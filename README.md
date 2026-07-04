@@ -1,6 +1,6 @@
 # llmctl
 
-![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sockheadrps/BADGE_GIST_ID/raw/llmctl-tests.json)
+![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sockheadrps/13ea892639ba3058ecad80acf0e1c25b/raw/llmctl-tests.json)
 
 <p align="center">
   <img src="readmeassets/launch.gif" alt="llmctl app overview" width="800">
