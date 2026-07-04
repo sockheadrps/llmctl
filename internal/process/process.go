@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,16 @@ func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
+// flag returns the CLI flag name to use, applying any per-profile override.
+func flag(p models.Profile, def string) string {
+	if p.FlagOverrides != nil {
+		if override, ok := p.FlagOverrides[def]; ok && override != "" {
+			return override
+		}
+	}
+	return def
+}
+
 // BuildArgs converts a Model+Profile pair into llama-server CLI flags.
 func BuildArgs(m models.Model, p models.Profile) []string {
 	var args []string
@@ -25,103 +36,107 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 	} else {
 		args = append(args, "--model", m.Path)
 	}
-	args = append(args, "--port", strconv.Itoa(p.Port))
+	args = append(args, flag(p, "--port"), strconv.Itoa(p.Port))
 	if p.Host != "" {
-		args = append(args, "--host", p.Host)
+		args = append(args, flag(p, "--host"), p.Host)
 	}
 	if p.Alias != "" {
-		args = append(args, "--alias", p.Alias)
+		args = append(args, flag(p, "--alias"), p.Alias)
 	}
 	if p.CtxSize > 0 {
-		args = append(args, "--ctx-size", strconv.Itoa(p.CtxSize))
+		args = append(args, flag(p, "--ctx-size"), strconv.Itoa(p.CtxSize))
 	}
 	if p.BatchSize != nil {
-		args = append(args, "--batch-size", strconv.Itoa(*p.BatchSize))
+		args = append(args, flag(p, "--batch-size"), strconv.Itoa(*p.BatchSize))
 	}
 	if p.UBatchSize != nil {
-		args = append(args, "--ubatch-size", strconv.Itoa(*p.UBatchSize))
+		args = append(args, flag(p, "--ubatch-size"), strconv.Itoa(*p.UBatchSize))
 	}
 	if p.Temp != nil {
-		args = append(args, "--temp", formatFloat(*p.Temp))
+		args = append(args, flag(p, "--temp"), formatFloat(*p.Temp))
 	}
 	if p.TopP != nil {
-		args = append(args, "--top-p", formatFloat(*p.TopP))
+		args = append(args, flag(p, "--top-p"), formatFloat(*p.TopP))
 	}
 	if p.TopK != nil {
-		args = append(args, "--top-k", strconv.Itoa(*p.TopK))
+		args = append(args, flag(p, "--top-k"), strconv.Itoa(*p.TopK))
 	}
 	if p.MinP != nil {
-		args = append(args, "--min-p", formatFloat(*p.MinP))
+		args = append(args, flag(p, "--min-p"), formatFloat(*p.MinP))
 	}
 	if p.PresencePenalty != nil {
-		args = append(args, "--presence-penalty", formatFloat(*p.PresencePenalty))
+		args = append(args, flag(p, "--presence-penalty"), formatFloat(*p.PresencePenalty))
 	}
 	if p.RepetitionPenalty != nil {
-		args = append(args, "--repeat-penalty", formatFloat(*p.RepetitionPenalty))
+		args = append(args, flag(p, "--repeat-penalty"), formatFloat(*p.RepetitionPenalty))
 	}
 	if p.FrequencyPenalty != nil {
-		args = append(args, "--frequency-penalty", formatFloat(*p.FrequencyPenalty))
+		args = append(args, flag(p, "--frequency-penalty"), formatFloat(*p.FrequencyPenalty))
 	}
 	if p.Seed != nil {
-		args = append(args, "--seed", strconv.Itoa(*p.Seed))
+		args = append(args, flag(p, "--seed"), strconv.Itoa(*p.Seed))
 	}
 	if p.RepeatLastN != nil {
-		args = append(args, "--repeat-last-n", strconv.Itoa(*p.RepeatLastN))
+		args = append(args, flag(p, "--repeat-last-n"), strconv.Itoa(*p.RepeatLastN))
 	}
 	if p.FlashAttn {
-		args = append(args, "--flash-attn", "on")
+		args = append(args, flag(p, "--flash-attn"), "on")
 	}
 	if p.GPULayers > 0 {
-		args = append(args, "--n-gpu-layers", strconv.Itoa(p.GPULayers))
+		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(p.GPULayers))
 	}
 	if p.MMap != nil {
+		f := flag(p, "--mmap")
 		if *p.MMap {
-			args = append(args, "--mmap")
+			args = append(args, f)
 		} else {
-			args = append(args, "--no-mmap")
+			args = append(args, "--no-"+strings.TrimPrefix(f, "--"))
 		}
 	}
 	if p.KVOffload != nil {
+		f := flag(p, "--kv-offload")
 		if *p.KVOffload {
-			args = append(args, "--kv-offload")
+			args = append(args, f)
 		} else {
-			args = append(args, "--no-kv-offload")
+			args = append(args, "--no-"+strings.TrimPrefix(f, "--"))
 		}
 	}
 	if p.Parallel != nil {
-		args = append(args, "--parallel", strconv.Itoa(*p.Parallel))
+		args = append(args, flag(p, "--parallel"), strconv.Itoa(*p.Parallel))
 	}
 	if p.ContBatching != nil {
+		f := flag(p, "--cont-batching")
 		if *p.ContBatching {
-			args = append(args, "--cont-batching")
+			args = append(args, f)
 		} else {
-			args = append(args, "--no-cont-batching")
+			args = append(args, "--no-"+strings.TrimPrefix(f, "--"))
 		}
 	}
 	if p.CachePrompt != nil {
+		f := flag(p, "--cache-prompt")
 		if *p.CachePrompt {
-			args = append(args, "--cache-prompt")
+			args = append(args, f)
 		} else {
-			args = append(args, "--no-cache-prompt")
+			args = append(args, "--no-"+strings.TrimPrefix(f, "--"))
 		}
 	}
 	if p.CacheRAM != nil {
-		args = append(args, "--cache-ram", strconv.Itoa(*p.CacheRAM))
+		args = append(args, flag(p, "--cache-ram"), strconv.Itoa(*p.CacheRAM))
 	}
 	if p.Reasoning != "" {
-		args = append(args, "--reasoning", p.Reasoning)
+		args = append(args, flag(p, "--reasoning"), p.Reasoning)
 	}
 	if p.ReasoningBudget != nil {
-		args = append(args, "--reasoning-budget", strconv.Itoa(*p.ReasoningBudget))
+		args = append(args, flag(p, "--reasoning-budget"), strconv.Itoa(*p.ReasoningBudget))
 	}
 	if p.ReasoningFormat != "" {
-		args = append(args, "--reasoning-format", p.ReasoningFormat)
+		args = append(args, flag(p, "--reasoning-format"), p.ReasoningFormat)
 	}
 	if p.CacheTypeK != "" {
-		args = append(args, "--cache-type-k", p.CacheTypeK)
+		args = append(args, flag(p, "--cache-type-k"), p.CacheTypeK)
 	}
 	if p.CacheTypeV != "" {
-		args = append(args, "--cache-type-v", p.CacheTypeV)
+		args = append(args, flag(p, "--cache-type-v"), p.CacheTypeV)
 	}
 	args = append(args, p.ExtraArgs...)
 	return args
@@ -131,12 +146,17 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 // profile, detached from the parent process group so it survives the CLI
 // invocation exiting, with stdout/stderr redirected to logPath.
 func Start(bin string, m models.Model, p models.Profile, logPath string) (pid int, err error) {
+	resolvedBin, err := resolveExecutable(bin)
+	if err != nil {
+		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
+	}
+
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		return 0, fmt.Errorf("create log file %s: %w", logPath, err)
 	}
 
-	cmd := exec.Command(bin, BuildArgs(m, p)...)
+	cmd := exec.Command(resolvedBin, BuildArgs(m, p)...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	configureProcess(cmd)
@@ -146,7 +166,7 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
-		return 0, fmt.Errorf("start %s: %w", bin, err)
+		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
 	}
 
 	// The child now owns the log file's lifetime; the parent CLI process
@@ -154,6 +174,36 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 	go cmd.Wait()
 
 	return cmd.Process.Pid, nil
+}
+
+func resolveExecutable(bin string) (string, error) {
+	bin = strings.TrimSpace(bin)
+	if bin == "" {
+		bin = "llama-server"
+	}
+
+	if resolved, err := exec.LookPath(bin); err == nil {
+		return resolved, nil
+	}
+
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(bin), ".exe") {
+		if resolved, err := exec.LookPath(bin + ".exe"); err == nil {
+			return resolved, nil
+		}
+	}
+
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	return "", fmt.Errorf("llama-server binary %q not found; set llama_server_bin in config.yaml to the full path to llama-server%s, or add it to PATH", bin, suffix)
+}
+
+func displayBin(bin string) string {
+	if strings.TrimSpace(bin) == "" {
+		return "llama-server"
+	}
+	return bin
 }
 
 // Stop sends SIGTERM to the process group led by pid and waits for it to

@@ -23,14 +23,137 @@ type formField struct {
 // 0..len(fields)-1 are the text fields, len(fields) is the Flash Attention
 // toggle, and len(fields)+1 is the Save action.
 type formState struct {
-	modelKey    string
-	editing     bool
-	originalKey string
-	fields      []formField
-	flash       bool
-	focus       int
-	scroll      int
-	err         string
+	modelKey             string
+	editing              bool
+	originalKey          string
+	fields               []formField
+	initial              []string
+	initialFlash         bool
+	flash                bool
+	focus                int
+	scroll               int
+	descScroll           int
+	descDir              int
+	descPause            int
+	err                  string
+	flagFocus            bool
+	flagInput            textinput.Model
+	flagOverrides        map[string]string
+	initialFlagOverrides map[string]string
+}
+
+// fieldDefaultFlag returns the default llama-server CLI flag for a form field
+// index, or "" for fields that don't map to a single CLI flag.
+func fieldDefaultFlag(idx int) string {
+	switch idx {
+	case fieldHost:
+		return "--host"
+	case fieldAlias:
+		return "--alias"
+	case fieldPort:
+		return "--port"
+	case fieldCtxSize:
+		return "--ctx-size"
+	case fieldTemp:
+		return "--temp"
+	case fieldTopP:
+		return "--top-p"
+	case fieldTopK:
+		return "--top-k"
+	case fieldMinP:
+		return "--min-p"
+	case fieldPresencePenalty:
+		return "--presence-penalty"
+	case fieldRepetitionPenalty:
+		return "--repeat-penalty"
+	case fieldFrequencyPenalty:
+		return "--frequency-penalty"
+	case fieldSeed:
+		return "--seed"
+	case fieldBatchSize:
+		return "--batch-size"
+	case fieldUBatchSize:
+		return "--ubatch-size"
+	case fieldRepeatLastN:
+		return "--repeat-last-n"
+	case fieldGPULayers:
+		return "--n-gpu-layers"
+	case fieldMMap:
+		return "--mmap"
+	case fieldKVOffload:
+		return "--kv-offload"
+	case fieldParallelSlots:
+		return "--parallel"
+	case fieldContBatching:
+		return "--cont-batching"
+	case fieldCachePrompt:
+		return "--cache-prompt"
+	case fieldCacheRAM:
+		return "--cache-ram"
+	case fieldReasoning:
+		return "--reasoning"
+	case fieldReasoningBudget:
+		return "--reasoning-budget"
+	case fieldReasoningFormat:
+		return "--reasoning-format"
+	case fieldCacheK:
+		return "--cache-type-k"
+	case fieldCacheV:
+		return "--cache-type-v"
+	}
+	return ""
+}
+
+func (f *formState) focusedFlag() string {
+	if f.focus == len(formLabels) {
+		return "--flash-attn"
+	}
+	return fieldDefaultFlag(f.focus)
+}
+
+func (f *formState) syncFlagInput() {
+	def := f.focusedFlag()
+	if def == "" {
+		f.flagInput.SetValue("")
+		return
+	}
+	val := def
+	if override, ok := f.flagOverrides[def]; ok {
+		val = override
+	}
+	f.flagInput.SetValue(val)
+}
+
+func (f *formState) commitFlagInput() {
+	def := f.focusedFlag()
+	if def == "" {
+		return
+	}
+	val := strings.TrimSpace(f.flagInput.Value())
+	if val == "" || val == def {
+		delete(f.flagOverrides, def)
+	} else {
+		if f.flagOverrides == nil {
+			f.flagOverrides = make(map[string]string)
+		}
+		f.flagOverrides[def] = val
+	}
+}
+
+func buildFlagInput() textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = ""
+	ti.CharLimit = 64
+	ti.Width = 22
+	return ti
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // Field indices into formState.fields, matching the order of formLabels.
@@ -80,6 +203,7 @@ func buildFormFields(defaults []string) []formField {
 	fields := make([]formField, len(formLabels))
 	for i, label := range formLabels {
 		ti := textinput.New()
+		ti.Prompt = ""
 		ti.Placeholder = label
 		ti.SetValue(defaults[i])
 		ti.CharLimit = 256
@@ -166,13 +290,51 @@ func (f *formState) blurAll() {
 }
 
 func (f *formState) moveFocus(delta int, visibleRows int) {
+	f.commitFlagInput()
+	f.flagFocus = false
+	f.flagInput.Blur()
 	total := len(f.fields) + 2 // + flash toggle + save action
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
+	f.resetDescriptionScroll()
 	if f.focus < len(f.fields) {
 		f.fields[f.focus].input.Focus()
 	}
 	f.ensureVisible(visibleRows, total)
+	f.syncFlagInput()
+}
+
+func (f *formState) resetDescriptionScroll() {
+	f.descScroll = 0
+	f.descDir = 1
+	f.descPause = scrollPauseTicks
+}
+
+func (f *formState) advanceDescriptionScroll(lines, visible int) {
+	f.descScroll, f.descDir, f.descPause = advanceAutoScroll(f.descScroll, f.descDir, f.descPause, lines, visible)
+}
+
+func (f formState) dirty() bool {
+	if f.flash != f.initialFlash {
+		return true
+	}
+	if len(f.initial) != len(f.fields) {
+		return true
+	}
+	for i := range f.fields {
+		if f.fields[i].input.Value() != f.initial[i] {
+			return true
+		}
+	}
+	if len(f.flagOverrides) != len(f.initialFlagOverrides) {
+		return true
+	}
+	for k, v := range f.flagOverrides {
+		if f.initialFlagOverrides[k] != v {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *formState) ensureVisible(visibleRows int, totalRows int) {
@@ -239,7 +401,21 @@ func (m Model) openForm(modelKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldExtraArgs] = ""
 	defaults[fieldNotes] = ""
 
-	m.form = formState{modelKey: modelKey, fields: buildFormFields(defaults), flash: true, focus: 0}
+	fi := buildFlagInput()
+	m.form = formState{
+		modelKey:             modelKey,
+		fields:               buildFormFields(defaults),
+		initial:              append([]string(nil), defaults...),
+		initialFlash:         true,
+		flash:                true,
+		focus:                0,
+		descDir:              1,
+		descPause:            scrollPauseTicks,
+		flagInput:            fi,
+		flagOverrides:        make(map[string]string),
+		initialFlagOverrides: make(map[string]string),
+	}
+	m.form.syncFlagInput()
 	m.screen = screenNewProfile
 	m.clearError()
 	return m, nil
@@ -291,14 +467,23 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldExtraArgs] = strings.Join(p.ExtraArgs, " ")
 	defaults[fieldNotes] = p.Notes
 
+	fi := buildFlagInput()
 	m.form = formState{
-		modelKey:    modelKey,
-		editing:     true,
-		originalKey: profileKey,
-		fields:      buildFormFields(defaults),
-		flash:       p.FlashAttn,
-		focus:       0,
+		modelKey:             modelKey,
+		editing:              true,
+		originalKey:          profileKey,
+		fields:               buildFormFields(defaults),
+		initial:              append([]string(nil), defaults...),
+		initialFlash:         p.FlashAttn,
+		flash:                p.FlashAttn,
+		focus:                0,
+		descDir:              1,
+		descPause:            scrollPauseTicks,
+		flagInput:            fi,
+		flagOverrides:        copyStringMap(p.FlagOverrides),
+		initialFlagOverrides: copyStringMap(p.FlagOverrides),
 	}
+	m.form.syncFlagInput()
 	m.screen = screenNewProfile
 	m.clearError()
 	return m, nil
@@ -352,11 +537,52 @@ func suggestPort(cfg *config.Config) int {
 }
 
 func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Flag override input in the details panel has focus — route keys there.
+	if m.form.flagFocus {
+		switch msg.String() {
+		case "esc", "left":
+			m.form.commitFlagInput()
+			m.form.flagFocus = false
+			m.form.flagInput.Blur()
+			// Re-focus the form field so typing works immediately after returning.
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Focus()
+			}
+		case "enter":
+			m.form.commitFlagInput()
+			m.form.flagFocus = false
+			m.form.flagInput.Blur()
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Focus()
+			}
+		default:
+			var cmd tea.Cmd
+			m.form.flagInput, cmd = m.form.flagInput.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "esc":
+		if m.form.dirty() {
+			m.formExit = formExitState{selected: formExitDiscard}
+			m.screen = screenFormExitConfirm
+			return m, nil
+		}
 		m.screen = screenMain
 		m.clearError()
 		return m, nil
+
+	case "right":
+		if flag := m.form.focusedFlag(); flag != "" {
+			m.form.flagFocus = true
+			m.form.flagInput.Focus()
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Blur()
+			}
+			return m, nil
+		}
 
 	case "tab", "down":
 		m.form.moveFocus(1, m.formVisibleRows())
@@ -565,8 +791,15 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		ReasoningFormat:   value(fieldReasoningFormat),
 		CacheTypeK:        value(fieldCacheK),
 		CacheTypeV:        value(fieldCacheV),
-		ExtraArgs:         extraArgs,
-		Notes:             value(fieldNotes),
+		ExtraArgs:     extraArgs,
+		Notes:         value(fieldNotes),
+		FlagOverrides: func() map[string]string {
+			m.form.commitFlagInput()
+			if len(m.form.flagOverrides) == 0 {
+				return nil
+			}
+			return copyStringMap(m.form.flagOverrides)
+		}(),
 	}
 	m.cfg.Models[m.form.modelKey] = mdl
 
@@ -586,10 +819,15 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) formVisibleRows() int {
+	return max(1, m.formPaneHeight()-1)
+}
+
+func (m Model) formPaneHeight() int {
 	if m.height <= 0 {
-		return 12
+		return 20
 	}
-	return max(8, m.height-12)
+	// title + blank line + bordered pane + newline + hotkey line
+	return max(8, m.height-6)
 }
 
 func parseIntOrZero(s string) (int, error) {

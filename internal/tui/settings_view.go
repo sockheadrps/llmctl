@@ -25,11 +25,47 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 	switch categoryID {
 	case "model_dirs":
 		b.WriteString(m.renderDirsContent())
+	case "llama_bin":
+		b.WriteString(m.renderBinContent())
 	}
 
-	if m.settings.dirs.err != "" {
+	if categoryID == "model_dirs" && m.settings.dirs.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.dirs.err))
+	}
+	if categoryID == "llama_bin" && m.settings.bin.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.bin.err))
+	}
+
+	return b.String()
+}
+
+func (m Model) renderBinContent() string {
+	var b strings.Builder
+	focused := m.focus == focusSettingsContent
+
+	cursor := "  "
+	style := profileStyle
+	if focused {
+		cursor = cursorStyle.Render("> ")
+		style = selectedProfileStyle
+	}
+
+	value := m.cfg.LlamaServerBin
+	if strings.TrimSpace(value) == "" {
+		value = "llama-server"
+	}
+	fmt.Fprintf(&b, "%s%s\n\n", cursor, style.Render("Edit Binary"))
+	b.WriteString(profileStyle.Render("Current: " + value))
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render("Use a command on PATH or a full path to llama-server.exe."))
+	b.WriteString("\n")
+
+	if m.settings.bin.editing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.bin.input.View())
+		b.WriteString("\n")
 	}
 
 	return b.String()

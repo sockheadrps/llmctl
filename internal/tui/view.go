@@ -67,6 +67,8 @@ func (m Model) View() string {
 		return m.viewPicker()
 	case screenNewProfile:
 		return m.viewForm()
+	case screenFormExitConfirm:
+		return overlayCenter(m.viewForm(), m.viewFormExitModal())
 	case screenConfirmProfile:
 		return overlayCenter(m.viewMain(), m.viewConfirmModal())
 	case screenLogs:
@@ -133,10 +135,6 @@ func (m Model) viewMain() string {
 		if n := lipgloss.Height(rightMeasureStyle.Render(runningContent)); n > runningH {
 			runningH = n
 		}
-		if n := lipgloss.Height(rightMeasureStyle.Render(detailsContent)); n > detailsH {
-			detailsH = n
-		}
-
 		rightAsLeftH := runningH + detailsH + 2 // right stacks 2 boxes' borders vs left's 1
 		switch {
 		case rightAsLeftH > leftH:
@@ -146,6 +144,7 @@ func (m Model) viewMain() string {
 		}
 
 		runningBox := runningBoxStyle.Width(rightW).Height(runningH).Render(runningContent)
+		detailsContent = m.renderDetailsWindow(detailsContent, rightW, detailsH)
 		detailsBox := paneStyle.Width(rightW).Height(detailsH).Render(detailsContent)
 		right = lipgloss.JoinVertical(lipgloss.Left, runningBox, detailsBox)
 	}
@@ -174,11 +173,7 @@ func (m Model) viewMain() string {
 		b.WriteString(errorStyle.Render(summary))
 		b.WriteString("\n")
 	}
-	help := "←/→ tabs · ↑/↓ move · enter run · s stop · e logs · del delete · q quit"
-	if m.focus == focusSettingsContent && m.settings.dirs.editing {
-		help = "enter save · esc cancel"
-	}
-	b.WriteString(helpStyle.Render(help))
+	b.WriteString(helpStyle.Render(m.helpText()))
 	return b.String()
 }
 
@@ -193,19 +188,48 @@ func firstLine(s string) string {
 	return s
 }
 
+func (m Model) helpText() string {
+	if m.searchEditing {
+		return "type to filter · enter confirm · esc cancel"
+	}
+	if m.focus == focusSettingsContent && (m.settings.dirs.editing || m.settings.bin.editing) {
+		return "enter save · esc cancel"
+	}
+	switch m.focus {
+	case focusTabs:
+		return "←/→ tabs · ↑/↓ select · q quit"
+	case focusRunning:
+		return "↑/↓ move · enter actions · s stop · e logs · q quit"
+	case focusSettingsContent:
+		return "↑/↓ move · enter edit · del delete · esc back"
+	case focusLeft:
+		switch m.leftMode {
+		case modeRunning:
+			return "↑/↓ move · enter actions · c copy endpoint · q quit"
+		case modeRecents:
+			return "↑/↓ move · enter run · q quit"
+		case modeSettings:
+			return "↑/↓ move · enter select · q quit"
+		default: // modeModels
+			return "↑/↓ move · enter run · c copy · / search · del delete · q quit"
+		}
+	}
+	return "←/→ tabs · ↑/↓ move · q quit"
+}
+
 // renderLeftPaneContent renders whichever tab's content is active. The
 // outer Models/Recents/Settings tab bar lives outside the boxes, in
 // renderHeaderLine.
 func (m Model) renderLeftPaneContent(leftW int) string {
 	switch m.leftMode {
 	case modeRecents:
-		return m.renderRecentsList()
+		return m.renderRecentsList(leftW)
 	case modeSettings:
-		return m.renderSettingsList()
+		return m.renderSettingsList(leftW)
 	case modeRunning:
-		return m.renderRunningTabList()
+		return m.renderRunningTabList(leftW)
 	default:
-		return m.renderModelsTree()
+		return m.renderModelsTree(leftW)
 	}
 }
 
@@ -267,29 +291,29 @@ func (m Model) renderTabBarLabels() string {
 
 // renderSettingsList shows the Settings tab's menu of configuration
 // sub-pages (currently just Model Directories).
-func (m Model) renderSettingsList() string {
+func (m Model) renderSettingsList(width int) string {
 	var b strings.Builder
 	rows := buildSettingsRows()
+	textWidth := formRowTextWidth(width)
 	focused := m.focus == focusLeft
 	for i, r := range rows {
 		selected := i == m.settingsCursor
+		active := selected && focused
 		cursor := "  "
 		style := profileStyle
-		if selected {
-			if focused {
-				cursor = cursorStyle.Render("> ")
-				style = selectedProfileStyle
-			} else {
-				cursor = profileStyle.Render("> ")
-			}
+		if active {
+			cursor = cursorStyle.Render("> ")
+			style = selectedProfileStyle
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(r.label)))
+		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 	}
 	return b.String()
 }
 
-func (m Model) renderModelsTree() string {
+func (m Model) renderModelsTree(width int) string {
 	var b strings.Builder
+	textWidth := formRowTextWidth(width)
 
 	if len(m.cfg.ModelsDirs) == 0 {
 		b.WriteString(modelStyle.Render("No models folders set."))
@@ -300,8 +324,25 @@ func (m Model) renderModelsTree() string {
 		return b.String()
 	}
 
+	if m.modelSearch != "" || m.searchEditing {
+		query := m.modelSearch
+		if query == "" {
+			query = "type to filter..."
+		}
+		prefix := "/ "
+		if m.searchEditing {
+			prefix = cursorStyle.Render("/ ")
+		}
+		b.WriteString(prefix + detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
+		b.WriteString("\n\n")
+	}
+
 	if len(m.rows) == 0 {
-		b.WriteString(profileStyle.Render("(no models configured)"))
+		empty := "(no models configured)"
+		if m.modelSearch != "" {
+			empty = "(no matches)"
+		}
+		b.WriteString(profileStyle.Render(empty))
 		b.WriteString("\n")
 		b.WriteString(helpStyle.Render("press A to add a model from your configured folders"))
 		return b.String()
@@ -310,13 +351,10 @@ func (m Model) renderModelsTree() string {
 	focused := m.focus == focusLeft
 	for i, r := range m.rows {
 		selected := i == m.cursor
+		active := selected && focused
 		cursor := "  "
-		if selected {
-			if focused {
-				cursor = cursorStyle.Render("> ")
-			} else {
-				cursor = profileStyle.Render("> ")
-			}
+		if active {
+			cursor = cursorStyle.Render("> ")
 		}
 
 		switch r.kind {
@@ -329,14 +367,9 @@ func (m Model) renderModelsTree() string {
 			}
 			// The selected model stands out; every other one dims back
 			// so it doesn't compete for attention.
-			style := profileStyle
-			if selected {
-				style = modelStyle
-				if focused {
-					style = selectedProfileStyle
-				}
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(r.label)))
+			style := m.modelRowStyle(r, active)
+			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 
 		case rowProfile:
 			label := r.label
@@ -345,33 +378,47 @@ func (m Model) renderModelsTree() string {
 			case r.modelKey == m.pendingDeleteModel && r.profileKey == m.pendingDeleteProfile:
 				style = pendingDeleteStyle
 				label += " (del again to confirm)"
-			case selected && focused:
+			case active:
 				style = selectedProfileStyle
 			}
+			label = truncateText(label, max(1, textWidth-lipgloss.Width(cursor)-2))
 			b.WriteString(fmt.Sprintf("%s  %s\n", cursor, style.Render(label)))
 
 		case rowAddProfile:
 			style := addStyle
-			if selected && focused {
+			if active {
 				style = selectedAddStyle
 			}
-			b.WriteString(fmt.Sprintf("%s  %s\n", cursor, style.Render(r.label)))
+			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-2))
+			b.WriteString(fmt.Sprintf("%s  %s\n", cursor, style.Render(label)))
 
 		case rowAddModel:
 			b.WriteString("\n")
 			style := addStyle
-			if selected && focused {
+			if active {
 				style = selectedAddStyle
 			}
-			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(r.label)))
+			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 		}
 	}
 	return b.String()
 }
 
+func (m Model) modelRowStyle(r row, active bool) lipgloss.Style {
+	switch {
+	case active:
+		return selectedProfileStyle
+	case m.modelProfilesMode && r.modelKey == m.expandedModelKey:
+		return activeModelStyle
+	default:
+		return profileStyle
+	}
+}
+
 // renderRecentsList shows up to models.RecentLimit most recently run
 // profiles, most recent first, for quick re-selection.
-func (m Model) renderRecentsList() string {
+func (m Model) renderRecentsList(width int) string {
 	var b strings.Builder
 
 	if len(m.recentRows) == 0 {
@@ -379,27 +426,30 @@ func (m Model) renderRecentsList() string {
 		return b.String()
 	}
 
+	textWidth := formRowTextWidth(width)
 	focused := m.focus == focusLeft
 	for i, r := range m.recentRows {
 		selected := i == m.recentCursor
+		active := selected && focused
 		cursor := "  "
 		style := profileStyle
-		if selected {
-			if focused {
-				cursor = cursorStyle.Render("> ")
-				style = selectedProfileStyle
-			} else {
-				cursor = profileStyle.Render("> ")
-			}
+		if active {
+			cursor = cursorStyle.Render("> ")
+			style = selectedProfileStyle
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(r.label)))
+		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 	}
 	return b.String()
 }
 
 func (m Model) renderRunning() string {
 	var b strings.Builder
-	b.WriteString(modelStyle.Render("Running"))
+	title := "Running"
+	if m.gpuName != "" {
+		title = m.gpuName
+	}
+	b.WriteString(modelStyle.Render(title))
 	b.WriteString("\n")
 	if vram := m.renderVRAMHeader(); vram != "" {
 		b.WriteString(infoStyle.Render(vram))
@@ -425,12 +475,19 @@ func (m Model) renderRunning() string {
 // Running tab's left-pane list (renderRunningTabList), which differ only
 // in which focus state highlights the selected row.
 func (m Model) renderRunningRow(r models.Running, selected, focused bool) string {
+	return m.renderRunningRowWithWidth(r, selected, focused, 0)
+}
+
+func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused bool, width int) string {
 	dot := loadingStyle.Render("●")
+	badge := loadingStyle.Render("loading")
 	switch m.health[r.ModelKey+"/"+r.ProfileKey] {
 	case health.StatusUp:
 		dot = runningStyle.Render("●")
+		badge = runningStyle.Render("up")
 	case health.StatusDown:
 		dot = downStyle.Render("●")
+		badge = downStyle.Render("down")
 	}
 
 	cursor := "  "
@@ -451,13 +508,16 @@ func (m Model) renderRunningRow(r models.Running, selected, focused bool) string
 	if mb, ok := m.gpuByPID[r.PID]; ok {
 		text += fmt.Sprintf("  %.1fG", float64(mb)/1024)
 	}
-	return fmt.Sprintf("%s%s %s\n", cursor, dot, labelStyle.Render(text))
+	if width > 0 {
+		text = truncateText(text, max(1, formRowTextWidth(width)-lipgloss.Width(cursor)-2))
+	}
+	return fmt.Sprintf("%s%s %s %s\n", cursor, dot, badge, labelStyle.Render(text))
 }
 
 // renderRunningTabList shows every running instance in the Running tab's
 // left pane — the same data as renderRunning's glance box, just styled as
 // a selectable list like the other tabs' left-pane content.
-func (m Model) renderRunningTabList() string {
+func (m Model) renderRunningTabList(width int) string {
 	var b strings.Builder
 
 	if len(m.running) == 0 {
@@ -467,7 +527,7 @@ func (m Model) renderRunningTabList() string {
 
 	focused := m.focus == focusLeft
 	for i, r := range m.running {
-		b.WriteString(m.renderRunningRow(r, i == m.runningCursor, focused))
+		b.WriteString(m.renderRunningRowWithWidth(r, i == m.runningCursor, focused, width))
 	}
 	return b.String()
 }
@@ -480,7 +540,7 @@ func (m Model) renderRunningTabList() string {
 // leftH to match it — otherwise a large tail would blow the box, and its
 // own border, straight past the terminal's actual height.
 func (m Model) renderRunningOutputColumn(rightW, leftH int) string {
-	innerH := leftH - 2
+	innerH := leftH
 	if innerH < 1 {
 		innerH = 1
 	}
@@ -548,17 +608,46 @@ func tailFittingHeight(logPath string, boxWidth, maxLines int) string {
 	if err != nil || raw == "" {
 		return ""
 	}
-	lines := strings.Split(raw, "\n")
 
-	measure := lipgloss.NewStyle().Width(boxWidth).Padding(0, 1)
-	for len(lines) > 0 {
-		candidate := strings.Join(lines, "\n")
-		if lipgloss.Height(measure.Render(candidate)) <= maxLines {
-			return candidate
-		}
-		lines = lines[1:]
+	lines := wrappedLogPreviewLines(raw, boxWidth)
+	if len(lines) == 0 {
+		return ""
 	}
-	return ""
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func wrappedLogPreviewLines(raw string, boxWidth int) []string {
+	innerWidth := formDescriptionTextWidth(boxWidth)
+	if innerWidth <= 0 {
+		innerWidth = formDescriptionTextWidth(minRightWidth)
+	}
+
+	text := sanitizePreviewText(raw)
+	rendered := lipgloss.NewStyle().Width(innerWidth).Render(strings.TrimRight(text, "\n"))
+	rendered = strings.TrimRight(rendered, "\n")
+	if rendered == "" {
+		return nil
+	}
+	return strings.Split(rendered, "\n")
+}
+
+func sanitizePreviewText(s string) string {
+	s = stripANSI(s)
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\t':
+			return r
+		}
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // renderVRAMHeader renders a compact used/total VRAM bar for the "Running"
@@ -620,6 +709,106 @@ func splitPaneHeight(leftHeight, runningCount int) (running, details int) {
 		details = 12
 	}
 	return running, details
+}
+
+func (m Model) renderDetailsWindow(content string, width, height int) string {
+	lines := wrappedContentLines(content, width)
+	return strings.Join(contentWindow(lines, height, m.detailsScroll), "\n")
+}
+
+func wrappedContentLines(content string, width int) []string {
+	innerWidth := formDescriptionTextWidth(width)
+	if innerWidth <= 0 {
+		innerWidth = formDescriptionTextWidth(minRightWidth)
+	}
+	rendered := lipgloss.NewStyle().Width(innerWidth).Render(strings.TrimRight(content, "\n"))
+	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
+}
+
+func contentWindow(lines []string, visible, offset int) []string {
+	if visible <= 0 {
+		return nil
+	}
+	if len(lines) == 0 {
+		return []string{""}
+	}
+
+	maxOffset := max(0, len(lines)-visible)
+	offset = max(0, min(offset, maxOffset))
+
+	window := make([]string, 0, min(visible, len(lines)))
+	for i := offset; i < min(offset+visible, len(lines)); i++ {
+		window = append(window, lines[i])
+	}
+	return window
+}
+
+func (m Model) mainDetailsLineCount() int {
+	rightW, _, detailsH := m.mainDetailsGeometry()
+	if detailsH <= 0 {
+		return 0
+	}
+	return len(wrappedContentLines(m.renderDetails(rightW), rightW))
+}
+
+func (m Model) mainDetailsVisibleLines() int {
+	_, _, detailsH := m.mainDetailsGeometry()
+	return detailsH
+}
+
+func (m Model) mainDetailsGeometry() (rightW, runningH, detailsH int) {
+	leftW, rightW, targetLeftH := m.paneDimensions()
+	leftMeasureStyle := lipgloss.NewStyle().Width(leftW).Padding(0, 1)
+	rightMeasureStyle := lipgloss.NewStyle().Width(rightW).Padding(0, 1)
+
+	leftH := max(lipgloss.Height(leftMeasureStyle.Render(m.renderLeftPaneContent(leftW))), targetLeftH)
+	runningH, detailsH = splitPaneHeight(leftH, len(m.running))
+	if n := lipgloss.Height(rightMeasureStyle.Render(m.renderRunning())); n > runningH {
+		runningH = n
+	}
+
+	rightAsLeftH := runningH + detailsH + 2
+	if leftH > rightAsLeftH {
+		detailsH += leftH - rightAsLeftH
+	}
+	return rightW, runningH, detailsH
+}
+
+func (m *Model) resetDetailsScroll() {
+	m.detailsScroll = 0
+	m.detailsDir = 1
+	m.detailsPause = scrollPauseTicks
+}
+
+func (m *Model) advanceDetailsScroll(lines, visible int) {
+	m.detailsScroll, m.detailsDir, m.detailsPause = advanceAutoScroll(m.detailsScroll, m.detailsDir, m.detailsPause, lines, visible)
+}
+
+func advanceAutoScroll(offset, dir, pause, lines, visible int) (int, int, int) {
+	if dir == 0 {
+		dir = 1
+	}
+	maxScroll := max(0, lines-visible)
+	if maxScroll == 0 {
+		return 0, 1, 0
+	}
+
+	if pause > 0 {
+		return offset, dir, pause - 1
+	}
+
+	offset += dir
+	if offset >= maxScroll {
+		return maxScroll, -1, scrollPauseTicks
+	}
+	if offset <= 0 {
+		return 0, 1, scrollPauseTicks
+	}
+	return offset, dir, 0
 }
 
 // modelSourceLine describes where a model's weights come from: an on-disk
@@ -787,7 +976,12 @@ func (m Model) renderDetails(width int) string {
 
 	// Keep profile details compact so the preview doesn't expand the pane
 	// enough to push the UI off-screen when a model is selected.
+	fmt.Fprintf(&b, "%s\n", modelStyle.Render(mdl.Name+" / "+p.Name))
 	fmt.Fprintf(&b, "%s\n", detailMutedStyle.Render(modelSourceLine(mdl)))
+	if p.Notes != "" {
+		b.WriteString(profileStyle.Render(p.Notes))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 
 	showValue := func(s string) bool {
@@ -806,7 +1000,7 @@ func (m Model) renderDetails(width int) string {
 		pairs []detailPair
 	}{
 		{
-			name: "Connection",
+			name: "Profile",
 			pairs: []detailPair{
 				{label: "Port", value: fmt.Sprint(p.Port)},
 				{label: "Ctx Size", value: dash(intOrEmpty(p.CtxSize))},
@@ -824,7 +1018,7 @@ func (m Model) renderDetails(width int) string {
 			},
 		},
 		{
-			name: "Compute",
+			name: "Runtime",
 			pairs: []detailPair{
 				{label: "Flash Attn", value: fmt.Sprint(p.FlashAttn)},
 				{label: "GPU Layers", value: dash(intOrEmpty(p.GPULayers))},
@@ -937,14 +1131,6 @@ func (m Model) renderDetails(width int) string {
 		b.WriteString(modelStyle.Render("Extra Args"))
 		b.WriteString("\n")
 		b.WriteString(profileStyle.Render("-"))
-	}
-
-	if p.Notes != "" {
-		b.WriteString("\n")
-		b.WriteString(modelStyle.Render("Notes:"))
-		b.WriteString("\n")
-		b.WriteString(profileStyle.Render(p.Notes))
-		b.WriteString("\n")
 	}
 
 	return b.String()

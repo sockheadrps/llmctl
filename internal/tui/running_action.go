@@ -8,6 +8,7 @@ type runningActionChoice int
 
 const (
 	runningActionViewOutput runningActionChoice = iota
+	runningActionCopyEndpoint
 	runningActionStop
 )
 
@@ -42,16 +43,26 @@ func (m Model) updateRunningAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "left", "h":
-		m.runningAction.selected = runningActionViewOutput
+		if m.runningAction.selected > runningActionViewOutput {
+			m.runningAction.selected--
+		}
 		return m, nil
 
 	case "right", "l":
-		m.runningAction.selected = runningActionStop
+		if m.runningAction.selected < runningActionStop {
+			m.runningAction.selected++
+		}
 		return m, nil
 
 	case "enter":
 		m.screen = screenMain
 		switch m.runningAction.selected {
+		case runningActionCopyEndpoint:
+			run, ok := m.findRunning(m.runningAction.modelKey, m.runningAction.profileKey)
+			if !ok {
+				return m, nil
+			}
+			return m.copyEndpoint(run)
 		case runningActionStop:
 			return m.stopRunning(m.runningAction.modelKey, m.runningAction.profileKey, m.runningAction.label)
 		default:

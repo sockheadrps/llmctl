@@ -24,13 +24,16 @@ type settingsCategoryDef struct {
 // by appending here and giving renderSettingsDetail a case for its id.
 var settingsCategories = []settingsCategoryDef{
 	{id: "model_dirs", label: "Model Directories"},
+	{id: "llama_bin", label: "llama-server Binary"},
 }
 
 // settingsState backs the Settings tab's content — currently just Model
 // Directories, but a struct (rather than dirsContentState directly) leaves
 // room to add another category's state alongside it later.
 type settingsState struct {
-	dirs dirsContentState
+	activeCategory string
+	dirs           dirsContentState
+	bin            binContentState
 }
 
 // dirsContentState is the Model Directories category's content: the
@@ -47,6 +50,12 @@ type dirsContentState struct {
 	err        string
 }
 
+type binContentState struct {
+	editing bool
+	input   textinput.Model
+	err     string
+}
+
 // enterSettingsCategory moves focus into the selected category's content in
 // the Details pane — the caller (selectRow, on Enter) already picked the
 // category, so there's nothing more to navigate before showing it. State is
@@ -55,10 +64,75 @@ type dirsContentState struct {
 func (m Model) enterSettingsCategory(categoryID string) (tea.Model, tea.Cmd) {
 	switch categoryID {
 	case "model_dirs":
+		m.settings.activeCategory = categoryID
 		m.settings.dirs = dirsContentState{list: append([]string(nil), m.cfg.ModelsDirs...)}
+	case "llama_bin":
+		m.settings.activeCategory = categoryID
+		m.settings.bin = binContentState{}
 	}
 	m.focus = focusSettingsContent
 	m.clearError()
+	return m, nil
+}
+
+func (m Model) activateSettingsContentRow() (tea.Model, tea.Cmd) {
+	switch m.settings.activeCategory {
+	case "llama_bin":
+		return m.openBinForm()
+	default:
+		return m.activateDirsRow()
+	}
+}
+
+func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
+	switch m.settings.activeCategory {
+	case "llama_bin":
+		if delta < 0 {
+			m.focus = focusLeft
+		}
+		return m, nil
+	default:
+		next := m.settings.dirs.cursor + delta
+		switch {
+		case next < 0:
+			m.focus = focusLeft
+		case next <= len(m.settings.dirs.list):
+			m.settings.dirs.cursor = next
+		}
+		return m, nil
+	}
+}
+
+func (m Model) openBinForm() (tea.Model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = "llama-server"
+	ti.CharLimit = 512
+	ti.Width = 60
+	ti.SetValue(m.cfg.LlamaServerBin)
+	ti.Focus()
+	ti.CursorEnd()
+
+	m.settings.bin.input = ti
+	m.settings.bin.editing = true
+	m.settings.bin.err = ""
+	return m, nil
+}
+
+func (m Model) submitBinForm() (tea.Model, tea.Cmd) {
+	raw := strings.TrimSpace(m.settings.bin.input.Value())
+	if raw == "" {
+		m.settings.bin.err = "binary path is required"
+		return m, nil
+	}
+
+	m.cfg.LlamaServerBin = raw
+	if err := m.saveConfig(); err != nil {
+		m.settings.bin.err = err.Error()
+		return m, nil
+	}
+
+	m.settings.bin.editing = false
+	m.settings.bin.err = ""
 	return m, nil
 }
 

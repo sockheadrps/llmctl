@@ -5,7 +5,9 @@ package runtime
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/config"
@@ -89,6 +91,12 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 		return models.Running{}, err
 	}
 
+	if resolvedPort, err := resolveLaunchPort(p.Host, p.Port); err != nil {
+		return models.Running{}, err
+	} else {
+		p.Port = resolvedPort
+	}
+
 	pid, err := process.Start(cfg.LlamaServerBin, m, p, logPath)
 	if err != nil {
 		return models.Running{}, err
@@ -117,6 +125,43 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 	recordRecent(modelKey, profileKey)
 
 	return entry, nil
+}
+
+func resolveLaunchPort(host string, configured int) (int, error) {
+	if configured > 0 && portAvailable(host, configured) {
+		return configured, nil
+	}
+	return freePort(host)
+}
+
+func portAvailable(host string, port int) bool {
+	ln, err := net.Listen("tcp", net.JoinHostPort(listenHost(host), strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
+
+func freePort(host string) (int, error) {
+	ln, err := net.Listen("tcp", net.JoinHostPort(listenHost(host), "0"))
+	if err != nil {
+		return 0, fmt.Errorf("find free port: %w", err)
+	}
+	defer ln.Close()
+
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("find free port: unexpected address %s", ln.Addr())
+	}
+	return addr.Port, nil
+}
+
+func listenHost(host string) string {
+	if host == "" {
+		return "127.0.0.1"
+	}
+	return host
 }
 
 // startGracePeriod is how long Start waits to confirm the process didn't

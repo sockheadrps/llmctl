@@ -2,9 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/sockheadrps/llmctl/internal/models"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -20,6 +23,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refreshRunning(true)
 		return m, tea.Batch(tickCmd(), m.backgroundChecks())
+
+	case scrollTickMsg:
+		switch m.screen {
+		case screenNewProfile:
+			m.form.advanceDescriptionScroll(m.formDescriptionLineCount(), m.formDescriptionVisibleLines())
+		case screenMain:
+			m.advanceDetailsScroll(m.mainDetailsLineCount(), m.mainDetailsVisibleLines())
+		}
+		return m, scrollTickCmd()
 
 	case healthMsg:
 		m.health = msg
@@ -63,6 +75,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePicker(msg)
 		case screenNewProfile:
 			return m.updateForm(msg)
+		case screenFormExitConfirm:
+			return m.updateFormExit(msg)
 		case screenConfirmProfile:
 			return m.updateConfirm(msg)
 		case screenLogs:
@@ -78,6 +92,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.searchEditing {
+		return m.updateModelSearch(msg)
+	}
+
 	// While a settings row (e.g. a model directory) is mid add/edit, route
 	// keys to its text input instead of the normal pane navigation — same
 	// as the form/confirm screens, just inline in the Details pane instead
@@ -95,6 +113,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.dirs.input, cmd = m.settings.dirs.input.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.bin.editing {
+		switch msg.String() {
+		case "esc":
+			m.settings.bin.editing = false
+			m.settings.bin.err = ""
+			return m, nil
+		case "enter":
+			return m.submitBinForm()
+		}
+		var cmd tea.Cmd
+		m.settings.bin.input, cmd = m.settings.bin.input.Update(msg)
+		return m, cmd
+	}
 
 	// Any key other than a repeated Delete cancels a pending delete
 	// confirmation, so it only fires when pressed twice in a row on the
@@ -110,19 +141,26 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, keys.Left):
+		m.resetDetailsScroll()
 		return m.moveFocusLeft()
 
 	case key.Matches(msg, keys.Right):
+		m.resetDetailsScroll()
 		return m.moveFocusRight()
 
 	case key.Matches(msg, keys.Up):
+		m.resetDetailsScroll()
 		return m.moveCursor(-1)
 
 	case key.Matches(msg, keys.Down):
+		m.resetDetailsScroll()
 		return m.moveCursor(1)
 
 	case key.Matches(msg, keys.Run):
 		return m.selectRow()
+
+	case key.Matches(msg, keys.Copy):
+		return m.copyOrDuplicateSelected()
 
 	case key.Matches(msg, keys.Stop):
 		return m.stopSelected()
@@ -134,7 +172,116 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openLogsForCurrent()
 	}
 
+	if msg.String() == "/" && m.screen == screenMain && m.leftMode == modeModels {
+		m.searchEditing = true
+		m.focus = focusLeft
+		return m, nil
+	}
+
 	return m, nil
+}
+
+func (m Model) copyOrDuplicateSelected() (tea.Model, tea.Cmd) {
+	if m.leftMode == modeRunning || m.focus == focusRunning {
+		return m.copySelectedEndpoint()
+	}
+	return m.duplicateSelectedProfile()
+}
+
+func (m Model) copySelectedEndpoint() (tea.Model, tea.Cmd) {
+	r, ok := m.currentRow()
+	if !ok || r.kind != rowRunning {
+		return m, nil
+	}
+	run, ok := m.findRunning(r.modelKey, r.profileKey)
+	if !ok {
+		return m, nil
+	}
+	return m.copyEndpoint(run)
+}
+
+func (m Model) updateModelSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.searchEditing = false
+		m.modelSearch = ""
+		m.modelProfilesMode = false
+		m.rebuildRows()
+		return m, nil
+	case "enter":
+		m.searchEditing = false
+		return m, nil
+	case "backspace":
+		if m.modelSearch != "" {
+			m.modelSearch = m.modelSearch[:len(m.modelSearch)-1]
+			m.rebuildRows()
+		}
+		return m, nil
+	}
+
+	s := msg.String()
+	if len(s) == 1 {
+		m.modelSearch += s
+		m.modelProfilesMode = false
+		m.rebuildRows()
+		m.cursor = min(m.cursor, max(0, len(m.rows)-1))
+	}
+	return m, nil
+}
+
+func (m Model) duplicateSelectedProfile() (tea.Model, tea.Cmd) {
+	if m.focus != focusLeft || m.leftMode != modeModels {
+		return m, nil
+	}
+	r, ok := m.currentRow()
+	if !ok || r.kind != rowProfile {
+		return m, nil
+	}
+
+	mdl := m.cfg.Models[r.modelKey]
+	source, ok := mdl.Profiles[r.profileKey]
+	if !ok {
+		return m, nil
+	}
+
+	nextKey := uniqueProfileKey(mdl.Profiles, r.profileKey+"-copy")
+	copyProfile := source
+	copyProfile.Name = nextKey
+	copyProfile.Port = suggestPort(m.cfg)
+	mdl.Profiles[nextKey] = copyProfile
+	m.cfg.Models[r.modelKey] = mdl
+
+	if err := m.saveConfig(); err != nil {
+		m.setError(err, "")
+		return m, nil
+	}
+
+	m.rebuildRows()
+	for i, row := range m.rows {
+		if row.kind == rowProfile && row.modelKey == r.modelKey && row.profileKey == nextKey {
+			m.cursor = i
+			break
+		}
+	}
+	m.modelProfilesMode = true
+	m.clearError()
+	return m, nil
+}
+
+func uniqueProfileKey(existing map[string]models.Profile, base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "profile-copy"
+	}
+	if _, ok := existing[base]; !ok {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if _, ok := existing[candidate]; !ok {
+			return candidate
+		}
+	}
 }
 
 // moveFocusLeft steps back up the focus hierarchy: Running -> left content
@@ -152,10 +299,16 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 		if m.leftMode == modeModels {
 			if r, ok := m.currentRow(); ok && (r.kind == rowProfile || r.kind == rowAddProfile) {
 				m.cursor = indexOfModelRow(m.rows, m.expandedModelKey)
+				m.modelProfilesMode = false
 				return m, nil
 			}
 		}
 		m.focus = focusTabs
+		if m.leftMode == modeModels {
+			m.expandedModelKey = ""
+			m.modelProfilesMode = false
+			m.rebuildRows()
+		}
 	case focusTabs:
 		if m.leftMode > modeModels {
 			m.leftMode--
@@ -213,14 +366,7 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case focusSettingsContent:
-		next := m.settings.dirs.cursor + delta
-		switch {
-		case next < 0:
-			m.focus = focusLeft
-		case next <= len(m.settings.dirs.list):
-			m.settings.dirs.cursor = next
-		}
-		return m, nil
+		return m.settingsContentMoveCursor(delta)
 
 	default: // focusLeft
 		switch m.leftMode {
@@ -260,10 +406,9 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	}
 }
 
-// moveModelsCursor moves the cursor within the Models tree. The top-level
-// model list is navigated independently of the expanded profile rows, and
-// the trailing "+ Add Model" entry is always reachable from that top-level
-// sequence.
+// moveModelsCursor moves the cursor through the Models tree. While browsing
+// models it only targets model rows and "+ Add Model"; Enter/Right on a
+// model switches into that model's profile rows.
 func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 	if len(m.rows) == 0 {
 		return m, nil
@@ -272,16 +417,6 @@ func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 	current := m.cursor
 	if current < 0 || current >= len(m.rows) {
 		current = 0
-	}
-
-	if delta > 0 && current >= 0 && current < len(m.rows) {
-		row := m.rows[current]
-		if row.kind == rowModel && m.expandedModelKey != row.modelKey {
-			m.expandedModelKey = row.modelKey
-			m.rebuildRows()
-			m.cursor = indexOfModelRow(m.rows, row.modelKey)
-			return m, nil
-		}
 	}
 
 	if delta > 0 && m.focus == focusLeft && m.expandedModelKey == "" && current == 0 {
@@ -294,10 +429,11 @@ func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Keep the cursor on the top-level model rows and the trailing add-model
-	// row. Profile rows and add-profile rows are skipped unless the current
-	// row is already inside that expanded model block.
-	targets := modelCursorTargets(m.rows)
+	inProfiles := m.modelProfilesMode
+	if current >= 0 && current < len(m.rows) {
+		inProfiles = inProfiles || m.rows[current].kind == rowProfile || m.rows[current].kind == rowAddProfile
+	}
+	targets := modelCursorTargets(m.rows, inProfiles, m.expandedModelKey)
 	if len(targets) == 0 {
 		return m, nil
 	}
@@ -309,18 +445,31 @@ func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 
 	nextIndex := currentIndex + delta
 	if nextIndex < 0 {
+		if inProfiles {
+			m.cursor = indexOfModelRow(m.rows, m.expandedModelKey)
+			m.modelProfilesMode = false
+			return m, nil
+		}
 		m.focus = focusTabs
+		m.expandedModelKey = ""
+		m.modelProfilesMode = false
+		m.rebuildRows()
 		return m, nil
 	}
 	if nextIndex >= len(targets) {
+		if inProfiles {
+			m.cursor = targets[0]
+		}
 		return m, nil
 	}
 
 	m.cursor = targets[nextIndex]
+	m.modelProfilesMode = inProfiles
 	if m.cursor >= 0 && m.cursor < len(m.rows) {
 		row := m.rows[m.cursor]
 		if row.kind == rowModel && m.expandedModelKey != row.modelKey {
 			m.expandedModelKey = row.modelKey
+			m.modelProfilesMode = false
 			m.rebuildRows()
 			m.cursor = indexOfModelRow(m.rows, row.modelKey)
 		}
@@ -328,11 +477,16 @@ func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func modelCursorTargets(rows []row) []int {
+func modelCursorTargets(rows []row, profilesMode bool, expandedModelKey string) []int {
 	targets := make([]int, 0, len(rows))
 	for i, r := range rows {
-		switch r.kind {
-		case rowModel, rowAddModel:
+		if profilesMode {
+			if r.modelKey == expandedModelKey && (r.kind == rowProfile || r.kind == rowAddProfile) {
+				targets = append(targets, i)
+			}
+			continue
+		}
+		if r.kind == rowModel || r.kind == rowAddModel {
 			targets = append(targets, i)
 		}
 	}
@@ -340,6 +494,7 @@ func modelCursorTargets(rows []row) []int {
 }
 
 func (m *Model) enterModelsPane() {
+	m.modelProfilesMode = false
 	keys := visibleModelKeys(m.cfg)
 	if len(keys) == 0 {
 		return
@@ -417,7 +572,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	case focusRunning:
 		return m, nil
 	case focusSettingsContent:
-		return m.activateDirsRow()
+		return m.activateSettingsContentRow()
 	}
 
 	r, ok := m.currentRow()
@@ -452,6 +607,7 @@ func (m Model) enterModel(modelKey string) (tea.Model, tea.Cmd) {
 		m.expandedModelKey = modelKey
 		m.rebuildRows()
 	}
+	m.modelProfilesMode = true
 	idx := indexOfModelRow(m.rows, modelKey)
 	if idx+1 < len(m.rows) && m.rows[idx+1].kind != rowModel {
 		m.cursor = idx + 1
@@ -487,6 +643,9 @@ func (m Model) stopSelected() (tea.Model, tea.Cmd) {
 // shortcut, not a place to expect config edits to happen from.
 func (m Model) deleteSelected() (tea.Model, tea.Cmd) {
 	if m.focus == focusSettingsContent {
+		if m.settings.activeCategory != "model_dirs" {
+			return m, nil
+		}
 		return m.deleteDirRow()
 	}
 

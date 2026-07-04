@@ -7,6 +7,7 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +27,7 @@ const (
 	screenMain screen = iota
 	screenPickModel
 	screenNewProfile
+	screenFormExitConfirm
 	screenConfirmProfile
 	screenLogs
 	screenRunningAction
@@ -102,6 +104,12 @@ type vramMsg struct {
 }
 
 type tickMsg time.Time
+type scrollTickMsg time.Time
+
+const (
+	scrollTickInterval = 500 * time.Millisecond
+	scrollPauseTicks   = 2
+)
 
 // Model is the root bubbletea model for the main screen.
 type Model struct {
@@ -114,9 +122,12 @@ type Model struct {
 	focus    paneFocus
 	leftMode leftMode
 
-	rows             []row
-	cursor           int
-	expandedModelKey string // "" = tree fully collapsed; else the one model showing its profiles
+	rows              []row
+	cursor            int
+	expandedModelKey  string // "" = tree fully collapsed; else the one model showing its profiles
+	modelProfilesMode bool   // true after entering the expanded model's profile rows
+	modelSearch       string
+	searchEditing     bool
 
 	recentRuns   []models.RecentRun
 	recentRows   []row
@@ -132,6 +143,7 @@ type Model struct {
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
 
 	gpuAvailable bool // whether nvidia-smi was found at startup
+	gpuName      string
 	gpuUsage     gpu.Usage
 	gpuByPID     map[int]int64
 
@@ -146,9 +158,13 @@ type Model struct {
 
 	pendingDeleteModel   string
 	pendingDeleteProfile string
+	detailsScroll        int
+	detailsDir           int
+	detailsPause         int
 
 	picker        pickerState
 	form          formState
+	formExit      formExitState
 	confirm       confirmState
 	logs          logsState
 	settings      settingsState
@@ -171,6 +187,11 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager) Model {
 		tokRates:     map[string]float64{},
 		gpuAvailable: gpu.Available(),
 	}
+	if m.gpuAvailable {
+		if name, err := gpu.Name(); err == nil {
+			m.gpuName = name
+		}
+	}
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
@@ -178,7 +199,7 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager) Model {
 }
 
 func (m *Model) rebuildRows() {
-	m.rows = buildRows(m.cfg, m.expandedModelKey)
+	m.rows = buildRowsFiltered(m.cfg, m.expandedModelKey, m.modelSearch)
 	if m.cursor >= len(m.rows) {
 		m.cursor = len(m.rows) - 1
 	}
@@ -232,6 +253,11 @@ func buildRecentRows(cfg *config.Config, recent []models.RecentRun) []row {
 // its name, an accordion: entering a model expands it and collapses
 // whichever was open before. A "+ Add Model" row always trails the list.
 func buildRows(cfg *config.Config, expandedModelKey string) []row {
+	return buildRowsFiltered(cfg, expandedModelKey, "")
+}
+
+func buildRowsFiltered(cfg *config.Config, expandedModelKey, filter string) []row {
+	filter = strings.ToLower(strings.TrimSpace(filter))
 	modelKeys := make([]string, 0, len(cfg.Models))
 	for k := range cfg.Models {
 		modelKeys = append(modelKeys, k)
@@ -249,19 +275,34 @@ func buildRows(cfg *config.Config, expandedModelKey string) []row {
 			continue
 		}
 
-		rows = append(rows, row{kind: rowModel, modelKey: mk, label: mdl.Name})
-
-		if mk != expandedModelKey {
-			continue
-		}
-
 		profileKeys := make([]string, 0, len(mdl.Profiles))
 		for pk := range mdl.Profiles {
 			profileKeys = append(profileKeys, pk)
 		}
 		sort.Strings(profileKeys)
 
+		matchingProfiles := make(map[string]bool, len(profileKeys))
+		modelMatches := filter == "" || modelMatchesFilter(mk, mdl, filter)
 		for _, pk := range profileKeys {
+			p := mdl.Profiles[pk]
+			if filter == "" || profileMatchesFilter(pk, p, filter) {
+				matchingProfiles[pk] = true
+			}
+		}
+		if filter != "" && !modelMatches && len(matchingProfiles) == 0 {
+			continue
+		}
+
+		rows = append(rows, row{kind: rowModel, modelKey: mk, label: mdl.Name})
+
+		if mk != expandedModelKey && filter == "" {
+			continue
+		}
+
+		for _, pk := range profileKeys {
+			if filter != "" && !modelMatches && !matchingProfiles[pk] {
+				continue
+			}
 			rows = append(rows, row{
 				kind:       rowProfile,
 				modelKey:   mk,
@@ -276,6 +317,20 @@ func buildRows(cfg *config.Config, expandedModelKey string) []row {
 	rows = append(rows, row{kind: rowAddModel, label: "+ Add Model"})
 
 	return rows
+}
+
+func modelMatchesFilter(key string, mdl models.Model, filter string) bool {
+	return strings.Contains(strings.ToLower(key), filter) ||
+		strings.Contains(strings.ToLower(mdl.Name), filter) ||
+		strings.Contains(strings.ToLower(mdl.Path), filter) ||
+		strings.Contains(strings.ToLower(mdl.HFRepo), filter) ||
+		strings.Contains(strings.ToLower(mdl.Notes), filter)
+}
+
+func profileMatchesFilter(key string, p models.Profile, filter string) bool {
+	return strings.Contains(strings.ToLower(key), filter) ||
+		strings.Contains(strings.ToLower(p.Name), filter) ||
+		strings.Contains(strings.ToLower(p.Notes), filter)
 }
 
 // visibleModelKeys returns the sorted keys of every model that appears in
@@ -443,12 +498,18 @@ func tailOrReason(logPath string) string {
 
 // Init starts the periodic refresh tick.
 func (m Model) Init() tea.Cmd {
-	return tickCmd()
+	return tea.Batch(tickCmd(), scrollTickCmd())
 }
 
 func tickCmd() tea.Cmd {
 	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
+	})
+}
+
+func scrollTickCmd() tea.Cmd {
+	return tea.Tick(scrollTickInterval, func(t time.Time) tea.Msg {
+		return scrollTickMsg(t)
 	})
 }
 

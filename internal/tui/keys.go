@@ -9,6 +9,7 @@ type keyMap struct {
 	Left   key.Binding
 	Right  key.Binding
 	Run    key.Binding
+	Copy   key.Binding
 	Stop   key.Binding
 	Delete key.Binding
 	Logs   key.Binding
@@ -35,6 +36,10 @@ var keys = keyMap{
 	Run: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "run profile"),
+	),
+	Copy: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "copy profile"),
 	),
 	Stop: key.NewBinding(
 		key.WithKeys("s"),

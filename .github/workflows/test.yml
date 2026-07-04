@@ -1,0 +1,60 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -v ./... 2>&1 | tee /tmp/test-output.txt
+
+      - name: Compute badge values
+        if: always()
+        id: badge
+        shell: bash
+        run: |
+          passed=$(grep -c "^--- PASS:" /tmp/test-output.txt 2>/dev/null || echo 0)
+          failed=$(grep -c "^--- FAIL:" /tmp/test-output.txt 2>/dev/null || echo 0)
+          total=$((passed + failed))
+          color="brightgreen"
+          if [ "$failed" -gt 0 ] || [ "$total" -eq 0 ]; then color="red"; fi
+          echo "message=${passed}/${total} passed" >> "$GITHUB_OUTPUT"
+          echo "color=$color" >> "$GITHUB_OUTPUT"
+          echo "### Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Result | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Passed | $passed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ❌ Failed | $failed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total | $total |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update test badge
+        if: always() && github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ secrets.BADGE_GIST_ID }}
+          filename: llmctl-tests.json
+          label: tests
+          message: ${{ steps.badge.outputs.message }}
+          color: ${{ steps.badge.outputs.color }}

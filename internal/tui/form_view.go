@@ -7,6 +7,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	formDefaultLeftWidth    = 70
+	formDefaultDetailsWidth = 36
+	formMinLeftWidth        = 36
+	formMinDetailsWidth     = 24
+	formMinInputWidth       = 8
+)
+
 func (m Model) viewForm() string {
 	mdl := m.cfg.Models[m.form.modelKey]
 
@@ -19,6 +27,14 @@ func (m Model) viewForm() string {
 	b.WriteString(titleStyle.Render(fmt.Sprintf("%s — %s", title, mdl.Name)))
 	b.WriteString("\n\n")
 
+	leftWidth, detailsWidth := m.formPaneWidths()
+	rowWidth := formRowTextWidth(leftWidth)
+	labelWidth := min(30, max(14, rowWidth/2-2))
+	inputWidth := max(formMinInputWidth, rowWidth-labelWidth-1)
+	if labelWidth+1+inputWidth > rowWidth {
+		labelWidth = max(8, rowWidth-formMinInputWidth-1)
+		inputWidth = max(formMinInputWidth, rowWidth-labelWidth-1)
+	}
 	body := strings.Builder{}
 	sections := []struct {
 		name   string
@@ -43,12 +59,14 @@ func (m Model) viewForm() string {
 		}
 		for _, idx := range section.fields {
 			f := m.form.fields[idx]
-			label := formLabelStyle
+			f.input.Width = inputWidth
+			labelText := truncateText(f.label+":", labelWidth)
+			label := formLabelStyle.Width(labelWidth)
 			if m.form.focus == idx {
-				label = formFocusedLabelStyle
+				label = formFocusedLabelStyle.Width(labelWidth)
 				focusedRow = rowIndex
 			}
-			selectedRows = append(selectedRows, fmt.Sprintf("%s %s", label.Render(f.label+":"), f.input.View()))
+			selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", label.Render(labelText), f.input.View()), rowWidth))
 			rowIndex++
 		}
 	}
@@ -57,11 +75,12 @@ func (m Model) viewForm() string {
 		flashLabel = formFocusedLabelStyle
 		focusedRow = rowIndex
 	}
+	flashLabel = flashLabel.Width(labelWidth)
 	flashValue := "false"
 	if m.form.flash {
 		flashValue = "true"
 	}
-	selectedRows = append(selectedRows, fmt.Sprintf("%s %s", flashLabel.Render("Flash Attention:"), flashValue))
+	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", flashLabel.Render(truncateText("Flash Attention:", labelWidth)), flashValue), rowWidth))
 	rowIndex++
 	selectedRows = append(selectedRows, "")
 	rowIndex++
@@ -70,7 +89,7 @@ func (m Model) viewForm() string {
 		saveStyle = selectedProfileStyle
 		focusedRow = rowIndex
 	}
-	selectedRows = append(selectedRows, saveStyle.Render("[ Save ]"))
+	selectedRows = append(selectedRows, fitStyledLine(saveStyle.Render("[ Save ]"), rowWidth))
 
 	start := 0
 	if len(selectedRows) > visibleRows {
@@ -95,24 +114,30 @@ func (m Model) viewForm() string {
 		body.WriteString("\n")
 	}
 
-	leftPane := paneStyle.Width(70).Render(body.String())
+	paneHeight := m.formPaneHeight()
+	leftPane := paneStyle.Width(leftWidth).Height(paneHeight).Render(body.String())
 	rightPane := strings.Builder{}
 	rightPane.WriteString(sectionTitleStyle.Render("Details"))
 	rightPane.WriteString("\n\n")
-	if m.form.focus < len(m.form.fields) {
-		rightPane.WriteString(detailMutedStyle.Render(m.form.fields[m.form.focus].label))
+	rightPane.WriteString(detailMutedStyle.Render(truncateText(m.formDescriptionTitle(), formDescriptionTextWidth(detailsWidth))))
+	rightPane.WriteString("\n\n")
+	if currentFlag := m.form.focusedFlag(); currentFlag != "" {
+		m.form.flagInput.Width = formDescriptionTextWidth(detailsWidth) - 7
+		if m.form.flagFocus {
+			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString("\n")
+			rightPane.WriteString(helpStyle.Render("← back  enter confirm"))
+		} else {
+			rightPane.WriteString(detailMutedStyle.Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString("\n")
+			rightPane.WriteString(helpStyle.Render("→ to override"))
+		}
 		rightPane.WriteString("\n\n")
-		rightPane.WriteString(strings.Join(strings.Split(formFieldDescription(m.form.focus), " "), " "))
-	} else if m.form.focus == len(m.form.fields) {
-		rightPane.WriteString(detailMutedStyle.Render("Flash Attention"))
-		rightPane.WriteString("\n\n")
-		rightPane.WriteString("Enable optimized attention kernels when your build and GPU support them.")
+		rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-7))
 	} else {
-		rightPane.WriteString(detailMutedStyle.Render("Save Profile"))
-		rightPane.WriteString("\n\n")
-		rightPane.WriteString("Persist the current profile settings to the model configuration and return to the main list.")
+		rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-4))
 	}
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPane, paneStyle.Width(36).Render(rightPane.String())))
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPane, paneStyle.Width(detailsWidth).Height(paneHeight).Render(rightPane.String())))
 	b.WriteString("\n")
 
 	if m.form.err != "" {
@@ -121,4 +146,133 @@ func (m Model) viewForm() string {
 	}
 	b.WriteString(helpStyle.Render("tab/↓ next  shift+tab/↑ prev  space toggle  enter next/save  esc cancel"))
 	return b.String()
+}
+
+func (m Model) formDescriptionTitle() string {
+	if m.form.focus < len(m.form.fields) {
+		return m.form.fields[m.form.focus].label
+	}
+	if m.form.focus == len(m.form.fields) {
+		return "Flash Attention"
+	}
+	return "Save Profile"
+}
+
+func (m Model) formDescriptionText() string {
+	if m.form.focus < len(m.form.fields) {
+		return formFieldDescription(m.form.focus)
+	}
+	if m.form.focus == len(m.form.fields) {
+		return formFieldDescription(len(formLabels))
+	}
+	return formFieldDescription(len(formLabels) + 1)
+}
+
+func (m Model) formDescriptionLines(width int) []string {
+	return wrapWords(m.formDescriptionText(), formDescriptionTextWidth(width))
+}
+
+func (m Model) formDescriptionLineCount() int {
+	_, detailsWidth := m.formPaneWidths()
+	return len(m.formDescriptionLines(detailsWidth))
+}
+
+func (m Model) formDescriptionVisibleLines() int {
+	return max(2, m.formVisibleRows()-3)
+}
+
+func (m Model) renderFormDescription(width, visible int) string {
+	return strings.Join(descriptionWindow(m.formDescriptionLines(width), visible, m.form.descScroll), "\n")
+}
+
+func (m Model) formPaneWidths() (leftWidth, detailsWidth int) {
+	termWidth := m.width
+	if termWidth <= 0 {
+		termWidth = fallbackWidth
+	}
+
+	available := termWidth - 4 // two bordered panes side-by-side
+	if available < formMinLeftWidth+formMinDetailsWidth {
+		available = formMinLeftWidth + formMinDetailsWidth
+	}
+
+	detailsWidth = formDefaultDetailsWidth
+	leftWidth = formDefaultLeftWidth
+	if leftWidth+detailsWidth > available {
+		detailsWidth = max(formMinDetailsWidth, min(formDefaultDetailsWidth, available/3))
+		leftWidth = available - detailsWidth
+		if leftWidth < formMinLeftWidth {
+			leftWidth = formMinLeftWidth
+			detailsWidth = max(formMinDetailsWidth, available-leftWidth)
+		}
+	}
+	return leftWidth, detailsWidth
+}
+
+func formDescriptionTextWidth(paneWidth int) int {
+	return max(8, paneWidth-2)
+}
+
+func formRowTextWidth(paneWidth int) int {
+	return max(8, paneWidth-2)
+}
+
+func truncateText(s string, width int) string {
+	if width <= 0 || len(s) <= width {
+		return s
+	}
+	if width <= 1 {
+		return s[:width]
+	}
+	return s[:width-1] + "."
+}
+
+func fitStyledLine(s string, width int) string {
+	if width <= 0 || lipgloss.Width(s) <= width {
+		return s
+	}
+	return truncateText(s, width)
+}
+
+func descriptionWindow(lines []string, visible, offset int) []string {
+	if visible <= 0 {
+		return nil
+	}
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
+	maxOffset := max(0, len(lines)-visible)
+	offset = max(0, min(offset, maxOffset))
+
+	window := make([]string, 0, visible)
+	for i := offset; i < min(offset+visible, len(lines)); i++ {
+		window = append(window, lines[i])
+	}
+	for len(window) < visible {
+		window = append(window, "")
+	}
+	return window
+}
+
+func wrapWords(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{""}
+	}
+
+	lines := []string{words[0]}
+	for _, word := range words[1:] {
+		last := len(lines) - 1
+		if len(lines[last])+1+len(word) <= width {
+			lines[last] += " " + word
+			continue
+		}
+		lines = append(lines, word)
+	}
+	return lines
 }

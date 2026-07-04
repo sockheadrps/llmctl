@@ -23,6 +23,17 @@ func Available() bool {
 	return err == nil
 }
 
+// Name returns the name of the first GPU reported by nvidia-smi, or an error
+// if nvidia-smi is unavailable or returns no output.
+func Name() (string, error) {
+	out, err := exec.Command("nvidia-smi", "--query-gpu=name", "--format=csv,noheader").Output()
+	if err != nil {
+		return "", err
+	}
+	name := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+	return name, nil
+}
+
 // Total returns used/total VRAM summed across all GPUs nvidia-smi reports.
 func Total() (Usage, error) {
 	out, err := exec.Command("nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits").Output()

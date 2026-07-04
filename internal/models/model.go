@@ -42,8 +42,9 @@ type Profile struct {
 	ReasoningFormat   string   `yaml:"reasoning_format,omitempty"`
 	CacheTypeK        string   `yaml:"cache_type_k,omitempty"`
 	CacheTypeV        string   `yaml:"cache_type_v,omitempty"`
-	ExtraArgs         []string `yaml:"extra_args,omitempty"`
-	Notes             string   `yaml:"notes,omitempty"`
+	ExtraArgs         []string          `yaml:"extra_args,omitempty"`
+	Notes             string            `yaml:"notes,omitempty"`
+	FlagOverrides     map[string]string `yaml:"flag_overrides,omitempty"`
 }
 
 // Model is a GGUF model along with the reusable profiles it can be run with.

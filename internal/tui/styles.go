@@ -34,6 +34,10 @@ var (
 				Foreground(lipgloss.Color("39")).
 				Bold(true)
 
+	activeModelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("39")).
+				Underline(true)
+
 	runningStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("42"))
 
@@ -54,7 +58,7 @@ var (
 			Bold(true)
 
 	addStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
+			Foreground(lipgloss.Color("245")).
 			Italic(true)
 
 	selectedAddStyle = lipgloss.NewStyle().

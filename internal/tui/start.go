@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/runtime"
@@ -22,8 +24,19 @@ func (m Model) startProfileCmd(r row) tea.Cmd {
 	return func() tea.Msg {
 		logPath, _ := runtime.LogPath(modelKey, profileKey)
 		_, err := mgr.Start(cfg, modelKey, profileKey)
+		if err != nil && !logFileHasContent(logPath) {
+			logPath = ""
+		}
 		return startResultMsg{label: label, logPath: logPath, err: err}
 	}
+}
+
+func logFileHasContent(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Size() > 0
 }
 
 // runProfile kicks off an async start for r and switches on the "starting…"
