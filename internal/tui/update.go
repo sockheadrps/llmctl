@@ -83,6 +83,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateLogs(msg)
 		case screenRunningAction:
 			return m.updateRunningAction(msg)
+		case screenStopConfirm:
+			return m.updateStopConfirm(msg)
+		case screenProfileTemplate:
+			return m.updateTemplatePicker(msg)
 		default:
 			return m.updateMain(msg)
 		}
@@ -586,7 +590,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	case rowProfile:
 		return m.openConfirm(r)
 	case rowAddProfile:
-		return m.openForm(r.modelKey)
+		return m.openTemplatePicker(r.modelKey)
 	case rowAddModel:
 		return m.openPicker()
 	case rowSettingsCategory:
@@ -623,7 +627,7 @@ func (m Model) stopSelected() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		run := m.running[m.runningCursor]
-		return m.stopRunning(run.ModelKey, run.ProfileKey, run.Label())
+		return m.openStopConfirm(run.ModelKey, run.ProfileKey, run.Label())
 	}
 
 	if m.focus != focusLeft {
@@ -633,7 +637,11 @@ func (m Model) stopSelected() (tea.Model, tea.Cmd) {
 	if !ok || (r.kind != rowProfile && r.kind != rowRunning) {
 		return m, nil
 	}
-	return m.stopRunning(r.modelKey, r.profileKey, r.label)
+	// Only confirm if a profile is currently running; otherwise silently no-op.
+	if _, running := m.findRunning(r.modelKey, r.profileKey); !running {
+		return m, nil
+	}
+	return m.openStopConfirm(r.modelKey, r.profileKey, r.label)
 }
 
 // deleteSelected implements press-twice-to-confirm deletion of a profile:

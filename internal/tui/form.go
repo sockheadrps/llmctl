@@ -359,8 +359,9 @@ func (f *formState) ensureVisible(visibleRows int, totalRows int) {
 }
 
 // openForm switches to the new-profile screen for modelKey, pre-filling a
-// suggested free port.
-func (m Model) openForm(modelKey string) (tea.Model, tea.Cmd) {
+// suggested free port. overrides is an optional map of field index → value
+// that overwrites specific defaults (used by template presets).
+func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, tea.Cmd) {
 	if _, ok := m.cfg.Models[modelKey]; !ok {
 		return m, nil
 	}
@@ -400,6 +401,12 @@ func (m Model) openForm(modelKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldCacheV] = ""
 	defaults[fieldExtraArgs] = ""
 	defaults[fieldNotes] = ""
+
+	for idx, val := range overrides {
+		if idx >= 0 && idx < len(defaults) {
+			defaults[idx] = val
+		}
+	}
 
 	fi := buildFlagInput()
 	m.form = formState{

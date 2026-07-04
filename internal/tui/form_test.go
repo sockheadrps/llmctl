@@ -247,7 +247,7 @@ func testNewFormModel(t *testing.T) Model {
 			},
 		}},
 	}
-	next, _ := m.openForm("model")
+	next, _ := m.openForm("model", nil)
 	return next.(Model)
 }
 

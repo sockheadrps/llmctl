@@ -75,6 +75,10 @@ func (m Model) View() string {
 		return m.viewLogs()
 	case screenRunningAction:
 		return overlayCenter(m.viewMain(), m.viewRunningActionModal())
+	case screenStopConfirm:
+		return overlayCenter(m.viewMain(), m.viewStopConfirmModal())
+	case screenProfileTemplate:
+		return m.viewTemplatePicker()
 	default:
 		return m.viewMain()
 	}
@@ -370,8 +374,19 @@ func (m Model) renderModelsTree(width int) string {
 			// The selected model stands out; every other one dims back
 			// so it doesn't compete for attention.
 			style := m.modelRowStyle(r, active)
-			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
-			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
+			dot := ""
+			if isRunning, status := m.modelRunningStatus(r.modelKey); isRunning {
+				switch status {
+				case health.StatusUp:
+					dot = runningStyle.Render("● ")
+				case health.StatusDown:
+					dot = downStyle.Render("● ")
+				default:
+					dot = loadingStyle.Render("● ")
+				}
+			}
+			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-lipgloss.Width(dot)))
+			b.WriteString(fmt.Sprintf("%s%s%s\n", cursor, dot, style.Render(label)))
 
 		case rowProfile:
 			label := r.label
@@ -503,8 +518,9 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 		}
 	}
 
+	key := r.ModelKey + "/" + r.ProfileKey
 	text := fmt.Sprintf("%-24s :%d", r.Label(), r.Port)
-	if rate, ok := m.tokRates[r.ModelKey+"/"+r.ProfileKey]; ok {
+	if rate, ok := m.tokRates[key]; ok {
 		text += fmt.Sprintf("  %.1f tok/s", rate)
 	}
 	if mb, ok := m.gpuByPID[r.PID]; ok {
@@ -513,7 +529,15 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 	if width > 0 {
 		text = truncateText(text, max(1, formRowTextWidth(width)-lipgloss.Width(cursor)-2))
 	}
-	return fmt.Sprintf("%s%s %s %s\n", cursor, dot, badge, labelStyle.Render(text))
+	row := fmt.Sprintf("%s%s %s %s\n", cursor, dot, badge, labelStyle.Render(text))
+
+	if rate, ok := m.tokRates[key]; ok {
+		row += "   " + m.renderRateMeter(key, rate) + "\n"
+	} else if peak := m.tokPeak[key]; peak > 0 {
+		// model is idle but has a session history — show the meter at zero
+		row += "   " + m.renderRateMeter(key, 0) + "\n"
+	}
+	return row
 }
 
 // renderRunningTabList shows every running instance in the Running tab's
@@ -583,13 +607,25 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	header := modelStyle.Render(fmt.Sprintf("%s  :%d", run.Label(), run.Port))
 	help := helpStyle.Render("enter to stop or view full output")
 
-	// header + blank + tail + blank + help
-	budget := innerH - 4
+	key := run.ModelKey + "/" + run.ProfileKey
+	hasMeter := m.tokPeak[key] > 0
+
+	// header + (meter) + blank + tail + blank + help
+	overhead := 4
+	if hasMeter {
+		overhead = 5
+	}
+	budget := innerH - overhead
 	if budget < 1 {
 		budget = 1
 	}
 
-	fmt.Fprintf(&b, "%s\n\n", header)
+	fmt.Fprintf(&b, "%s\n", header)
+	if hasMeter {
+		rate := m.tokRates[key]
+		b.WriteString(m.renderRateMeter(key, rate) + "\n")
+	}
+	b.WriteString("\n")
 	if tail := tailFittingHeight(run.LogFile, rightW, budget); tail != "" {
 		b.WriteString(profileStyle.Render(tail))
 	} else {
@@ -892,6 +928,84 @@ func tabInstructions(mode leftMode) string {
 	}
 }
 
+// renderRateMeter renders a horizontal bar showing current tok/s relative to
+// the session peak, followed by the numeric rate.
+func (m Model) renderRateMeter(key string, rate float64) string {
+	const barWidth = 16
+	peak := m.tokPeak[key]
+	if peak <= 0 {
+		peak = rate
+	}
+	filled := 0
+	if peak > 0 {
+		filled = int((rate / peak) * barWidth)
+		if filled > barWidth {
+			filled = barWidth
+		}
+	}
+	bar := infoStyle.Render(strings.Repeat("█", filled)) +
+		detailMutedStyle.Render(strings.Repeat("░", barWidth-filled))
+	label := detailMutedStyle.Render(fmt.Sprintf("  %.1f tok/s", rate))
+	if peak > rate && peak > 0 {
+		label += detailMutedStyle.Render(fmt.Sprintf("  (peak %.1f)", peak))
+	}
+	return bar + label
+}
+
+// modelRunningStatus returns whether any profile for modelKey is running and
+// the best health status among them (up beats loading beats down).
+func (m Model) modelRunningStatus(modelKey string) (running bool, status health.Status) {
+	for _, r := range m.running {
+		if r.ModelKey != modelKey {
+			continue
+		}
+		s := m.health[r.ModelKey+"/"+r.ProfileKey]
+		if !running {
+			running = true
+			status = s
+		}
+		if s == health.StatusUp {
+			status = s
+			break
+		}
+	}
+	return
+}
+
+// renderSparkline converts a slice of rate samples into a compact bar
+// chart string using Unicode block elements, scaled to the slice max.
+func renderSparkline(history []float64, width int) string {
+	if len(history) == 0 || width <= 0 {
+		return ""
+	}
+	peak := 0.0
+	for _, v := range history {
+		if v > peak {
+			peak = v
+		}
+	}
+	if peak == 0 {
+		return ""
+	}
+	blocks := []rune("▁▂▃▄▅▆▇█")
+	n := len(blocks)
+	data := history
+	if len(data) > width {
+		data = data[len(data)-width:]
+	}
+	var b strings.Builder
+	for _, v := range data {
+		idx := int((v / peak) * float64(n-1))
+		if idx < 0 {
+			idx = 0
+		} else if idx >= n {
+			idx = n - 1
+		}
+		b.WriteRune(blocks[idx])
+	}
+	return b.String()
+}
+
 type detailPair struct {
 	label string
 	value string
@@ -986,15 +1100,21 @@ func (m Model) renderDetails(width int) string {
 	}
 	b.WriteString("\n")
 
-	showValue := func(s string) bool {
-		return strings.TrimSpace(s) != ""
-	}
-
 	dash := func(s string) string {
 		if s == "" {
 			return "-"
 		}
 		return s
+	}
+
+	boolDash := func(v *bool) string {
+		if v == nil {
+			return "-"
+		}
+		if *v {
+			return "true"
+		}
+		return "false"
 	}
 
 	sections := []struct {
@@ -1017,13 +1137,19 @@ func (m Model) renderDetails(width int) string {
 				{label: "Min P", value: dash(floatPtrOrEmpty(p.MinP))},
 				{label: "Presence Pen", value: dash(floatPtrOrEmpty(p.PresencePenalty))},
 				{label: "Repeat Pen", value: dash(floatPtrOrEmpty(p.RepetitionPenalty))},
+				{label: "Freq Pen", value: dash(floatPtrOrEmpty(p.FrequencyPenalty))},
+				{label: "Seed", value: dash(intPtrOrEmpty(p.Seed))},
 			},
 		},
 		{
 			name: "Runtime",
 			pairs: []detailPair{
 				{label: "Flash Attn", value: fmt.Sprint(p.FlashAttn)},
-				{label: "GPU Layers", value: dash(intOrEmpty(p.GPULayers))},
+				{label: "GPU Layers", value: fmt.Sprint(p.GPULayers)},
+				{label: "MMap", value: boolDash(p.MMap)},
+				{label: "KV Offload", value: boolDash(p.KVOffload)},
+				{label: "Parallel", value: dash(intPtrOrEmpty(p.Parallel))},
+				{label: "Cont Batching", value: boolDash(p.ContBatching)},
 			},
 		},
 		{
@@ -1031,25 +1157,21 @@ func (m Model) renderDetails(width int) string {
 			pairs: []detailPair{
 				{label: "Cache K", value: dash(p.CacheTypeK)},
 				{label: "Cache V", value: dash(p.CacheTypeV)},
+				{label: "Cache Prompt", value: boolDash(p.CachePrompt)},
+				{label: "Cache RAM", value: dash(intPtrOrEmpty(p.CacheRAM))},
+			},
+		},
+		{
+			name: "Reasoning",
+			pairs: []detailPair{
+				{label: "Reasoning", value: dash(p.Reasoning)},
+				{label: "Budget", value: dash(intPtrOrEmpty(p.ReasoningBudget))},
+				{label: "Format", value: dash(p.ReasoningFormat)},
 			},
 		},
 	}
 
-	for i := range sections {
-		filtered := make([]detailPair, 0, len(sections[i].pairs))
-		for _, pair := range sections[i].pairs {
-			if pair.label == "Port" || pair.label == "Ctx Size" || pair.label == "Flash Attn" || pair.label == "GPU Layers" {
-				if pair.value != "" && pair.value != "0" && pair.value != "false" && pair.value != "-" {
-					filtered = append(filtered, pair)
-				}
-				continue
-			}
-			if showValue(pair.value) && pair.value != "-" {
-				filtered = append(filtered, pair)
-			}
-		}
-		sections[i].pairs = filtered
-	}
+	// Always show all pairs — dash("-") for unset so the full picture is visible.
 
 	if width >= 70 {
 		leftSections := []struct {
@@ -1059,7 +1181,7 @@ func (m Model) renderDetails(width int) string {
 		rightSections := []struct {
 			name  string
 			pairs []detailPair
-		}{sections[2], sections[3]}
+		}{sections[2], sections[3], sections[4]}
 
 		columnWidth := (width - 3) / 2
 		if columnWidth < 24 {

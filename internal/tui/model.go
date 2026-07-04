@@ -31,6 +31,8 @@ const (
 	screenConfirmProfile
 	screenLogs
 	screenRunningAction
+	screenStopConfirm
+	screenProfileTemplate
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -141,6 +143,7 @@ type Model struct {
 
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
+	tokPeak    map[string]float64   // session-high tok/s per instance, for scaling the rate meter
 
 	gpuAvailable bool // whether nvidia-smi was found at startup
 	gpuName      string
@@ -162,13 +165,17 @@ type Model struct {
 	detailsDir           int
 	detailsPause         int
 
-	picker        pickerState
-	form          formState
-	formExit      formExitState
-	confirm       confirmState
-	logs          logsState
-	settings      settingsState
-	runningAction runningActionState
+	picker         pickerState
+	form           formState
+	formExit       formExitState
+	confirm        confirmState
+	logs           logsState
+	settings       settingsState
+	runningAction  runningActionState
+	stopConfirm    stopConfirmState
+	templatePicker templatePickerState
+
+	tokHistory map[string][]float64
 
 	width  int
 	height int
@@ -185,6 +192,8 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager) Model {
 		focus:        focusTabs,
 		tokSamples:   map[string]tokSample{},
 		tokRates:     map[string]float64{},
+		tokPeak:      map[string]float64{},
+		tokHistory:   map[string][]float64{},
 		gpuAvailable: gpu.Available(),
 	}
 	if m.gpuAvailable {
@@ -426,6 +435,8 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 		if !live[key] {
 			delete(m.tokSamples, key)
 			delete(m.tokRates, key)
+			delete(m.tokPeak, key)
+			delete(m.tokHistory, key)
 		}
 	}
 }
@@ -439,7 +450,17 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 	for key, decoded := range msg {
 		if prev, ok := m.tokSamples[key]; ok && decoded >= prev.decoded {
 			if dt := now.Sub(prev.at).Seconds(); dt > 0 {
-				m.tokRates[key] = float64(decoded-prev.decoded) / dt
+				rate := float64(decoded-prev.decoded) / dt
+				m.tokRates[key] = rate
+				if rate > m.tokPeak[key] {
+					m.tokPeak[key] = rate
+				}
+				hist := append(m.tokHistory[key], rate)
+				const maxHistLen = 30
+				if len(hist) > maxHistLen {
+					hist = hist[len(hist)-maxHistLen:]
+				}
+				m.tokHistory[key] = hist
 			}
 		}
 		m.tokSamples[key] = tokSample{decoded: decoded, at: now}
