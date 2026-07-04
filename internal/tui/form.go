@@ -29,12 +29,15 @@ type formState struct {
 	fields      []formField
 	flash       bool
 	focus       int
+	scroll      int
 	err         string
 }
 
 // Field indices into formState.fields, matching the order of formLabels.
 const (
 	fieldKey = iota
+	fieldHost
+	fieldAlias
 	fieldPort
 	fieldCtxSize
 	fieldTemp
@@ -43,7 +46,21 @@ const (
 	fieldMinP
 	fieldPresencePenalty
 	fieldRepetitionPenalty
+	fieldFrequencyPenalty
+	fieldSeed
+	fieldBatchSize
+	fieldUBatchSize
+	fieldRepeatLastN
 	fieldGPULayers
+	fieldMMap
+	fieldKVOffload
+	fieldParallelSlots
+	fieldContBatching
+	fieldCachePrompt
+	fieldCacheRAM
+	fieldReasoning
+	fieldReasoningBudget
+	fieldReasoningFormat
 	fieldCacheK
 	fieldCacheV
 	fieldExtraArgs
@@ -51,9 +68,12 @@ const (
 )
 
 var formLabels = []string{
-	"Key", "Port", "Ctx Size", "Temp", "Top P", "Top K", "Min P",
-	"Presence Penalty", "Repetition Penalty",
-	"GPU Layers", "Cache Type K", "Cache Type V", "Extra Args (space-separated)", "Notes",
+	"Key", "Host", "Alias", "Port", "Ctx Size", "Temp", "Top P", "Top K", "Min P",
+	"Presence Penalty", "Repetition Penalty", "Frequency Penalty", "Seed",
+	"Batch Size", "UBatch Size", "Repeat Last N", "GPU Layers", "MMap", "KV Offload",
+	"Parallel Slots", "Continuous Batching", "Prompt Cache", "Cache RAM",
+	"Reasoning", "Reasoning Budget", "Reasoning Format", "Cache Type K", "Cache Type V",
+	"Extra Args (space-separated)", "Notes",
 }
 
 func buildFormFields(defaults []string) []formField {
@@ -70,18 +90,109 @@ func buildFormFields(defaults []string) []formField {
 	return fields
 }
 
+func formFieldDescription(idx int) string {
+	switch idx {
+	case fieldHost:
+		return "Sets the network interface that llama-server listens on, such as 127.0.0.1 for local-only access or 0.0.0.0 for all interfaces."
+	case fieldAlias:
+		return "A friendly identifier for the profile that can help distinguish multiple profiles using the same model."
+	case fieldPort:
+		return "The TCP port used by the server. Each running profile should use a unique port."
+	case fieldCtxSize:
+		return "The model context window size. Larger values increase memory usage and allow longer conversations."
+	case fieldTemp:
+		return "Controls how random the generated output is. Lower values are more deterministic."
+	case fieldTopP:
+		return "Limits sampling to the smallest set of tokens whose cumulative probability exceeds this value."
+	case fieldTopK:
+		return "Restricts sampling to the most likely K tokens."
+	case fieldMinP:
+		return "Filters out low-probability tokens. A value of 0.0 disables this filter."
+	case fieldPresencePenalty:
+		return "Encourages the model to introduce new topics rather than repeating earlier ones."
+	case fieldRepetitionPenalty:
+		return "Discourages repeated text and can reduce loops or repetition."
+	case fieldFrequencyPenalty:
+		return "Penalizes tokens that have already appeared frequently to improve diversity."
+	case fieldSeed:
+		return "Sets the random seed for reproducible results. Use -1 for randomness."
+	case fieldBatchSize:
+		return "Maximum logical prompt processing batch size. Larger values can improve prompt throughput but need more memory."
+	case fieldUBatchSize:
+		return "Maximum physical micro-batch size. Advanced tuning option for throughput and memory tradeoffs."
+	case fieldRepeatLastN:
+		return "Number of recent tokens considered when applying repetition penalties."
+	case fieldGPULayers:
+		return "How many transformer layers to load on the GPU. Larger values usually increase performance."
+	case fieldMMap:
+		return "Enables memory-mapped model loading for faster startup and lower RAM use."
+	case fieldKVOffload:
+		return "Lets KV cache operations use the GPU. This can improve performance on supported hardware."
+	case fieldParallelSlots:
+		return "How many simultaneous inference slots the server should support."
+	case fieldContBatching:
+		return "Enables dynamic batching across multiple clients for better throughput."
+	case fieldCachePrompt:
+		return "Caches prompt processing to speed up repeated requests."
+	case fieldCacheRAM:
+		return "Maximum RAM allocated for prompt caching."
+	case fieldReasoning:
+		return "Turns reasoning mode on, off, or auto for compatible models."
+	case fieldReasoningBudget:
+		return "Sets a budget for reasoning tokens to limit thinking time and latency."
+	case fieldReasoningFormat:
+		return "Changes how reasoning content is returned, such as auto, none, or DeepSeek-style output."
+	case fieldCacheK:
+		return "The data type used for the key portion of the KV cache."
+	case fieldCacheV:
+		return "The data type used for the value portion of the KV cache."
+	case fieldExtraArgs:
+		return "Additional raw llama.cpp arguments, split by spaces, for advanced or experimental features."
+	case fieldNotes:
+		return "Optional notes for this profile that help you remember how it was intended to be used."
+	case len(formLabels):
+		return "The Flash Attention toggle enables hardware-optimized attention when supported by your build."
+	case len(formLabels) + 1:
+		return "Save this profile to your model configuration and return to the main view."
+	default:
+		return "Adjust this option to change how llama-server starts for this profile."
+	}
+}
+
 func (f *formState) blurAll() {
 	for i := range f.fields {
 		f.fields[i].input.Blur()
 	}
 }
 
-func (f *formState) moveFocus(delta int) {
+func (f *formState) moveFocus(delta int, visibleRows int) {
 	total := len(f.fields) + 2 // + flash toggle + save action
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
 	if f.focus < len(f.fields) {
 		f.fields[f.focus].input.Focus()
+	}
+	f.ensureVisible(visibleRows, total)
+}
+
+func (f *formState) ensureVisible(visibleRows int, totalRows int) {
+	if visibleRows <= 0 {
+		visibleRows = 1
+	}
+	if totalRows <= visibleRows {
+		f.scroll = 0
+		return
+	}
+	if f.focus < f.scroll {
+		f.scroll = f.focus
+	} else if f.focus >= f.scroll+visibleRows {
+		f.scroll = f.focus - visibleRows + 1
+	}
+	maxScroll := totalRows - visibleRows
+	if f.scroll < 0 {
+		f.scroll = 0
+	} else if f.scroll > maxScroll {
+		f.scroll = maxScroll
 	}
 }
 
@@ -96,11 +207,37 @@ func (m Model) openForm(modelKey string) (tea.Model, tea.Cmd) {
 	// own defaults for those are already no-ops (0.0 and 1.0), so leaving
 	// them unset until the user opts in avoids emitting flags that do
 	// nothing but add noise to the command line.
-	defaults := []string{
-		"", strconv.Itoa(suggestPort(m.cfg)), "8192", "0.6", "0.95", "20", "0.0",
-		"", "",
-		"999", "", "", "", "",
-	}
+	defaults := make([]string, len(formLabels))
+	defaults[fieldKey] = ""
+	defaults[fieldHost] = ""
+	defaults[fieldAlias] = ""
+	defaults[fieldPort] = strconv.Itoa(suggestPort(m.cfg))
+	defaults[fieldCtxSize] = "8192"
+	defaults[fieldTemp] = "0.6"
+	defaults[fieldTopP] = "0.95"
+	defaults[fieldTopK] = "20"
+	defaults[fieldMinP] = "0.0"
+	defaults[fieldPresencePenalty] = ""
+	defaults[fieldRepetitionPenalty] = ""
+	defaults[fieldFrequencyPenalty] = ""
+	defaults[fieldSeed] = ""
+	defaults[fieldBatchSize] = ""
+	defaults[fieldUBatchSize] = ""
+	defaults[fieldRepeatLastN] = ""
+	defaults[fieldGPULayers] = "999"
+	defaults[fieldMMap] = ""
+	defaults[fieldKVOffload] = ""
+	defaults[fieldParallelSlots] = ""
+	defaults[fieldContBatching] = ""
+	defaults[fieldCachePrompt] = ""
+	defaults[fieldCacheRAM] = ""
+	defaults[fieldReasoning] = ""
+	defaults[fieldReasoningBudget] = ""
+	defaults[fieldReasoningFormat] = ""
+	defaults[fieldCacheK] = ""
+	defaults[fieldCacheV] = ""
+	defaults[fieldExtraArgs] = ""
+	defaults[fieldNotes] = ""
 
 	m.form = formState{modelKey: modelKey, fields: buildFormFields(defaults), flash: true, focus: 0}
 	m.screen = screenNewProfile
@@ -122,22 +259,37 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	defaults := []string{
-		profileKey,
-		strconv.Itoa(p.Port),
-		intOrEmpty(p.CtxSize),
-		floatPtrOrEmpty(p.Temp),
-		floatPtrOrEmpty(p.TopP),
-		intPtrOrEmpty(p.TopK),
-		floatPtrOrEmpty(p.MinP),
-		floatPtrOrEmpty(p.PresencePenalty),
-		floatPtrOrEmpty(p.RepetitionPenalty),
-		intOrEmpty(p.GPULayers),
-		p.CacheTypeK,
-		p.CacheTypeV,
-		strings.Join(p.ExtraArgs, " "),
-		p.Notes,
-	}
+	defaults := make([]string, len(formLabels))
+	defaults[fieldKey] = profileKey
+	defaults[fieldHost] = p.Host
+	defaults[fieldAlias] = p.Alias
+	defaults[fieldPort] = strconv.Itoa(p.Port)
+	defaults[fieldCtxSize] = intOrEmpty(p.CtxSize)
+	defaults[fieldTemp] = floatPtrOrEmpty(p.Temp)
+	defaults[fieldTopP] = floatPtrOrEmpty(p.TopP)
+	defaults[fieldTopK] = intPtrOrEmpty(p.TopK)
+	defaults[fieldMinP] = floatPtrOrEmpty(p.MinP)
+	defaults[fieldPresencePenalty] = floatPtrOrEmpty(p.PresencePenalty)
+	defaults[fieldRepetitionPenalty] = floatPtrOrEmpty(p.RepetitionPenalty)
+	defaults[fieldFrequencyPenalty] = floatPtrOrEmpty(p.FrequencyPenalty)
+	defaults[fieldSeed] = intPtrOrEmpty(p.Seed)
+	defaults[fieldBatchSize] = intPtrOrEmpty(p.BatchSize)
+	defaults[fieldUBatchSize] = intPtrOrEmpty(p.UBatchSize)
+	defaults[fieldRepeatLastN] = intPtrOrEmpty(p.RepeatLastN)
+	defaults[fieldGPULayers] = intOrEmpty(p.GPULayers)
+	defaults[fieldMMap] = boolPtrOrEmpty(p.MMap)
+	defaults[fieldKVOffload] = boolPtrOrEmpty(p.KVOffload)
+	defaults[fieldParallelSlots] = intPtrOrEmpty(p.Parallel)
+	defaults[fieldContBatching] = boolPtrOrEmpty(p.ContBatching)
+	defaults[fieldCachePrompt] = boolPtrOrEmpty(p.CachePrompt)
+	defaults[fieldCacheRAM] = intPtrOrEmpty(p.CacheRAM)
+	defaults[fieldReasoning] = p.Reasoning
+	defaults[fieldReasoningBudget] = intPtrOrEmpty(p.ReasoningBudget)
+	defaults[fieldReasoningFormat] = p.ReasoningFormat
+	defaults[fieldCacheK] = p.CacheTypeK
+	defaults[fieldCacheV] = p.CacheTypeV
+	defaults[fieldExtraArgs] = strings.Join(p.ExtraArgs, " ")
+	defaults[fieldNotes] = p.Notes
 
 	m.form = formState{
 		modelKey:    modelKey,
@@ -164,6 +316,16 @@ func intPtrOrEmpty(n *int) string {
 		return ""
 	}
 	return strconv.Itoa(*n)
+}
+
+func boolPtrOrEmpty(b *bool) string {
+	if b == nil {
+		return ""
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }
 
 func floatPtrOrEmpty(f *float64) string {
@@ -197,11 +359,11 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab", "down":
-		m.form.moveFocus(1)
+		m.form.moveFocus(1, m.formVisibleRows())
 		return m, nil
 
 	case "shift+tab", "up":
-		m.form.moveFocus(-1)
+		m.form.moveFocus(-1, m.formVisibleRows())
 		return m, nil
 
 	case " ":
@@ -218,7 +380,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case len(m.form.fields) + 1:
 			return m.submitForm()
 		default:
-			m.form.moveFocus(1)
+			m.form.moveFocus(1, m.formVisibleRows())
 			return m, nil
 		}
 	}
@@ -287,9 +449,74 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		m.form.err = "repetition penalty must be a number"
 		return m, nil
 	}
+	frequencyPenalty, err := parseFloatPtr(value(fieldFrequencyPenalty))
+	if err != nil {
+		m.form.err = "frequency penalty must be a number"
+		return m, nil
+	}
+	seed, err := parseIntPtr(value(fieldSeed))
+	if err != nil {
+		m.form.err = "seed must be an integer"
+		return m, nil
+	}
+	batchSize, err := parseIntPtr(value(fieldBatchSize))
+	if err != nil {
+		m.form.err = "batch size must be an integer"
+		return m, nil
+	}
+	ubatchSize, err := parseIntPtr(value(fieldUBatchSize))
+	if err != nil {
+		m.form.err = "ubatch size must be an integer"
+		return m, nil
+	}
+	repeatLastN, err := parseIntPtr(value(fieldRepeatLastN))
+	if err != nil {
+		m.form.err = "repeat last n must be an integer"
+		return m, nil
+	}
 	gpuLayers, err := parseIntOrZero(value(fieldGPULayers))
 	if err != nil {
 		m.form.err = "gpu layers must be an integer"
+		return m, nil
+	}
+	mmap, err := parseBoolPtr(value(fieldMMap))
+	if err != nil {
+		m.form.err = "mmap must be true or false"
+		return m, nil
+	}
+	kvOffload, err := parseBoolPtr(value(fieldKVOffload))
+	if err != nil {
+		m.form.err = "kv offload must be true or false"
+		return m, nil
+	}
+	parallelSlots, err := parseIntPtr(value(fieldParallelSlots))
+	if err != nil {
+		m.form.err = "parallel slots must be an integer"
+		return m, nil
+	}
+	contBatching, err := parseBoolPtr(value(fieldContBatching))
+	if err != nil {
+		m.form.err = "continuous batching must be true or false"
+		return m, nil
+	}
+	cachePrompt, err := parseBoolPtr(value(fieldCachePrompt))
+	if err != nil {
+		m.form.err = "prompt cache must be true or false"
+		return m, nil
+	}
+	cacheRAM, err := parseIntPtr(value(fieldCacheRAM))
+	if err != nil {
+		m.form.err = "cache ram must be an integer"
+		return m, nil
+	}
+	reasoning, err := parseReasoning(value(fieldReasoning))
+	if err != nil {
+		m.form.err = err.Error()
+		return m, nil
+	}
+	reasoningBudget, err := parseIntPtr(value(fieldReasoningBudget))
+	if err != nil {
+		m.form.err = "reasoning budget must be an integer"
 		return m, nil
 	}
 
@@ -310,6 +537,8 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	}
 	mdl.Profiles[key] = models.Profile{
 		Name:              key,
+		Host:              value(fieldHost),
+		Alias:             value(fieldAlias),
 		Port:              port,
 		CtxSize:           ctxSize,
 		Temp:              temp,
@@ -318,8 +547,22 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		MinP:              minP,
 		PresencePenalty:   presencePenalty,
 		RepetitionPenalty: repetitionPenalty,
+		FrequencyPenalty:  frequencyPenalty,
+		Seed:              seed,
+		BatchSize:         batchSize,
+		UBatchSize:        ubatchSize,
+		RepeatLastN:       repeatLastN,
 		FlashAttn:         m.form.flash,
 		GPULayers:         gpuLayers,
+		MMap:              mmap,
+		KVOffload:         kvOffload,
+		Parallel:          parallelSlots,
+		ContBatching:      contBatching,
+		CachePrompt:       cachePrompt,
+		CacheRAM:          cacheRAM,
+		Reasoning:         reasoning,
+		ReasoningBudget:   reasoningBudget,
+		ReasoningFormat:   value(fieldReasoningFormat),
 		CacheTypeK:        value(fieldCacheK),
 		CacheTypeV:        value(fieldCacheV),
 		ExtraArgs:         extraArgs,
@@ -342,11 +585,42 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) formVisibleRows() int {
+	if m.height <= 0 {
+		return 12
+	}
+	return max(8, m.height-12)
+}
+
 func parseIntOrZero(s string) (int, error) {
 	if s == "" {
 		return 0, nil
 	}
 	return strconv.Atoi(s)
+}
+
+func parseBoolPtr(s string) (*bool, error) {
+	if s == "" {
+		return nil, nil
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func parseReasoning(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "on", "off", "auto":
+		return s, nil
+	default:
+		return "", fmt.Errorf("reasoning must be on, off, or auto")
+	}
 }
 
 // parseIntPtr and parseFloatPtr return nil for a blank field — used for

@@ -14,6 +14,8 @@ package models
 // explicit disabling value are not the same thing.
 type Profile struct {
 	Name              string   `yaml:"-"`
+	Host              string   `yaml:"host,omitempty"`
+	Alias             string   `yaml:"alias,omitempty"`
 	Port              int      `yaml:"port"`
 	CtxSize           int      `yaml:"ctx_size,omitempty"`
 	Temp              *float64 `yaml:"temp,omitempty"`
@@ -22,8 +24,22 @@ type Profile struct {
 	MinP              *float64 `yaml:"min_p,omitempty"`
 	PresencePenalty   *float64 `yaml:"presence_penalty,omitempty"`
 	RepetitionPenalty *float64 `yaml:"repetition_penalty,omitempty"`
+	FrequencyPenalty  *float64 `yaml:"frequency_penalty,omitempty"`
+	Seed              *int     `yaml:"seed,omitempty"`
+	BatchSize         *int     `yaml:"batch_size,omitempty"`
+	UBatchSize        *int     `yaml:"ubatch_size,omitempty"`
+	RepeatLastN       *int     `yaml:"repeat_last_n,omitempty"`
 	FlashAttn         bool     `yaml:"flash_attention,omitempty"`
 	GPULayers         int      `yaml:"gpu_layers,omitempty"`
+	MMap              *bool    `yaml:"mmap,omitempty"`
+	KVOffload         *bool    `yaml:"kv_offload,omitempty"`
+	Parallel          *int     `yaml:"parallel,omitempty"`
+	ContBatching      *bool    `yaml:"cont_batching,omitempty"`
+	CachePrompt       *bool    `yaml:"cache_prompt,omitempty"`
+	CacheRAM          *int     `yaml:"cache_ram,omitempty"`
+	Reasoning         string   `yaml:"reasoning,omitempty"`
+	ReasoningBudget   *int     `yaml:"reasoning_budget,omitempty"`
+	ReasoningFormat   string   `yaml:"reasoning_format,omitempty"`
 	CacheTypeK        string   `yaml:"cache_type_k,omitempty"`
 	CacheTypeV        string   `yaml:"cache_type_v,omitempty"`
 	ExtraArgs         []string `yaml:"extra_args,omitempty"`

@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/models"
@@ -27,8 +26,20 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 		args = append(args, "--model", m.Path)
 	}
 	args = append(args, "--port", strconv.Itoa(p.Port))
+	if p.Host != "" {
+		args = append(args, "--host", p.Host)
+	}
+	if p.Alias != "" {
+		args = append(args, "--alias", p.Alias)
+	}
 	if p.CtxSize > 0 {
 		args = append(args, "--ctx-size", strconv.Itoa(p.CtxSize))
+	}
+	if p.BatchSize != nil {
+		args = append(args, "--batch-size", strconv.Itoa(*p.BatchSize))
+	}
+	if p.UBatchSize != nil {
+		args = append(args, "--ubatch-size", strconv.Itoa(*p.UBatchSize))
 	}
 	if p.Temp != nil {
 		args = append(args, "--temp", formatFloat(*p.Temp))
@@ -48,11 +59,63 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 	if p.RepetitionPenalty != nil {
 		args = append(args, "--repeat-penalty", formatFloat(*p.RepetitionPenalty))
 	}
+	if p.FrequencyPenalty != nil {
+		args = append(args, "--frequency-penalty", formatFloat(*p.FrequencyPenalty))
+	}
+	if p.Seed != nil {
+		args = append(args, "--seed", strconv.Itoa(*p.Seed))
+	}
+	if p.RepeatLastN != nil {
+		args = append(args, "--repeat-last-n", strconv.Itoa(*p.RepeatLastN))
+	}
 	if p.FlashAttn {
 		args = append(args, "--flash-attn", "on")
 	}
 	if p.GPULayers > 0 {
 		args = append(args, "--n-gpu-layers", strconv.Itoa(p.GPULayers))
+	}
+	if p.MMap != nil {
+		if *p.MMap {
+			args = append(args, "--mmap")
+		} else {
+			args = append(args, "--no-mmap")
+		}
+	}
+	if p.KVOffload != nil {
+		if *p.KVOffload {
+			args = append(args, "--kv-offload")
+		} else {
+			args = append(args, "--no-kv-offload")
+		}
+	}
+	if p.Parallel != nil {
+		args = append(args, "--parallel", strconv.Itoa(*p.Parallel))
+	}
+	if p.ContBatching != nil {
+		if *p.ContBatching {
+			args = append(args, "--cont-batching")
+		} else {
+			args = append(args, "--no-cont-batching")
+		}
+	}
+	if p.CachePrompt != nil {
+		if *p.CachePrompt {
+			args = append(args, "--cache-prompt")
+		} else {
+			args = append(args, "--no-cache-prompt")
+		}
+	}
+	if p.CacheRAM != nil {
+		args = append(args, "--cache-ram", strconv.Itoa(*p.CacheRAM))
+	}
+	if p.Reasoning != "" {
+		args = append(args, "--reasoning", p.Reasoning)
+	}
+	if p.ReasoningBudget != nil {
+		args = append(args, "--reasoning-budget", strconv.Itoa(*p.ReasoningBudget))
+	}
+	if p.ReasoningFormat != "" {
+		args = append(args, "--reasoning-format", p.ReasoningFormat)
 	}
 	if p.CacheTypeK != "" {
 		args = append(args, "--cache-type-k", p.CacheTypeK)
@@ -76,7 +139,7 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 	cmd := exec.Command(bin, BuildArgs(m, p)...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	configureProcess(cmd)
 	if m.CacheDir != "" {
 		cmd.Env = append(os.Environ(), "LLAMA_CACHE="+m.CacheDir)
 	}
@@ -99,10 +162,7 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 // trusting SIGTERM alone let a previous instance linger, holding its GPU
 // memory, while llmctl believed it had already stopped.
 func Stop(pid int) error {
-	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
-		if err == syscall.ESRCH {
-			return nil // already dead
-		}
+	if err := terminateProcess(pid); err != nil {
 		return fmt.Errorf("stop pid %d: %w", pid, err)
 	}
 
@@ -110,14 +170,14 @@ func Stop(pid int) error {
 		return nil
 	}
 
-	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+	if err := killProcess(pid); err != nil {
 		return fmt.Errorf("kill pid %d: %w", pid, err)
 	}
 	if awaitDeath(pid, time.Second) {
 		return nil
 	}
 
-	return fmt.Errorf("pid %d did not exit after SIGTERM and SIGKILL", pid)
+	return fmt.Errorf("pid %d did not exit after termination", pid)
 }
 
 func awaitDeath(pid int, timeout time.Duration) bool {
@@ -133,11 +193,7 @@ func awaitDeath(pid int, timeout time.Duration) bool {
 
 // IsAlive reports whether a process with the given PID is still running.
 func IsAlive(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return process.Signal(syscall.Signal(0)) == nil
+	return isProcessAlive(pid)
 }
 
 // TailLog returns the last n non-empty lines of the file at path.

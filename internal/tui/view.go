@@ -121,7 +121,7 @@ func (m Model) viewMain() string {
 		}
 
 		runningContent := m.renderRunning()
-		detailsContent := m.renderDetails()
+		detailsContent := m.renderDetails(rightW)
 		runningH, detailsH := splitPaneHeight(leftH, len(m.running))
 
 		// lipgloss's Height() is a floor, not a cap — content taller than
@@ -174,9 +174,9 @@ func (m Model) viewMain() string {
 		b.WriteString(errorStyle.Render(summary))
 		b.WriteString("\n")
 	}
-	help := "←/→ switch  ↑/k up  ↓/j down  enter select/run  s stop  e logs  del delete (press twice)  q quit"
+	help := "←/→ tabs · ↑/↓ move · enter run · s stop · e logs · del delete · q quit"
 	if m.focus == focusSettingsContent && m.settings.dirs.editing {
-		help = "enter save  esc cancel"
+		help = "enter save · esc cancel"
 	}
 	b.WriteString(helpStyle.Render(help))
 	return b.String()
@@ -236,7 +236,7 @@ func dashWrap(totalWidth int, content string, focused bool) string {
 }
 
 // renderTabBarLabels shows the Models/Recents/Settings/Running tabs, with
-// the active tab bold.
+// the active tab styled as a filled chip.
 func (m Model) renderTabBarLabels() string {
 	tabs := []struct {
 		mode  leftMode
@@ -250,11 +250,16 @@ func (m Model) renderTabBarLabels() string {
 
 	rendered := make([]string, len(tabs))
 	for i, t := range tabs {
-		style := profileStyle
 		if m.leftMode == t.mode {
-			style = selectedProfileStyle
+			rendered[i] = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("250")).
+				Background(lipgloss.Color("236")).
+				Bold(true).
+				Padding(0, 1).
+				Render(t.label)
+		} else {
+			rendered[i] = profileStyle.Render(t.label)
 		}
-		rendered[i] = style.Render("[ " + t.label + " ]")
 	}
 
 	return strings.Join(rendered, "  ")
@@ -395,10 +400,12 @@ func (m Model) renderRecentsList() string {
 func (m Model) renderRunning() string {
 	var b strings.Builder
 	b.WriteString(modelStyle.Render("Running"))
+	b.WriteString("\n")
 	if vram := m.renderVRAMHeader(); vram != "" {
-		b.WriteString("  " + vram)
+		b.WriteString(infoStyle.Render(vram))
+		b.WriteString("\n")
 	}
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	if len(m.running) == 0 {
 		b.WriteString(profileStyle.Render("(nothing running)"))
@@ -586,8 +593,9 @@ func (m Model) renderVRAMHeader() string {
 // splitPaneHeight divides the right column so its total rendered height
 // (including each box's own border) matches leftHeight, the left pane's
 // content height. Running entries are one line each, so that box is sized
-// to just fit runningCount (with a small minimum/cap) and Details — which
-// tends to have more to show — gets whatever height is left over.
+// to just fit runningCount (with a small minimum/cap), while the Details
+// pane stays compact so a selected model preview does not stretch the full
+// interface and push the top of the TUI out of view.
 func splitPaneHeight(leftHeight, runningCount int) (running, details int) {
 	// The right column stacks two bordered boxes instead of the left's
 	// one, so it has two extra border lines to account for.
@@ -607,6 +615,9 @@ func splitPaneHeight(leftHeight, runningCount int) (running, details int) {
 	details = budget - running
 	if details < 5 {
 		details = 5
+	}
+	if details > 12 {
+		details = 12
 	}
 	return running, details
 }
@@ -648,11 +659,11 @@ func (m Model) renderModelPreview(modelKey string) string {
 	b.WriteString("\n")
 	for _, pk := range profileKeys {
 		p := mdl.Profiles[pk]
-		text := fmt.Sprintf("%-20s :%d", p.Name, p.Port)
+		text := fmt.Sprintf("%-16s :%d", p.Name, p.Port)
 		if p.Temp != nil {
 			text += fmt.Sprintf("  temp %.2g", *p.Temp)
 		}
-		b.WriteString(profileStyle.Render("• "+text) + "\n")
+		b.WriteString(detailMutedStyle.Render("• "+text) + "\n")
 	}
 
 	b.WriteString("\n")
@@ -690,11 +701,42 @@ func tabInstructions(mode leftMode) string {
 	}
 }
 
+type detailPair struct {
+	label string
+	value string
+}
+
+func formatDetailPairs(pairs []detailPair, width int) []string {
+	if width <= 0 {
+		width = 36
+	}
+
+	if width < 56 {
+		lines := make([]string, 0, len(pairs))
+		for _, pair := range pairs {
+			lines = append(lines, fmt.Sprintf("%s: %s", pair.label, pair.value))
+		}
+		return lines
+	}
+
+	lines := make([]string, 0, (len(pairs)+1)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		left := fmt.Sprintf("%s: %s", pairs[i].label, pairs[i].value)
+		if i+1 >= len(pairs) {
+			lines = append(lines, left)
+			continue
+		}
+		right := fmt.Sprintf("%s: %s", pairs[i+1].label, pairs[i+1].value)
+		lines = append(lines, left+"    "+right)
+	}
+	return lines
+}
+
 // renderDetails shows the settings for the currently selected profile,
 // including the backing model's on-disk file size and any notes. The
 // header names whatever's actually focused instead of a static "Details"
 // label, since that's more useful at a glance.
-func (m Model) renderDetails() string {
+func (m Model) renderDetails(width int) string {
 	var b strings.Builder
 
 	// Still at the outer tab bar — nothing's selected yet within a tab,
@@ -718,7 +760,7 @@ func (m Model) renderDetails() string {
 	if r.kind == rowModel {
 		mdl := m.cfg.Models[r.modelKey]
 		b.WriteString(modelStyle.Render(mdl.Name))
-		b.WriteString("\n\n")
+		b.WriteString("\n")
 		b.WriteString(m.renderModelPreview(r.modelKey))
 		return b.String()
 	}
@@ -743,9 +785,14 @@ func (m Model) renderDetails() string {
 		return b.String()
 	}
 
-	b.WriteString(modelStyle.Render(mdl.Name + " / " + p.Name))
-	b.WriteString("\n\n")
-	fmt.Fprintf(&b, "%s\n\n", profileStyle.Render(modelSourceLine(mdl)))
+	// Keep profile details compact so the preview doesn't expand the pane
+	// enough to push the UI off-screen when a model is selected.
+	fmt.Fprintf(&b, "%s\n", detailMutedStyle.Render(modelSourceLine(mdl)))
+	b.WriteString("\n")
+
+	showValue := func(s string) bool {
+		return strings.TrimSpace(s) != ""
+	}
 
 	dash := func(s string) string {
 		if s == "" {
@@ -753,20 +800,144 @@ func (m Model) renderDetails() string {
 		}
 		return s
 	}
-	pair := func(l1, v1, l2, v2 string) string {
-		return fmt.Sprintf("%-24s%s: %s\n", l1+": "+v1, l2, v2)
+
+	sections := []struct {
+		name  string
+		pairs []detailPair
+	}{
+		{
+			name: "Connection",
+			pairs: []detailPair{
+				{label: "Port", value: fmt.Sprint(p.Port)},
+				{label: "Ctx Size", value: dash(intOrEmpty(p.CtxSize))},
+			},
+		},
+		{
+			name: "Sampling",
+			pairs: []detailPair{
+				{label: "Temp", value: dash(floatPtrOrEmpty(p.Temp))},
+				{label: "Top P", value: dash(floatPtrOrEmpty(p.TopP))},
+				{label: "Top K", value: dash(intPtrOrEmpty(p.TopK))},
+				{label: "Min P", value: dash(floatPtrOrEmpty(p.MinP))},
+				{label: "Presence Pen", value: dash(floatPtrOrEmpty(p.PresencePenalty))},
+				{label: "Repeat Pen", value: dash(floatPtrOrEmpty(p.RepetitionPenalty))},
+			},
+		},
+		{
+			name: "Compute",
+			pairs: []detailPair{
+				{label: "Flash Attn", value: fmt.Sprint(p.FlashAttn)},
+				{label: "GPU Layers", value: dash(intOrEmpty(p.GPULayers))},
+			},
+		},
+		{
+			name: "Cache",
+			pairs: []detailPair{
+				{label: "Cache K", value: dash(p.CacheTypeK)},
+				{label: "Cache V", value: dash(p.CacheTypeV)},
+			},
+		},
 	}
 
-	var settings strings.Builder
-	settings.WriteString(pair("Port", fmt.Sprint(p.Port), "Ctx Size", dash(intOrEmpty(p.CtxSize))))
-	settings.WriteString(pair("Temp", dash(floatPtrOrEmpty(p.Temp)), "Top P", dash(floatPtrOrEmpty(p.TopP))))
-	settings.WriteString(pair("Top K", dash(intPtrOrEmpty(p.TopK)), "Min P", dash(floatPtrOrEmpty(p.MinP))))
-	settings.WriteString(pair("Presence Pen", dash(floatPtrOrEmpty(p.PresencePenalty)), "Repeat Pen", dash(floatPtrOrEmpty(p.RepetitionPenalty))))
-	settings.WriteString(pair("Flash Attn", fmt.Sprint(p.FlashAttn), "GPU Layers", dash(intOrEmpty(p.GPULayers))))
-	settings.WriteString(pair("Cache K", dash(p.CacheTypeK), "Cache V", dash(p.CacheTypeV)))
-	fmt.Fprintf(&settings, "Extra Args: %s\n", dash(strings.Join(p.ExtraArgs, " ")))
+	for i := range sections {
+		filtered := make([]detailPair, 0, len(sections[i].pairs))
+		for _, pair := range sections[i].pairs {
+			if pair.label == "Port" || pair.label == "Ctx Size" || pair.label == "Flash Attn" || pair.label == "GPU Layers" {
+				if pair.value != "" && pair.value != "0" && pair.value != "false" && pair.value != "-" {
+					filtered = append(filtered, pair)
+				}
+				continue
+			}
+			if showValue(pair.value) && pair.value != "-" {
+				filtered = append(filtered, pair)
+			}
+		}
+		sections[i].pairs = filtered
+	}
 
-	b.WriteString(profileStyle.Render(settings.String()))
+	if width >= 70 {
+		leftSections := []struct {
+			name  string
+			pairs []detailPair
+		}{sections[0], sections[1]}
+		rightSections := []struct {
+			name  string
+			pairs []detailPair
+		}{sections[2], sections[3]}
+
+		columnWidth := (width - 3) / 2
+		if columnWidth < 24 {
+			columnWidth = width
+		}
+
+		formatSection := func(section struct {
+			name  string
+			pairs []detailPair
+		}) string {
+			var sectionBuilder strings.Builder
+			sectionBuilder.WriteString(modelStyle.Render(section.name))
+			sectionBuilder.WriteString("\n")
+			for _, line := range formatDetailPairs(section.pairs, columnWidth) {
+				sectionBuilder.WriteString(profileStyle.Render(line))
+				sectionBuilder.WriteString("\n")
+			}
+			return sectionBuilder.String()
+		}
+
+		leftColumn := strings.Builder{}
+		for _, section := range leftSections {
+			if section.name != "" {
+				if leftColumn.Len() > 0 {
+					leftColumn.WriteString("\n")
+				}
+				leftColumn.WriteString(formatSection(section))
+			}
+		}
+
+		rightColumn := strings.Builder{}
+		for _, section := range rightSections {
+			if section.name != "" {
+				if rightColumn.Len() > 0 {
+					rightColumn.WriteString("\n")
+				}
+				rightColumn.WriteString(formatSection(section))
+			}
+		}
+
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(columnWidth).Render(leftColumn.String()),
+			lipgloss.NewStyle().Width(columnWidth).Render(rightColumn.String()),
+		))
+		b.WriteString("\n")
+	} else {
+		for _, section := range sections {
+			if len(section.pairs) == 0 {
+				continue
+			}
+			if section.name != "" {
+				b.WriteString("\n")
+				b.WriteString(modelStyle.Render(section.name))
+				b.WriteString("\n")
+			}
+			for _, line := range formatDetailPairs(section.pairs, width) {
+				b.WriteString(profileStyle.Render(line))
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	extraArgs := dash(strings.Join(p.ExtraArgs, " "))
+	if extraArgs != "-" {
+		b.WriteString("\n")
+		b.WriteString(modelStyle.Render("Extra Args"))
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Width(width).Render(profileStyle.Render(extraArgs)))
+	} else {
+		b.WriteString("\n")
+		b.WriteString(modelStyle.Render("Extra Args"))
+		b.WriteString("\n")
+		b.WriteString(profileStyle.Render("-"))
+	}
 
 	if p.Notes != "" {
 		b.WriteString("\n")

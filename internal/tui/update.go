@@ -199,6 +199,9 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	case focusTabs:
 		if delta > 0 {
 			m.focus = focusLeft
+			if m.leftMode == modeModels {
+				m.enterModelsPane()
+			}
 		}
 		return m, nil
 
@@ -257,91 +260,108 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	}
 }
 
-// moveModelsCursor moves the cursor within the Models tree. While
-// "browsing" — the cursor sits on a model's own row — Up/Down step between
-// models only, skipping over any profile rows, and hovering a model
-// auto-expands its profiles into the tree below it as a preview
-// (accordion-style, collapsing whichever model was previously expanded).
-// Once Enter has moved the cursor onto one of those child rows ("entered"),
-// Up/Down instead step through that model's children, only backing out to
-// browsing when stepping past the top or bottom child.
+// moveModelsCursor moves the cursor within the Models tree. The top-level
+// model list is navigated independently of the expanded profile rows, and
+// the trailing "+ Add Model" entry is always reachable from that top-level
+// sequence.
 func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
-	if r, ok := m.currentRow(); ok && r.kind != rowModel {
-		return m.moveWithinExpandedModel(delta)
-	}
-	return m.browseModels(delta)
-}
-
-// browseModels moves delta steps through visibleModelKeys, expanding the
-// newly-focused model as a preview.
-func (m Model) browseModels(delta int) (tea.Model, tea.Cmd) {
-	keys := visibleModelKeys(m.cfg)
-	if len(keys) == 0 {
-		if delta < 0 {
-			m.focus = focusTabs
-		}
+	if len(m.rows) == 0 {
 		return m, nil
 	}
 
-	pos := 0
-	curRow, curIsModel := m.currentRow()
-	if curIsModel {
-		for i, k := range keys {
-			if k == curRow.modelKey {
-				pos = i
-				break
-			}
+	current := m.cursor
+	if current < 0 || current >= len(m.rows) {
+		current = 0
+	}
+
+	if delta > 0 && current >= 0 && current < len(m.rows) {
+		row := m.rows[current]
+		if row.kind == rowModel && m.expandedModelKey != row.modelKey {
+			m.expandedModelKey = row.modelKey
+			m.rebuildRows()
+			m.cursor = indexOfModelRow(m.rows, row.modelKey)
+			return m, nil
 		}
 	}
 
-	next := pos + delta
-	switch {
-	case next < 0:
+	if delta > 0 && m.focus == focusLeft && m.expandedModelKey == "" && current == 0 {
+		if len(visibleModelKeys(m.cfg)) > 0 {
+			firstKey := visibleModelKeys(m.cfg)[0]
+			m.expandedModelKey = firstKey
+			m.rebuildRows()
+			m.cursor = indexOfModelRow(m.rows, firstKey)
+			return m, nil
+		}
+	}
+
+	// Keep the cursor on the top-level model rows and the trailing add-model
+	// row. Profile rows and add-profile rows are skipped unless the current
+	// row is already inside that expanded model block.
+	targets := modelCursorTargets(m.rows)
+	if len(targets) == 0 {
+		return m, nil
+	}
+
+	currentIndex := indexInSlice(targets, current)
+	if currentIndex < 0 {
+		currentIndex = 0
+	}
+
+	nextIndex := currentIndex + delta
+	if nextIndex < 0 {
 		m.focus = focusTabs
 		return m, nil
-	case next >= len(keys):
-		return m, nil
-	case next == pos && curIsModel:
-		// Already on this model — just expand it in place.
-		targetKey := keys[next]
-		if m.expandedModelKey != targetKey {
-			m.expandedModelKey = targetKey
-			m.rebuildRows()
-		}
-		m.cursor = indexOfModelRow(m.rows, targetKey)
+	}
+	if nextIndex >= len(targets) {
 		return m, nil
 	}
 
-	targetKey := keys[next]
-	if m.expandedModelKey != targetKey {
-		m.expandedModelKey = targetKey
-		m.rebuildRows()
+	m.cursor = targets[nextIndex]
+	if m.cursor >= 0 && m.cursor < len(m.rows) {
+		row := m.rows[m.cursor]
+		if row.kind == rowModel && m.expandedModelKey != row.modelKey {
+			m.expandedModelKey = row.modelKey
+			m.rebuildRows()
+			m.cursor = indexOfModelRow(m.rows, row.modelKey)
+		}
 	}
-	m.cursor = indexOfModelRow(m.rows, targetKey)
 	return m, nil
 }
 
-// moveWithinExpandedModel steps the cursor through the currently-expanded
-// model's profile/add-profile rows, clamping at either end rather than
-// spilling into a neighboring model's rows — stepping past the top backs
-// out to browsing (cursor returns to the model's own row); stepping past
-// the bottom is a no-op.
-func (m Model) moveWithinExpandedModel(delta int) (tea.Model, tea.Cmd) {
-	modelIdx := indexOfModelRow(m.rows, m.expandedModelKey)
+func modelCursorTargets(rows []row) []int {
+	targets := make([]int, 0, len(rows))
+	for i, r := range rows {
+		switch r.kind {
+		case rowModel, rowAddModel:
+			targets = append(targets, i)
+		}
+	}
+	return targets
+}
 
-	lastChildIdx := modelIdx
-	for i := modelIdx + 1; i < len(m.rows) && m.rows[i].kind != rowModel; i++ {
-		lastChildIdx = i
+func (m *Model) enterModelsPane() {
+	keys := visibleModelKeys(m.cfg)
+	if len(keys) == 0 {
+		return
 	}
 
-	next := m.cursor + delta
-	switch {
-	case next <= modelIdx:
-		m.cursor = modelIdx
-	case next <= lastChildIdx:
-		m.cursor = next
+	firstKey := keys[0]
+	if m.expandedModelKey != firstKey {
+		m.expandedModelKey = firstKey
+		m.rebuildRows()
 	}
-	return m, nil
+	if idx := indexOfModelRow(m.rows, firstKey); idx >= 0 {
+		m.cursor = idx
+	}
+}
+
+func indexInSlice(values []int, target int) int {
+	for i, value := range values {
+		if value == target {
+			return i
+		}
+	}
+	return -1
 }
 
 // currentRow resolves the row the left-pane cursor currently points at, in

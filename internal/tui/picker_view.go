@@ -5,13 +5,19 @@ import (
 	"strings"
 )
 
+func pickerSpinnerFrame(step int) string {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	return frames[step%len(frames)]
+}
+
 func (m Model) viewPicker() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Add Model"))
 	b.WriteString("\n\n")
 
 	dirs, _ := m.cfg.ResolvedModelsDirs()
-	b.WriteString(helpStyle.Render("scanning " + strings.Join(dirs, ", ")))
+	spinner := pickerSpinnerFrame(m.picker.cursor)
+	b.WriteString(loadingStyle.Render(spinner + " scanning " + strings.Join(dirs, ", ")))
 	b.WriteString("\n")
 	if len(m.picker.unreadable) > 0 {
 		b.WriteString(errorStyle.Render("could not scan: " + strings.Join(m.picker.unreadable, ", ")))

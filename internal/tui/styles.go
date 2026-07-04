@@ -5,28 +5,33 @@ import "github.com/charmbracelet/lipgloss"
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("205"))
+			Foreground(lipgloss.Color("39"))
 
 	paneStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
+			BorderForeground(lipgloss.Color("238")).
 			Padding(0, 1)
 
 	focusedPaneStyle = paneStyle.
-				BorderForeground(lipgloss.Color("205"))
+				BorderForeground(lipgloss.Color("245")).
+				Background(lipgloss.Color("236"))
 
 	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
+			Foreground(lipgloss.Color("39")).
 			Bold(true)
 
 	modelStyle = lipgloss.NewStyle().
-			Bold(true)
+			Bold(true).
+			Foreground(lipgloss.Color("255"))
 
 	profileStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("245"))
 
+	detailMutedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240"))
+
 	selectedProfileStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("205")).
+				Foreground(lipgloss.Color("39")).
 				Bold(true)
 
 	runningStyle = lipgloss.NewStyle().
@@ -34,6 +39,9 @@ var (
 
 	loadingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214"))
+
+	infoStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("74"))
 
 	downStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196"))
@@ -59,9 +67,13 @@ var (
 			Width(30)
 
 	formFocusedLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("205")).
+				Foreground(lipgloss.Color("39")).
 				Bold(true).
 				Width(30)
+
+	sectionTitleStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("39")).
+				Bold(true)
 
 	pendingDeleteStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("196")).
@@ -70,10 +82,10 @@ var (
 
 	modalStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("205")).
+			BorderForeground(lipgloss.Color("39")).
 			Padding(1, 3)
 
 	modalTitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("205"))
+			Foreground(lipgloss.Color("39"))
 )
