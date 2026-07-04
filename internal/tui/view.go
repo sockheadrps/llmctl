@@ -252,10 +252,7 @@ func dashWrap(totalWidth int, content string, focused bool) string {
 	left := remaining / 2
 	right := remaining - left
 
-	dashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	if focused {
-		dashStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	}
+	dashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 	return dashStyle.Render(strings.Repeat("─", left)) + content + dashStyle.Render(strings.Repeat("─", right))
 }
 
@@ -272,14 +269,18 @@ func (m Model) renderTabBarLabels() string {
 		{modeRunning, "Running"},
 	}
 
+	tabFocused := m.focus == focusTabs
 	rendered := make([]string, len(tabs))
 	for i, t := range tabs {
 		if m.leftMode == t.mode {
+			color := lipgloss.Color("39")
+			if !tabFocused {
+				color = lipgloss.Color("24")
+			}
 			rendered[i] = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("250")).
-				Background(lipgloss.Color("236")).
+				Foreground(color).
 				Bold(true).
-				Padding(0, 1).
+				Underline(true).
 				Render(t.label)
 		} else {
 			rendered[i] = profileStyle.Render(t.label)
@@ -295,15 +296,16 @@ func (m Model) renderSettingsList(width int) string {
 	var b strings.Builder
 	rows := buildSettingsRows()
 	textWidth := formRowTextWidth(width)
-	focused := m.focus == focusLeft
+	inSettings := m.focus == focusLeft || m.focus == focusSettingsContent
 	for i, r := range rows {
 		selected := i == m.settingsCursor
-		active := selected && focused
 		cursor := "  "
 		style := profileStyle
-		if active {
-			cursor = cursorStyle.Render("> ")
-			style = selectedProfileStyle
+		if selected && inSettings {
+			if m.focus == focusLeft {
+				cursor = cursorStyle.Render("> ")
+			}
+			style = activeModelStyle
 		}
 		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))

@@ -76,6 +76,13 @@ func (m Model) renderDirsContent() string {
 
 	focused := m.focus == focusSettingsContent
 
+	// When not actively editing this category, read straight from config so
+	// the preview is always current without requiring an Enter first.
+	dirs := m.settings.dirs.list
+	if !focused {
+		dirs = m.cfg.ModelsDirs
+	}
+
 	addCursor, addRowStyle := "  ", addStyle
 	switch {
 	case m.settings.dirs.cursor == 0 && focused:
@@ -86,11 +93,11 @@ func (m Model) renderDirsContent() string {
 	}
 	fmt.Fprintf(&b, "%s%s\n", addCursor, addRowStyle.Render("+ Add Directory"))
 
-	if len(m.settings.dirs.list) == 0 {
+	if len(dirs) == 0 {
 		b.WriteString(profileStyle.Render("(no directories configured)"))
 		b.WriteString("\n")
 	}
-	for i, d := range m.settings.dirs.list {
+	for i, d := range dirs {
 		cursor := "  "
 		style := profileStyle
 		label := d

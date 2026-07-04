@@ -121,6 +121,7 @@ func (m Model) viewForm() string {
 	rightPane.WriteString("\n\n")
 	rightPane.WriteString(detailMutedStyle.Render(truncateText(m.formDescriptionTitle(), formDescriptionTextWidth(detailsWidth))))
 	rightPane.WriteString("\n\n")
+	descReserved := 4
 	if currentFlag := m.form.focusedFlag(); currentFlag != "" {
 		m.form.flagInput.Width = formDescriptionTextWidth(detailsWidth) - 7
 		if m.form.flagFocus {
@@ -133,10 +134,22 @@ func (m Model) viewForm() string {
 			rightPane.WriteString(helpStyle.Render("→ to override"))
 		}
 		rightPane.WriteString("\n\n")
-		rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-7))
-	} else {
-		rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-4))
+		descReserved = 7
 	}
+	if m.form.focus == fieldExtraArgs {
+		if val := m.form.fields[fieldExtraArgs].input.Value(); val != "" {
+			valLines := wrapWords(val, formDescriptionTextWidth(detailsWidth))
+			rightPane.WriteString(detailMutedStyle.Render("Args:"))
+			rightPane.WriteString("\n")
+			for _, line := range valLines {
+				rightPane.WriteString(line)
+				rightPane.WriteString("\n")
+			}
+			rightPane.WriteString("\n")
+			descReserved += len(valLines) + 2
+		}
+	}
+	rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-descReserved))
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPane, paneStyle.Width(detailsWidth).Height(paneHeight).Render(rightPane.String())))
 	b.WriteString("\n")
 

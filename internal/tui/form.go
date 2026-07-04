@@ -576,12 +576,19 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "right":
 		if flag := m.form.focusedFlag(); flag != "" {
-			m.form.flagFocus = true
-			m.form.flagInput.Focus()
-			if m.form.focus < len(m.form.fields) {
-				m.form.fields[m.form.focus].input.Blur()
+			atEnd := m.form.focus >= len(m.form.fields)
+			if !atEnd {
+				ti := m.form.fields[m.form.focus].input
+				atEnd = ti.Position() >= len([]rune(ti.Value()))
 			}
-			return m, nil
+			if atEnd {
+				m.form.flagFocus = true
+				m.form.flagInput.Focus()
+				if m.form.focus < len(m.form.fields) {
+					m.form.fields[m.form.focus].input.Blur()
+				}
+				return m, nil
+			}
 		}
 
 	case "tab", "down":

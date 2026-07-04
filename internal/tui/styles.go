@@ -9,12 +9,11 @@ var (
 
 	paneStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("238")).
+			BorderForeground(lipgloss.Color("30")).
 			Padding(0, 1)
 
 	focusedPaneStyle = paneStyle.
-				BorderForeground(lipgloss.Color("245")).
-				Background(lipgloss.Color("236"))
+				BorderForeground(lipgloss.Color("38"))
 
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("39")).
@@ -76,7 +75,7 @@ var (
 				Width(30)
 
 	sectionTitleStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
+				Foreground(lipgloss.Color("213")).
 				Bold(true)
 
 	pendingDeleteStyle = lipgloss.NewStyle().
