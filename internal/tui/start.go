@@ -1,0 +1,36 @@
+package tui
+
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/sockheadrps/llmctl/internal/runtime"
+)
+
+// startResultMsg carries the outcome of an async profile start. Manager.Start
+// blocks briefly to confirm the process didn't die immediately, so it must
+// run as a tea.Cmd rather than inline in Update to avoid freezing the UI.
+// logPath is set even on success, so the log viewer has somewhere to look.
+type startResultMsg struct {
+	label   string
+	logPath string
+	err     error
+}
+
+func (m Model) startProfileCmd(r row) tea.Cmd {
+	mgr, cfg := m.mgr, m.cfg
+	modelKey, profileKey, label := r.modelKey, r.profileKey, r.label
+	return func() tea.Msg {
+		logPath, _ := runtime.LogPath(modelKey, profileKey)
+		_, err := mgr.Start(cfg, modelKey, profileKey)
+		return startResultMsg{label: label, logPath: logPath, err: err}
+	}
+}
+
+// runProfile kicks off an async start for r and switches on the "starting…"
+// status; the result arrives later as a startResultMsg.
+func (m Model) runProfile(r row) (tea.Model, tea.Cmd) {
+	m.starting = true
+	m.startingLabel = r.label
+	m.clearError()
+	return m, m.startProfileCmd(r)
+}
