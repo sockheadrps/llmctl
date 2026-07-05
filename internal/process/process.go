@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/models"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 func formatFloat(f float64) string {
@@ -185,6 +186,10 @@ func resolveExecutable(bin string) (string, error) {
 	bin = strings.TrimSpace(bin)
 	if bin == "" {
 		bin = "llama-server"
+	}
+
+	if expanded, err := util.ExpandHome(bin); err == nil {
+		bin = expanded
 	}
 
 	if resolved, err := exec.LookPath(bin); err == nil {
