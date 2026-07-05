@@ -2,16 +2,10 @@ package tui
 
 import (
 	"fmt"
-
-	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/models"
 )
-
-func writeClipboard(text string) error {
-	return clipboard.WriteAll(text)
-}
 
 func (m Model) copyEndpoint(run models.Running) (tea.Model, tea.Cmd) {
 	endpoint := fmt.Sprintf("http://localhost:%d/v1", run.Port)
