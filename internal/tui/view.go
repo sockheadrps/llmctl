@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/process"
@@ -330,6 +331,9 @@ func (m Model) renderSettingsList(width int) string {
 		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 	}
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render("llmctl " + build.Version))
+	b.WriteString("\n")
 	return b.String()
 }
 
