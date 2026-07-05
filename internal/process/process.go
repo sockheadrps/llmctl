@@ -29,14 +29,11 @@ func flag(p models.Profile, def string) string {
 	return def
 }
 
-// BuildArgs converts a Model+Profile pair into llama-server CLI flags.
-func BuildArgs(m models.Model, p models.Profile) []string {
+// BuildProfileArgs returns the llama-server CLI flags for a Profile, excluding
+// the model source (--model / -hf). Useful for exporting/displaying a
+// profile's settings as a copyable parameter string.
+func BuildProfileArgs(p models.Profile) []string {
 	var args []string
-	if m.IsRemote() {
-		args = append(args, "-hf", m.HFRepo)
-	} else {
-		args = append(args, "--model", m.Path)
-	}
 	args = append(args, flag(p, "--port"), strconv.Itoa(p.Port))
 	if p.Host != "" {
 		args = append(args, flag(p, "--host"), p.Host)
@@ -141,6 +138,17 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 	}
 	args = append(args, p.ExtraArgs...)
 	return args
+}
+
+// BuildArgs converts a Model+Profile pair into llama-server CLI flags.
+func BuildArgs(m models.Model, p models.Profile) []string {
+	var args []string
+	if m.IsRemote() {
+		args = append(args, "-hf", m.HFRepo)
+	} else {
+		args = append(args, "--model", m.Path)
+	}
+	return append(args, BuildProfileArgs(p)...)
 }
 
 // Start launches bin (typically "llama-server") with args from the given

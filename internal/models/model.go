@@ -75,6 +75,7 @@ type Running struct {
 	ModelName   string `json:"model_name"`
 	ProfileKey  string `json:"profile_key"`
 	ProfileName string `json:"profile_name"`
+	Host        string `json:"host,omitempty"`
 	Port        int    `json:"port"`
 	PID         int    `json:"pid"`
 	LogFile     string `json:"log_file"`

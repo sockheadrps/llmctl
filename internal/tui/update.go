@@ -74,6 +74,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == screenMain {
 			return m.updateMouse(msg)
 		}
+		if m.screen == screenExportArgs {
+			return m.updateExportArgs(msg)
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -94,6 +97,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateStopConfirm(msg)
 		case screenProfileTemplate:
 			return m.updateTemplatePicker(msg)
+		case screenExportArgs:
+			return m.updateExportArgs(msg)
 		default:
 			return m.updateMain(msg)
 		}
@@ -278,6 +283,12 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchEditing = true
 		m.focus = focusLeft
 		return m, nil
+	}
+
+	if msg.String() == "x" && m.focus == focusLeft {
+		if r, ok := m.currentRow(); ok && r.kind == rowProfile {
+			return m.openExportArgs(r)
+		}
 	}
 
 	return m, nil

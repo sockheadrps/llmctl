@@ -77,6 +77,9 @@ func (m Model) View() string {
 	case screenPickModel:
 		return m.viewPicker()
 	case screenNewProfile:
+		if m.form.importEditing {
+			return overlayCenter(m.viewForm(), m.viewFormImportModal())
+		}
 		return m.viewForm()
 	case screenFormExitConfirm:
 		return overlayCenter(m.viewForm(), m.viewFormExitModal())
@@ -90,6 +93,8 @@ func (m Model) View() string {
 		return overlayCenter(m.viewMain(), m.viewStopConfirmModal())
 	case screenProfileTemplate:
 		return m.viewTemplatePicker()
+	case screenExportArgs:
+		return overlayCenter(m.viewMain(), m.viewExportArgsModal())
 	default:
 		return m.viewMain()
 	}

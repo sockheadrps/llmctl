@@ -33,6 +33,7 @@ const (
 	screenRunningAction
 	screenStopConfirm
 	screenProfileTemplate
+	screenExportArgs
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -173,6 +174,7 @@ type Model struct {
 	settings       settingsState
 	runningAction  runningActionState
 	stopConfirm    stopConfirmState
+	exportArgs     exportArgsState
 	templatePicker templatePickerState
 
 	tokHistory map[string][]float64
@@ -569,7 +571,7 @@ func checkHealthCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(healthMsg, len(running))
 		for _, r := range running {
-			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Port)
+			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Host, r.Port)
 		}
 		return result
 	}
@@ -583,7 +585,7 @@ func checkSlotsCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(slotsMsg, len(running))
 		for _, r := range running {
-			slots, err := health.Slots(r.Port)
+			slots, err := health.Slots(r.Host, r.Port)
 			if err != nil {
 				continue
 			}

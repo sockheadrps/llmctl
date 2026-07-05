@@ -162,7 +162,29 @@ func (m Model) viewForm() string {
 		b.WriteString("\n")
 	}
 	b.WriteString(helpStyle.Render("↑↓/wasd navigate  enter edit/save  esc cancel"))
+	b.WriteString("  ")
+	b.WriteString(helpStyle.Render("x import args"))
 	return b.String()
+}
+
+func (m Model) viewFormImportModal() string {
+	_, detailsWidth := m.formPaneWidths()
+	inputWidth := max(24, formDescriptionTextWidth(detailsWidth)-2)
+	m.form.importInput.Width = inputWidth
+
+	var body strings.Builder
+	body.WriteString(modalTitleStyle.Render("Import Args"))
+	body.WriteString("\n\n")
+	body.WriteString(detailMutedStyle.Render("Paste llama-server args copied from Export Args."))
+	body.WriteString("\n\n")
+	body.WriteString(m.form.importInput.View())
+	body.WriteString("\n\n")
+	if m.form.importErr != "" {
+		body.WriteString(errorStyle.Render("error: " + m.form.importErr))
+		body.WriteString("\n\n")
+	}
+	body.WriteString(helpStyle.Render("enter apply  esc cancel"))
+	return modalStyle.Render(body.String())
 }
 
 func (m Model) formDescriptionTitle() string {

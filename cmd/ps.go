@@ -34,7 +34,7 @@ var psCmd = &cobra.Command{
 		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 		fmt.Fprintln(w, "MODEL\tPROFILE\tPORT\tPID\tSTATUS")
 		for _, r := range running {
-			fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\n", r.ModelName, r.ProfileName, r.Port, r.PID, health.Check(r.Port))
+			fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\n", r.ModelName, r.ProfileName, r.Port, r.PID, health.Check(r.Host, r.Port))
 		}
 		return w.Flush()
 	},

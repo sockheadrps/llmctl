@@ -29,11 +29,11 @@ func (s Slot) Decoded() int {
 }
 
 // Slots fetches the current slot states for the llama-server instance on
-// port. Errors (connection refused, non-200, bad JSON) are returned as-is
+// host:port. Errors (connection refused, non-200, bad JSON) are returned as-is
 // so callers can decide how to treat an unreachable instance.
-func Slots(port int) ([]Slot, error) {
+func Slots(host string, port int) ([]Slot, error) {
 	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/slots", port))
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/slots", probeHost(host), port))
 	if err != nil {
 		return nil, err
 	}

@@ -9,9 +9,13 @@ import (
 	"github.com/sockheadrps/llmctl/internal/models"
 )
 
+func writeClipboard(text string) error {
+	return clipboard.WriteAll(text)
+}
+
 func (m Model) copyEndpoint(run models.Running) (tea.Model, tea.Cmd) {
 	endpoint := fmt.Sprintf("http://localhost:%d/v1", run.Port)
-	if err := clipboard.WriteAll(endpoint); err != nil {
+	if err := writeClipboard(endpoint); err != nil {
 		m.setError(fmt.Errorf("copy endpoint: %w", err), "")
 		return m, nil
 	}

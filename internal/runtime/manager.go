@@ -125,6 +125,7 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 		ModelName:   m.Name,
 		ProfileKey:  profileKey,
 		ProfileName: p.Name,
+		Host:        p.Host,
 		Port:        p.Port,
 		PID:         pid,
 		LogFile:     logPath,

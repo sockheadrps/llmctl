@@ -380,3 +380,114 @@ func TestSyncFlagInputShowsCurrentOverrideOrDefault(t *testing.T) {
 		t.Fatalf("expected override --ngl, got %q", got)
 	}
 }
+
+func TestParseProfileArgsMapsExportedFlags(t *testing.T) {
+	got, extra := parseProfileArgs(`--port 8123 --host 0.0.0.0 --flash-attn on --no-mmap --reasoning auto --cache-type-k q8_0 --verbose --threads 8`)
+
+	if got[fieldPort] != "8123" {
+		t.Fatalf("expected port 8123, got %q", got[fieldPort])
+	}
+	if got[fieldHost] != "0.0.0.0" {
+		t.Fatalf("expected host 0.0.0.0, got %q", got[fieldHost])
+	}
+	if got[len(formLabels)] != "on" {
+		t.Fatalf("expected flash attn on, got %q", got[len(formLabels)])
+	}
+	if got[fieldMMap] != "false" {
+		t.Fatalf("expected mmap false, got %q", got[fieldMMap])
+	}
+	if got[fieldReasoning] != "auto" {
+		t.Fatalf("expected reasoning auto, got %q", got[fieldReasoning])
+	}
+	if got[fieldCacheK] != "q8_0" {
+		t.Fatalf("expected cache type k q8_0, got %q", got[fieldCacheK])
+	}
+	if got[fieldExtraArgs] != "--verbose --threads 8" {
+		t.Fatalf("expected extra args preserved, got %q", got[fieldExtraArgs])
+	}
+	if !reflect.DeepEqual(extra, []string{"--verbose", "--threads", "8"}) {
+		t.Fatalf("expected extra token list preserved, got %v", extra)
+	}
+}
+
+func TestParseProfileArgsSkipsBinaryAndModelSource(t *testing.T) {
+	got, extra := parseProfileArgs(`llama-server --model /models/llama.gguf -hf ignored/repo --port 8123 --verbose`)
+
+	if got[fieldPort] != "8123" {
+		t.Fatalf("expected port 8123, got %q", got[fieldPort])
+	}
+	if got[fieldExtraArgs] != "--verbose" {
+		t.Fatalf("expected only real extra args, got %q", got[fieldExtraArgs])
+	}
+	if !reflect.DeepEqual(extra, []string{"--verbose"}) {
+		t.Fatalf("expected model source tokens to be ignored, got %v", extra)
+	}
+}
+
+func TestImportModalAppliesArgsToForm(t *testing.T) {
+	m := testNewFormModel(t)
+	m.form.openImportModal()
+	m.form.importInput.SetValue(`--port 8123 --host 0.0.0.0 --flash-attn off --cache-type-v q4_0 --verbose`)
+
+	next, _ := m.updateForm(tea.KeyMsg{Type: tea.KeyEnter})
+	got := next.(Model)
+
+	if got.form.importEditing {
+		t.Fatal("expected import modal to close after applying args")
+	}
+	if got.form.fields[fieldPort].input.Value() != "8123" {
+		t.Fatalf("expected imported port 8123, got %q", got.form.fields[fieldPort].input.Value())
+	}
+	if got.form.fields[fieldHost].input.Value() != "0.0.0.0" {
+		t.Fatalf("expected imported host 0.0.0.0, got %q", got.form.fields[fieldHost].input.Value())
+	}
+	if got.form.flash {
+		t.Fatal("expected flash attn to be off after import")
+	}
+	if got.form.fields[fieldCacheV].input.Value() != "q4_0" {
+		t.Fatalf("expected imported cache type v q4_0, got %q", got.form.fields[fieldCacheV].input.Value())
+	}
+	if got.form.fields[fieldExtraArgs].input.Value() != "--verbose" {
+		t.Fatalf("expected imported extra args, got %q", got.form.fields[fieldExtraArgs].input.Value())
+	}
+}
+
+func TestImportShortcutOpensModal(t *testing.T) {
+	m := testNewFormModel(t)
+
+	next, _ := m.updateForm(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	got := next.(Model)
+
+	if !got.form.importEditing {
+		t.Fatal("expected x to open import modal")
+	}
+}
+
+func TestConfirmModalCanOpenExportArgs(t *testing.T) {
+	m := Model{
+		cfg: &config.Config{Models: map[string]models.Model{
+			"model": {
+				Name: "Model",
+				Profiles: map[string]models.Profile{
+					"profile": {Name: "Profile", Port: 8080},
+				},
+			},
+		}},
+	}
+	next, _ := m.openConfirm(row{kind: rowProfile, modelKey: "model", profileKey: "profile", label: "Profile"})
+	got := next.(Model)
+
+	next, _ = got.updateConfirm(tea.KeyMsg{Type: tea.KeyRight})
+	got = next.(Model)
+	next, _ = got.updateConfirm(tea.KeyMsg{Type: tea.KeyRight})
+	got = next.(Model)
+	next, _ = got.updateConfirm(tea.KeyMsg{Type: tea.KeyEnter})
+	got = next.(Model)
+
+	if got.screen != screenExportArgs {
+		t.Fatalf("expected confirm modal export action to open export args screen, got %v", got.screen)
+	}
+	if got.exportArgs.label != "Profile" {
+		t.Fatalf("expected export popup label to be set, got %q", got.exportArgs.label)
+	}
+}
