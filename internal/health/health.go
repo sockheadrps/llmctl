@@ -20,6 +20,10 @@ const (
 // Check hits the llama-server /health endpoint on the given port and
 // classifies the result. A refused connection means the process hasn't
 // opened its listener yet (still loading, or dead).
+//
+// llama-server returns 200 when idle and 503 when all slots are busy
+// processing requests — both mean the server is alive and healthy.
+// Connection refused or timeout means it's still loading or dead.
 func Check(port int) Status {
 	client := http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
@@ -29,10 +33,8 @@ func Check(port int) Status {
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
-	case http.StatusOK:
+	case http.StatusOK, http.StatusServiceUnavailable:
 		return StatusUp
-	case http.StatusServiceUnavailable:
-		return StatusLoading
 	default:
 		return StatusDown
 	}
