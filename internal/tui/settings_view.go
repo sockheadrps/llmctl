@@ -86,7 +86,7 @@ func (m Model) renderRPCContent() string {
 		enabledLabel = "Enabled"
 	}
 
-	for i, label := range []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint"} {
+	for i, label := range []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"} {
 		cursor := "  "
 		style := profileStyle
 		if focused && m.settings.rpc.cursor == i {
@@ -100,15 +100,26 @@ func (m Model) renderRPCContent() string {
 	if endpoint == "" {
 		endpoint = "(not set)"
 	}
+	rpcBin := m.cfg.RPCServerBin
+	if rpcBin == "" {
+		rpcBin = "(uses default binary)"
+	}
 	b.WriteString("\n")
 	b.WriteString(profileStyle.Render("Endpoint: " + endpoint))
 	b.WriteString("\n")
-	b.WriteString(detailMutedStyle.Render("When enabled, --rpc <endpoint> is appended to every launch."))
+	b.WriteString(profileStyle.Render("Binary:   " + rpcBin))
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
 	b.WriteString("\n")
 
 	if m.settings.rpc.editing {
 		b.WriteString("\n")
 		b.WriteString(formLabelStyle.Render("Endpoint:") + " " + m.settings.rpc.input.View())
+		b.WriteString("\n")
+	}
+	if m.settings.rpc.binEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.rpc.binInput.View())
 		b.WriteString("\n")
 	}
 

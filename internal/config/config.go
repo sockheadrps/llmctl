@@ -18,8 +18,9 @@ type Config struct {
 	// ModelsDirs. Load migrates it in and Save never writes it back out.
 	ModelsDir   string                  `yaml:"models_dir,omitempty"`
 	ModelsDirs  []string                `yaml:"models_dirs,omitempty"`
-	RPCEnabled  bool                    `yaml:"rpc_enabled,omitempty"`
-	RPCEndpoint string                  `yaml:"rpc_endpoint,omitempty"`
+	RPCEnabled   bool   `yaml:"rpc_enabled,omitempty"`
+	RPCEndpoint  string `yaml:"rpc_endpoint,omitempty"`
+	RPCServerBin string `yaml:"rpc_server_bin,omitempty"`
 	Models      map[string]models.Model `yaml:"models"`
 }
 

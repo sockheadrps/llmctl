@@ -218,6 +218,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.rpc.input, cmd = m.settings.rpc.input.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.rpc.binEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.binEditing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRPCBinForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.binInput, cmd = m.settings.rpc.binInput.Update(msg)
+		return m, cmd
+	}
 
 	// Any key other than a repeated Delete cancels a pending delete
 	// confirmation, so it only fires when pressed twice in a row on the

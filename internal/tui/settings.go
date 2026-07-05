@@ -32,10 +32,12 @@ var settingsCategories = []settingsCategoryDef{
 // Directories, but a struct (rather than dirsContentState directly) leaves
 // room to add another category's state alongside it later.
 type rpcContentState struct {
-	cursor  int // 0 = toggle, 1 = endpoint
-	editing bool
-	input   textinput.Model
-	err     string
+	cursor     int // 0 = toggle, 1 = endpoint, 2 = binary
+	editing    bool
+	input      textinput.Model
+	binEditing bool
+	binInput   textinput.Model
+	err        string
 }
 
 type settingsState struct {
@@ -110,7 +112,7 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		switch {
 		case next < 0:
 			m.focus = focusLeft
-		case next <= 1:
+		case next <= 2:
 			m.settings.rpc.cursor = next
 		}
 		return m, nil
@@ -127,15 +129,19 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
-	if m.settings.rpc.cursor == 0 {
-		// toggle enabled
+	switch m.settings.rpc.cursor {
+	case 0:
 		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
 		}
 		return m, nil
+	case 1:
+		return m.openRPCEndpointForm()
+	case 2:
+		return m.openRPCBinForm()
 	}
-	return m.openRPCEndpointForm()
+	return m, nil
 }
 
 func (m Model) openRPCEndpointForm() (tea.Model, tea.Cmd) {
@@ -160,6 +166,32 @@ func (m Model) submitRPCEndpointForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.settings.rpc.editing = false
+	m.settings.rpc.err = ""
+	return m, nil
+}
+
+func (m Model) openRPCBinForm() (tea.Model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = "llama-server"
+	ti.CharLimit = 512
+	ti.Width = 50
+	ti.SetValue(m.cfg.RPCServerBin)
+	ti.Focus()
+	ti.CursorEnd()
+	m.settings.rpc.binInput = ti
+	m.settings.rpc.binEditing = true
+	m.settings.rpc.err = ""
+	return m, nil
+}
+
+func (m Model) submitRPCBinForm() (tea.Model, tea.Cmd) {
+	val := strings.TrimSpace(m.settings.rpc.binInput.Value())
+	m.cfg.RPCServerBin = val
+	if err := m.saveConfig(); err != nil {
+		m.settings.rpc.err = err.Error()
+		return m, nil
+	}
+	m.settings.rpc.binEditing = false
 	m.settings.rpc.err = ""
 	return m, nil
 }
