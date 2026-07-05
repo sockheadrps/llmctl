@@ -6,6 +6,7 @@ package tui
 
 import (
 	"fmt"
+	runtimeos "runtime"
 	"sort"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ const (
 	screenProfileTemplate
 	screenExportArgs
 	screenNetworkSwitch
+	screenNetworkPicker
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -186,10 +188,13 @@ type Model struct {
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
 
-	netStatus   netStatusMsg
+	netSupported bool // false on non-Linux; tab is hidden entirely
+
+	netStatus    netStatusMsg
 	netSwitching bool
-	netCursor   int
-	netSwitch   netSwitchState
+	netCursor    int
+	netSwitch    netSwitchState
+	netPicker    netPickerState
 
 	netInternetConn string
 	netRPCConn      string
@@ -213,6 +218,7 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		tokPeak:         map[string]float64{},
 		tokHistory:      map[string][]float64{},
 		gpuAvailable:    gpu.Available(),
+		netSupported:    runtimeos.GOOS == "linux",
 		netInternetConn: netInternetConn,
 		netRPCConn:      netRPCConn,
 		netIface:        netIface,
@@ -528,10 +534,9 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
-	cmds := []tea.Cmd{
-		checkHealthCmd(m.running),
-		checkSlotsCmd(m.running),
-		checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn),
+	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
+	if m.netSupported {
+		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
 	}
 	if m.gpuAvailable {
 		cmds = append(cmds, checkVRAMCmd())

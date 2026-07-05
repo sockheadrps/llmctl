@@ -97,6 +97,8 @@ func (m Model) View() string {
 		return overlayCenter(m.viewMain(), m.viewExportArgsModal())
 	case screenNetworkSwitch:
 		return overlayCenter(m.viewMain(), m.viewNetworkSwitchModal())
+	case screenNetworkPicker:
+		return overlayCenter(m.viewMain(), m.viewNetworkPickerModal())
 	default:
 		return m.viewMain()
 	}
@@ -242,6 +244,9 @@ func (m Model) helpText() string {
 		case modeSettings:
 			return "↑↓/wasd move · enter/space select · q quit"
 		case modeNetwork:
+			if m.netCursor >= netRowSetInternet {
+				return "↑↓/wasd move · enter pick connection · q quit"
+			}
 			return "↑↓/wasd move · enter switch · q quit"
 		default: // modeModels
 			return "↑↓/wasd move · enter/space run · c copy · / search · del delete · q quit"
@@ -302,7 +307,12 @@ func (m Model) renderTabBarLabels() string {
 		{modeRecents, "Recents"},
 		{modeSettings, "Settings"},
 		{modeRunning, "Running"},
-		{modeNetwork, "Network"},
+	}
+	if m.netSupported {
+		tabs = append(tabs, struct {
+			mode  leftMode
+			label string
+		}{modeNetwork, "Network"})
 	}
 
 	tabFocused := m.focus == focusTabs

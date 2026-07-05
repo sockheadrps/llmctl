@@ -60,6 +60,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)
 
+	case netConnectionsMsg:
+		m.netPicker.loading = false
+		m.netPicker.connections = msg.connections
+		m.netPicker.cursor = 0
+		return m, nil
+
 	case startResultMsg:
 		m.starting = false
 		m.startingLabel = ""
@@ -114,6 +120,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateExportArgs(msg)
 		case screenNetworkSwitch:
 			return m.updateNetworkSwitch(msg)
+		case screenNetworkPicker:
+			return m.updateNetworkPicker(msg)
 		default:
 			return m.updateMain(msg)
 		}
@@ -412,6 +420,39 @@ func uniqueProfileKey(existing map[string]models.Profile, base string) string {
 	}
 }
 
+func (m Model) openNetworkPicker(role netPickerRole) (tea.Model, tea.Cmd) {
+	m.netPicker = netPickerState{role: role, loading: true}
+	m.screen = screenNetworkPicker
+	return m, listNetworkConnectionsCmd(role)
+}
+
+func (m Model) updateNetworkPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenMain
+	case "up", "w", "k":
+		if m.netPicker.cursor > 0 {
+			m.netPicker.cursor--
+		}
+	case "down", "s", "j":
+		if m.netPicker.cursor < len(m.netPicker.connections)-1 {
+			m.netPicker.cursor++
+		}
+	case "enter", " ":
+		if !m.netPicker.loading && m.netPicker.cursor < len(m.netPicker.connections) {
+			conn := m.netPicker.connections[m.netPicker.cursor]
+			switch m.netPicker.role {
+			case netPickerRoleInternet:
+				m.netInternetConn = conn.name
+			case netPickerRoleRPC:
+				m.netRPCConn = conn.name
+			}
+		}
+		m.screen = screenMain
+	}
+	return m, nil
+}
+
 func (m Model) openNetworkSwitch() (tea.Model, tea.Cmd) {
 	m.netSwitch = netSwitchState{
 		toRPC:  m.netCursor == netRowSwitchRPC,
@@ -480,7 +521,11 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
-		if m.leftMode < modeNetwork {
+		maxMode := modeRunning
+		if m.netSupported {
+			maxMode = modeNetwork
+		}
+		if m.leftMode < maxMode {
 			m.leftMode++
 		}
 	case focusLeft:
@@ -560,7 +605,7 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 			switch {
 			case next < 0:
 				m.focus = focusTabs
-			case next < 2:
+			case next < netRowCount:
 				m.netCursor = next
 			}
 			return m, nil
@@ -737,7 +782,15 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	}
 
 	if m.leftMode == modeNetwork && m.focus == focusLeft {
-		return m.openNetworkSwitch()
+		switch m.netCursor {
+		case netRowSwitchRPC, netRowSwitchInternet:
+			return m.openNetworkSwitch()
+		case netRowSetInternet:
+			return m.openNetworkPicker(netPickerRoleInternet)
+		case netRowSetRPC:
+			return m.openNetworkPicker(netPickerRoleRPC)
+		}
+		return m, nil
 	}
 
 	r, ok := m.currentRow()
