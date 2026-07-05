@@ -95,6 +95,8 @@ func (m Model) View() string {
 		return m.viewTemplatePicker()
 	case screenExportArgs:
 		return overlayCenter(m.viewMain(), m.viewExportArgsModal())
+	case screenNetworkSwitch:
+		return overlayCenter(m.viewMain(), m.viewNetworkSwitchModal())
 	default:
 		return m.viewMain()
 	}
@@ -191,6 +193,9 @@ func (m Model) viewMain() string {
 	case m.stopping:
 		b.WriteString(loadingStyle.Render("stopping " + m.stoppingLabel + "..."))
 		b.WriteString("\n")
+	case m.netSwitching:
+		b.WriteString(loadingStyle.Render("switching network..."))
+		b.WriteString("\n")
 	case m.err != nil:
 		summary := "error: " + firstLine(m.err.Error())
 		if m.errLogPath != "" {
@@ -236,6 +241,8 @@ func (m Model) helpText() string {
 			return "↑↓/wasd move · enter/space run · q quit"
 		case modeSettings:
 			return "↑↓/wasd move · enter/space select · q quit"
+		case modeNetwork:
+			return "↑↓/wasd move · enter switch · q quit"
 		default: // modeModels
 			return "↑↓/wasd move · enter/space run · c copy · / search · del delete · q quit"
 		}
@@ -254,6 +261,8 @@ func (m Model) renderLeftPaneContent(leftW int) string {
 		return m.renderSettingsList(leftW)
 	case modeRunning:
 		return m.renderRunningTabList(leftW)
+	case modeNetwork:
+		return m.renderNetworkList(leftW)
 	default:
 		return m.renderModelsTree(leftW)
 	}
@@ -293,6 +302,7 @@ func (m Model) renderTabBarLabels() string {
 		{modeRecents, "Recents"},
 		{modeSettings, "Settings"},
 		{modeRunning, "Running"},
+		{modeNetwork, "Network"},
 	}
 
 	tabFocused := m.focus == focusTabs
@@ -967,6 +977,8 @@ func tabTitle(mode leftMode) string {
 		return "Settings"
 	case modeRunning:
 		return "Running"
+	case modeNetwork:
+		return "Network"
 	default:
 		return "Models"
 	}
@@ -980,6 +992,8 @@ func tabInstructions(mode leftMode) string {
 		return "Select a settings category to configure, like where llmctl looks for model files."
 	case modeRunning:
 		return "Select a running instance to preview its output. Enter to stop it or view the full output."
+	case modeNetwork:
+		return "Switch between the RPC and internet network profiles, and view link status."
 	default:
 		return "Select from saved model profiles, or add new model profiles."
 	}
@@ -1112,6 +1126,10 @@ func formatDetailPairs(pairs []detailPair, width int) []string {
 // label, since that's more useful at a glance.
 func (m Model) renderDetails(width int) string {
 	var b strings.Builder
+
+	if m.leftMode == modeNetwork {
+		return m.renderNetworkDetails(width)
+	}
 
 	// Still at the outer tab bar — nothing's selected yet within a tab,
 	// so explain what arrowing down into it will show instead of an empty

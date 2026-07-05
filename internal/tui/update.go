@@ -47,6 +47,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gpuByPID = msg.byPID
 		return m, nil
 
+	case netStatusMsg:
+		m.netStatus = msg
+		return m, nil
+
+	case netSwitchResultMsg:
+		m.netSwitching = false
+		if msg.err != nil {
+			m.setError(msg.err, "")
+			return m, nil
+		}
+		m.clearError()
+		return m, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)
+
 	case startResultMsg:
 		m.starting = false
 		m.startingLabel = ""
@@ -99,6 +112,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateTemplatePicker(msg)
 		case screenExportArgs:
 			return m.updateExportArgs(msg)
+		case screenNetworkSwitch:
+			return m.updateNetworkSwitch(msg)
 		default:
 			return m.updateMain(msg)
 		}
@@ -397,6 +412,33 @@ func uniqueProfileKey(existing map[string]models.Profile, base string) string {
 	}
 }
 
+func (m Model) openNetworkSwitch() (tea.Model, tea.Cmd) {
+	m.netSwitch = netSwitchState{
+		toRPC:  m.netCursor == netRowSwitchRPC,
+		cursor: 0,
+	}
+	m.screen = screenNetworkSwitch
+	return m, nil
+}
+
+func (m Model) updateNetworkSwitch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h", "a":
+		m.netSwitch.cursor = 0
+	case "right", "l", "d":
+		m.netSwitch.cursor = 1
+	case "esc":
+		m.screen = screenMain
+	case "enter", " ":
+		m.screen = screenMain
+		if m.netSwitch.cursor == 0 {
+			m.netSwitching = true
+			return m, switchNetworkCmd(m.netSwitch.toRPC, m.netInternetConn, m.netRPCConn)
+		}
+	}
+	return m, nil
+}
+
 // moveFocusLeft steps back up the focus hierarchy: Running -> left content
 // -> tab bar. At the tab bar it steps to the previous tab.
 func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
@@ -438,7 +480,7 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
-		if m.leftMode < modeRunning {
+		if m.leftMode < modeNetwork {
 			m.leftMode++
 		}
 	case focusLeft:
@@ -510,6 +552,16 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 				m.focus = focusTabs
 			case next < len(m.running):
 				m.runningCursor = next
+			}
+			return m, nil
+
+		case modeNetwork:
+			next := m.netCursor + delta
+			switch {
+			case next < 0:
+				m.focus = focusTabs
+			case next < 2:
+				m.netCursor = next
 			}
 			return m, nil
 
@@ -682,6 +734,10 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 		return m, nil
 	case focusSettingsContent:
 		return m.activateSettingsContentRow()
+	}
+
+	if m.leftMode == modeNetwork && m.focus == focusLeft {
+		return m.openNetworkSwitch()
 	}
 
 	r, ok := m.currentRow()

@@ -34,6 +34,7 @@ const (
 	screenStopConfirm
 	screenProfileTemplate
 	screenExportArgs
+	screenNetworkSwitch
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -62,6 +63,7 @@ const (
 	modeRecents
 	modeSettings
 	modeRunning
+	modeNetwork
 )
 
 // rowKind identifies what a flattened tree row represents.
@@ -179,10 +181,19 @@ type Model struct {
 
 	tokHistory map[string][]float64
 
-	dividerDragging    bool
-	leftWidthOverride  int // 0 = auto (avail*2/5); positive = user-dragged override
+	dividerDragging      bool
+	leftWidthOverride    int // 0 = auto (avail*2/5); positive = user-dragged override
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
+
+	netStatus   netStatusMsg
+	netSwitching bool
+	netCursor   int
+	netSwitch   netSwitchState
+
+	netInternetConn string
+	netRPCConn      string
+	netIface        string
 
 	width  int
 	height int
@@ -192,16 +203,19 @@ type Model struct {
 // cfgPath is where changes made in the TUI (new models/profiles) are persisted.
 // Focus starts on the tab bar (Models tab active) rather than dropping
 // straight into the tree.
-func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager) Model {
+func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetConn, netRPCConn, netIface string) Model {
 	m := Model{
 		cfg: cfg, cfgPath: cfgPath, mgr: mgr,
-		health:       healthMsg{},
-		focus:        focusTabs,
-		tokSamples:   map[string]tokSample{},
-		tokRates:     map[string]float64{},
-		tokPeak:      map[string]float64{},
-		tokHistory:   map[string][]float64{},
-		gpuAvailable: gpu.Available(),
+		health:          healthMsg{},
+		focus:           focusTabs,
+		tokSamples:      map[string]tokSample{},
+		tokRates:        map[string]float64{},
+		tokPeak:         map[string]float64{},
+		tokHistory:      map[string][]float64{},
+		gpuAvailable:    gpu.Available(),
+		netInternetConn: netInternetConn,
+		netRPCConn:      netRPCConn,
+		netIface:        netIface,
 	}
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
@@ -514,7 +528,11 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
-	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
+	cmds := []tea.Cmd{
+		checkHealthCmd(m.running),
+		checkSlotsCmd(m.running),
+		checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn),
+	}
 	if m.gpuAvailable {
 		cmds = append(cmds, checkVRAMCmd())
 	}
