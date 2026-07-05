@@ -27,15 +27,15 @@ func overlayCenter(bg, fg string) string {
 		bgHeight = 24
 	}
 
-	plainFG := stripANSI(fg)
-	modalLines := strings.Split(plainFG, "\n")
+	colorLines := strings.Split(fg, "\n")
+	plainLines := strings.Split(stripANSI(fg), "\n")
 	modalWidth := 0
-	for _, line := range modalLines {
+	for _, line := range plainLines {
 		if w := lipgloss.Width(line); w > modalWidth {
 			modalWidth = w
 		}
 	}
-	modalHeight := len(modalLines)
+	modalHeight := len(colorLines)
 
 	if modalWidth < 24 {
 		modalWidth = 24
@@ -55,28 +55,37 @@ func overlayCenter(bg, fg string) string {
 		canvas[i] = strings.Repeat(" ", bgWidth)
 	}
 
-	for rowIndex, line := range modalLines {
+	dimStyle := lipgloss.NewStyle().Background(lipgloss.Color("236"))
+
+	for i := range canvas {
+		canvas[i] = dimStyle.Width(bgWidth).Render(canvas[i])
+	}
+
+	for rowIndex, colorLine := range colorLines {
 		row := startRow + rowIndex
 		if row < 0 || row >= bgHeight {
 			continue
 		}
 
-		trimmed := []rune(line)
-		if len(trimmed) > maxModalWidth {
-			trimmed = trimmed[:maxModalWidth]
+		plainLine := ""
+		if rowIndex < len(plainLines) {
+			plainLine = plainLines[rowIndex]
 		}
-		lineText := string(trimmed)
-		if len(trimmed) < maxModalWidth {
-			lineText += strings.Repeat(" ", maxModalWidth-len(trimmed))
+		plainW := lipgloss.Width(plainLine)
+		padding := ""
+		if plainW < maxModalWidth {
+			padding = strings.Repeat(" ", maxModalWidth-plainW)
 		}
-		canvas[row] = canvas[row][:startCol] + lineText + canvas[row][startCol+maxModalWidth:]
-	}
 
-	for i := range canvas {
-		canvas[i] = lipgloss.NewStyle().
-			Width(bgWidth).
-			Background(lipgloss.Color("236")).
-			Render(canvas[i])
+		// Render the left and right dim strips independently so the modal's
+		// ANSI reset sequences don't bleed into the surrounding background.
+		rightCols := bgWidth - startCol - maxModalWidth
+		if rightCols < 0 {
+			rightCols = 0
+		}
+		leftStrip := dimStyle.Render(strings.Repeat(" ", startCol))
+		rightStrip := dimStyle.Render(strings.Repeat(" ", rightCols))
+		canvas[row] = leftStrip + colorLine + padding + rightStrip
 	}
 
 	return strings.Join(canvas, "\n")

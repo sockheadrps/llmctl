@@ -44,6 +44,8 @@ type Profile struct {
 	CacheTypeV        string   `yaml:"cache_type_v,omitempty"`
 	ExtraArgs         []string          `yaml:"extra_args,omitempty"`
 	Notes             string            `yaml:"notes,omitempty"`
+	RPCEnabled        *bool             `yaml:"rpc_enabled,omitempty"`
+	MaxTokPerSec      float64           `yaml:"max_tok_per_sec,omitempty"`
 	FlagOverrides     map[string]string `yaml:"flag_overrides,omitempty"`
 }
 

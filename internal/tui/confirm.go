@@ -38,15 +38,15 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenMain
 		return m, nil
 
-	case "left", "h":
+	case "left", "h", "a":
 		m.confirm.selected = confirmRun
 		return m, nil
 
-	case "right", "l":
+	case "right", "l", "d":
 		m.confirm.selected = confirmEdit
 		return m, nil
 
-	case "enter":
+	case "enter", " ":
 		m.screen = screenMain
 		switch m.confirm.selected {
 		case confirmEdit:

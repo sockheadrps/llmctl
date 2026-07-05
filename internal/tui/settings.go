@@ -25,15 +25,24 @@ type settingsCategoryDef struct {
 var settingsCategories = []settingsCategoryDef{
 	{id: "model_dirs", label: "Model Directories"},
 	{id: "llama_bin", label: "llama-server Binary"},
+	{id: "rpc", label: "RPC Server"},
 }
 
 // settingsState backs the Settings tab's content — currently just Model
 // Directories, but a struct (rather than dirsContentState directly) leaves
 // room to add another category's state alongside it later.
+type rpcContentState struct {
+	cursor  int // 0 = toggle, 1 = endpoint
+	editing bool
+	input   textinput.Model
+	err     string
+}
+
 type settingsState struct {
 	activeCategory string
 	dirs           dirsContentState
 	bin            binContentState
+	rpc            rpcContentState
 }
 
 // dirsContentState is the Model Directories category's content: the
@@ -69,6 +78,9 @@ func (m Model) enterSettingsCategory(categoryID string) (tea.Model, tea.Cmd) {
 	case "llama_bin":
 		m.settings.activeCategory = categoryID
 		m.settings.bin = binContentState{}
+	case "rpc":
+		m.settings.activeCategory = categoryID
+		m.settings.rpc = rpcContentState{}
 	}
 	m.focus = focusSettingsContent
 	m.clearError()
@@ -79,6 +91,8 @@ func (m Model) activateSettingsContentRow() (tea.Model, tea.Cmd) {
 	switch m.settings.activeCategory {
 	case "llama_bin":
 		return m.openBinForm()
+	case "rpc":
+		return m.activateRPCRow()
 	default:
 		return m.activateDirsRow()
 	}
@@ -91,6 +105,15 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 			m.focus = focusLeft
 		}
 		return m, nil
+	case "rpc":
+		next := m.settings.rpc.cursor + delta
+		switch {
+		case next < 0:
+			m.focus = focusLeft
+		case next <= 1:
+			m.settings.rpc.cursor = next
+		}
+		return m, nil
 	default:
 		next := m.settings.dirs.cursor + delta
 		switch {
@@ -101,6 +124,44 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+}
+
+func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
+	if m.settings.rpc.cursor == 0 {
+		// toggle enabled
+		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
+		if err := m.saveConfig(); err != nil {
+			m.settings.rpc.err = err.Error()
+		}
+		return m, nil
+	}
+	return m.openRPCEndpointForm()
+}
+
+func (m Model) openRPCEndpointForm() (tea.Model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = "192.168.1.100:50052"
+	ti.CharLimit = 128
+	ti.Width = 40
+	ti.SetValue(m.cfg.RPCEndpoint)
+	ti.Focus()
+	ti.CursorEnd()
+	m.settings.rpc.input = ti
+	m.settings.rpc.editing = true
+	m.settings.rpc.err = ""
+	return m, nil
+}
+
+func (m Model) submitRPCEndpointForm() (tea.Model, tea.Cmd) {
+	val := strings.TrimSpace(m.settings.rpc.input.Value())
+	m.cfg.RPCEndpoint = val
+	if err := m.saveConfig(); err != nil {
+		m.settings.rpc.err = err.Error()
+		return m, nil
+	}
+	m.settings.rpc.editing = false
+	m.settings.rpc.err = ""
+	return m, nil
 }
 
 func (m Model) openBinForm() (tea.Model, tea.Cmd) {

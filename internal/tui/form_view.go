@@ -63,7 +63,11 @@ func (m Model) viewForm() string {
 			labelText := truncateText(f.label+":", labelWidth)
 			label := formLabelStyle.Width(labelWidth)
 			if m.form.focus == idx {
-				label = formFocusedLabelStyle.Width(labelWidth)
+				if !m.form.navigating {
+					label = formEditingLabelStyle.Width(labelWidth)
+				} else {
+					label = formFocusedLabelStyle.Width(labelWidth)
+				}
 				focusedRow = rowIndex
 			}
 			selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", label.Render(labelText), f.input.View()), rowWidth))
@@ -110,7 +114,7 @@ func (m Model) viewForm() string {
 		body.WriteString("\n")
 	}
 	if len(selectedRows) > visibleRows {
-		body.WriteString(helpStyle.Render("↑/↓ scroll  tab/enter next"))
+		body.WriteString(helpStyle.Render("↑↓/wasd scroll  enter activate"))
 		body.WriteString("\n")
 	}
 
@@ -131,7 +135,7 @@ func (m Model) viewForm() string {
 		} else {
 			rightPane.WriteString(detailMutedStyle.Render("Flag:") + " " + m.form.flagInput.View())
 			rightPane.WriteString("\n")
-			rightPane.WriteString(helpStyle.Render("→ to override"))
+			rightPane.WriteString(helpStyle.Render("→/d to override"))
 		}
 		rightPane.WriteString("\n\n")
 		descReserved = 7
@@ -157,7 +161,7 @@ func (m Model) viewForm() string {
 		b.WriteString(errorStyle.Render("error: " + m.form.err))
 		b.WriteString("\n")
 	}
-	b.WriteString(helpStyle.Render("tab/↓ next  shift+tab/↑ prev  space toggle  enter next/save  esc cancel"))
+	b.WriteString(helpStyle.Render("↑↓/wasd navigate  enter edit/save  esc cancel"))
 	return b.String()
 }
 

@@ -177,6 +177,11 @@ type Model struct {
 
 	tokHistory map[string][]float64
 
+	dividerDragging    bool
+	leftWidthOverride  int // 0 = auto (avail*2/5); positive = user-dragged override
+	rightDividerDragging bool
+	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
+
 	width  int
 	height int
 }
@@ -454,6 +459,7 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 				m.tokRates[key] = rate
 				if rate > m.tokPeak[key] {
 					m.tokPeak[key] = rate
+					m.persistPeakIfRecord(key, rate)
 				}
 				hist := append(m.tokHistory[key], rate)
 				const maxHistLen = 30
@@ -476,6 +482,31 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 			delete(m.tokSamples, key)
 		}
 	}
+}
+
+// persistPeakIfRecord saves rate to the profile's MaxTokPerSec when it beats
+// the previously stored all-time peak, so the rate-meter scale survives restarts.
+func (m *Model) persistPeakIfRecord(key string, rate float64) {
+	parts := strings.SplitN(key, "/", 2)
+	if len(parts) != 2 {
+		return
+	}
+	modelKey, profileKey := parts[0], parts[1]
+	mdl, ok := m.cfg.Models[modelKey]
+	if !ok {
+		return
+	}
+	p, ok := mdl.Profiles[profileKey]
+	if !ok {
+		return
+	}
+	if rate <= p.MaxTokPerSec {
+		return
+	}
+	p.MaxTokPerSec = rate
+	mdl.Profiles[profileKey] = p
+	m.cfg.Models[modelKey] = mdl
+	_ = m.saveConfig()
 }
 
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired

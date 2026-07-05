@@ -145,7 +145,8 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 // Start launches bin (typically "llama-server") with args from the given
 // profile, detached from the parent process group so it survives the CLI
 // invocation exiting, with stdout/stderr redirected to logPath.
-func Start(bin string, m models.Model, p models.Profile, logPath string) (pid int, err error) {
+// rpcEndpoint, when non-empty, appends --rpc <endpoint> to the args.
+func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndpoint string) (pid int, err error) {
 	resolvedBin, err := resolveExecutable(bin)
 	if err != nil {
 		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
@@ -156,7 +157,11 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 		return 0, fmt.Errorf("create log file %s: %w", logPath, err)
 	}
 
-	cmd := exec.Command(resolvedBin, BuildArgs(m, p)...)
+	args := BuildArgs(m, p)
+	if rpcEndpoint != "" {
+		args = append(args, "--rpc", rpcEndpoint)
+	}
+	cmd := exec.Command(resolvedBin, args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	configureProcess(cmd)

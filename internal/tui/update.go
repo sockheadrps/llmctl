@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/models"
 )
@@ -69,6 +70,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, nil
 
+	case tea.MouseMsg:
+		if m.screen == screenMain {
+			return m.updateMouse(msg)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch m.screen {
 		case screenPickModel:
@@ -92,6 +99,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	return m, nil
+}
+
+func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	leftW, _, _ := m.paneDimensions()
+	dividerLeft := leftW + 1  // right border of left pane
+	dividerRight := leftW + 2 // left border of right pane
+
+	// Use the actual rendered runningH (accounts for content overflow) to
+	// locate the horizontal divider. Y=0 header, Y=1 body top border, so
+	// divider row = 1 (top border) + runningH + 1 (bottom border of running) = runningH+2.
+	_, actualRunningH, actualDetailsH := m.mainDetailsGeometry()
+	hDividerY := actualRunningH + 2
+	inRightColumn := msg.X > dividerRight
+
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button != tea.MouseButtonLeft {
+			break
+		}
+		if msg.X == dividerLeft || msg.X == dividerRight {
+			m.dividerDragging = true
+		} else if inRightColumn && m.leftMode != modeRunning {
+			if msg.Y >= hDividerY-1 && msg.Y <= hDividerY+2 {
+				m.rightDividerDragging = true
+			}
+		}
+
+	case tea.MouseActionMotion:
+		if m.dividerDragging {
+			newLeft := msg.X - 1
+			avail := m.width - 4
+			if newLeft < minLeftWidth {
+				newLeft = minLeftWidth
+			}
+			if newLeft > avail-minRightWidth {
+				newLeft = avail - minRightWidth
+			}
+			m.leftWidthOverride = newLeft
+		}
+		if m.rightDividerDragging {
+			// newRunningH = drag Y minus header row minus body top border.
+			// The minimum is the raw content line count of the running list
+			// (so the box is never set smaller than its content — that would
+			// trigger the overflow correction which can push leftH past the
+			// terminal height). actualRunningH is the rendered box height
+			// (padded/filled), not the content height, so we measure content
+			// directly.
+			_, rightW, _ := m.paneDimensions()
+			rightMeasure := lipgloss.NewStyle().Width(rightW).Padding(0, 1)
+			contentH := lipgloss.Height(rightMeasure.Render(m.renderRunning()))
+			minRunning := max(3, contentH)
+
+			newRunningH := msg.Y - 2
+			totalBudget := actualRunningH + actualDetailsH
+			if newRunningH < minRunning {
+				newRunningH = minRunning
+			}
+			if newRunningH > totalBudget-3 {
+				newRunningH = totalBudget - 3
+			}
+			m.rightSplitOverride = newRunningH
+		}
+
+	case tea.MouseActionRelease:
+		m.dividerDragging = false
+		m.rightDividerDragging = false
+	}
 	return m, nil
 }
 
@@ -130,6 +205,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.bin.input, cmd = m.settings.bin.input.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.rpc.editing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.editing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRPCEndpointForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.input, cmd = m.settings.rpc.input.Update(msg)
+		return m, cmd
+	}
 
 	// Any key other than a repeated Delete cancels a pending delete
 	// confirmation, so it only fires when pressed twice in a row on the
@@ -165,9 +253,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Copy):
 		return m.copyOrDuplicateSelected()
-
-	case key.Matches(msg, keys.Stop):
-		return m.stopSelected()
 
 	case key.Matches(msg, keys.Delete):
 		return m.deleteSelected()
@@ -559,21 +644,17 @@ func (m Model) currentRow() (row, bool) {
 	}
 }
 
-// selectRow handles Enter on whichever kind of row is under the cursor:
-// open the Run/Edit confirm for a profile, the add-model picker, or the
-// new-profile form. On the tab bar, Enter just drops into that tab's
-// content, same as pressing Down. It's a no-op from the Running pane —
-// that pane's rows aren't run/edit targets, just use 's' to stop one.
+// selectRow handles Enter on whichever kind of row is under the cursor.
 func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
-		if m.leftMode == modeModels {
-			m.focus = focusLeft
-		} else {
-			m.focus = focusLeft
-		}
+		m.focus = focusLeft
 		return m, nil
 	case focusRunning:
+		if m.runningCursor >= 0 && m.runningCursor < len(m.running) {
+			run := m.running[m.runningCursor]
+			return m.openStopConfirm(run.ModelKey, run.ProfileKey, run.Label())
+		}
 		return m, nil
 	case focusSettingsContent:
 		return m.activateSettingsContentRow()
@@ -596,7 +677,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	case rowSettingsCategory:
 		return m.enterSettingsCategory(r.modelKey)
 	case rowRunning:
-		return m.openRunningAction(r.modelKey, r.profileKey, r.label)
+		return m.openStopConfirm(r.modelKey, r.profileKey, r.label)
 	default:
 		return m, nil
 	}
@@ -619,29 +700,6 @@ func (m Model) enterModel(modelKey string) (tea.Model, tea.Cmd) {
 		m.cursor = idx
 	}
 	return m, nil
-}
-
-func (m Model) stopSelected() (tea.Model, tea.Cmd) {
-	if m.focus == focusRunning {
-		if m.runningCursor < 0 || m.runningCursor >= len(m.running) {
-			return m, nil
-		}
-		run := m.running[m.runningCursor]
-		return m.openStopConfirm(run.ModelKey, run.ProfileKey, run.Label())
-	}
-
-	if m.focus != focusLeft {
-		return m, nil
-	}
-	r, ok := m.currentRow()
-	if !ok || (r.kind != rowProfile && r.kind != rowRunning) {
-		return m, nil
-	}
-	// Only confirm if a profile is currently running; otherwise silently no-op.
-	if _, running := m.findRunning(r.modelKey, r.profileKey); !running {
-		return m, nil
-	}
-	return m.openStopConfirm(r.modelKey, r.profileKey, r.label)
 }
 
 // deleteSelected implements press-twice-to-confirm deletion of a profile:

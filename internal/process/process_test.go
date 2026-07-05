@@ -281,7 +281,7 @@ func TestStartMissingExecutableReturnsConfigHintWithoutLog(t *testing.T) {
 	m := models.Model{Name: "Test Model", Path: filepath.Join(t.TempDir(), "model.gguf")}
 	p := models.Profile{Name: "default", Port: 8080}
 
-	_, err := Start("llmctl-definitely-missing-llama-server", m, p, logPath)
+	_, err := Start("llmctl-definitely-missing-llama-server", m, p, logPath, "")
 	if err == nil {
 		t.Fatal("expected missing executable error")
 	}

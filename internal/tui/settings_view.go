@@ -27,6 +27,8 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 		b.WriteString(m.renderDirsContent())
 	case "llama_bin":
 		b.WriteString(m.renderBinContent())
+	case "rpc":
+		b.WriteString(m.renderRPCContent())
 	}
 
 	if categoryID == "model_dirs" && m.settings.dirs.err != "" {
@@ -36,6 +38,10 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 	if categoryID == "llama_bin" && m.settings.bin.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.bin.err))
+	}
+	if categoryID == "rpc" && m.settings.rpc.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.rpc.err))
 	}
 
 	return b.String()
@@ -65,6 +71,44 @@ func (m Model) renderBinContent() string {
 	if m.settings.bin.editing {
 		b.WriteString("\n")
 		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.bin.input.View())
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m Model) renderRPCContent() string {
+	var b strings.Builder
+	focused := m.focus == focusSettingsContent
+
+	enabledLabel := "Disabled"
+	if m.cfg.RPCEnabled {
+		enabledLabel = "Enabled"
+	}
+
+	for i, label := range []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint"} {
+		cursor := "  "
+		style := profileStyle
+		if focused && m.settings.rpc.cursor == i {
+			cursor = cursorStyle.Render("> ")
+			style = selectedProfileStyle
+		}
+		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
+	}
+
+	endpoint := m.cfg.RPCEndpoint
+	if endpoint == "" {
+		endpoint = "(not set)"
+	}
+	b.WriteString("\n")
+	b.WriteString(profileStyle.Render("Endpoint: " + endpoint))
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render("When enabled, --rpc <endpoint> is appended to every launch."))
+	b.WriteString("\n")
+
+	if m.settings.rpc.editing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Endpoint:") + " " + m.settings.rpc.input.View())
 		b.WriteString("\n")
 	}
 

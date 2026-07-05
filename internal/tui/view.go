@@ -45,9 +45,19 @@ func (m Model) paneDimensions() (leftWidth, rightWidth, targetLeftH int) {
 	// The two boxes sit side by side with no gap; each has 2 columns of
 	// border overhead not covered by its Width() value.
 	avail := termWidth - 4
-	leftWidth = avail * 2 / 5
-	if leftWidth < minLeftWidth {
-		leftWidth = minLeftWidth
+	if m.leftWidthOverride > 0 {
+		leftWidth = m.leftWidthOverride
+		if leftWidth < minLeftWidth {
+			leftWidth = minLeftWidth
+		}
+		if leftWidth > avail-minRightWidth {
+			leftWidth = avail - minRightWidth
+		}
+	} else {
+		leftWidth = avail * 2 / 5
+		if leftWidth < minLeftWidth {
+			leftWidth = minLeftWidth
+		}
 	}
 	rightWidth = avail - leftWidth
 	if rightWidth < minRightWidth {
@@ -128,16 +138,22 @@ func (m Model) viewMain() string {
 
 		runningContent := m.renderRunning()
 		detailsContent := m.renderDetails(rightW)
-		runningH, detailsH := splitPaneHeight(leftH, len(m.running))
+		runningH, detailsH := m.computeSplitHeights(leftH)
 
-		// lipgloss's Height() is a floor, not a cap — content taller than
-		// its preferred share (many settings + a long Notes field, lots of
-		// running instances, …) just overflows past it. Let content win
-		// instead of silently drifting out of sync: whichever box actually
-		// needs more room gets it, then the other column stretches to
-		// match so the two stay the same total height.
+		// Content always wins over the computed floor — this keeps the layout
+		// math consistent whether or not the user has dragged the split.
 		if n := lipgloss.Height(rightMeasureStyle.Render(runningContent)); n > runningH {
 			runningH = n
+			// Shrink details to keep the total within budget so the body
+			// height stays predictable and the hotkey line stays on screen.
+			budget := leftH - 2
+			if budget < 8 {
+				budget = 8
+			}
+			detailsH = budget - runningH
+			if detailsH < 3 {
+				detailsH = 3
+			}
 		}
 		rightAsLeftH := runningH + detailsH + 2 // right stacks 2 boxes' borders vs left's 1
 		switch {
@@ -201,24 +217,24 @@ func (m Model) helpText() string {
 	}
 	switch m.focus {
 	case focusTabs:
-		return "←/→ tabs · ↑/↓ select · q quit"
+		return "←→/ad tabs · ↑↓/ws select · q quit"
 	case focusRunning:
-		return "↑/↓ move · enter actions · s stop · e logs · q quit"
+		return "↑↓/wasd move · enter stop · e logs · q quit"
 	case focusSettingsContent:
-		return "↑/↓ move · enter edit · del delete · esc back"
+		return "↑↓/wasd move · enter edit · del delete · esc back"
 	case focusLeft:
 		switch m.leftMode {
 		case modeRunning:
-			return "↑/↓ move · enter actions · c copy endpoint · q quit"
+			return "↑↓/wasd move · enter/space stop · c copy endpoint · q quit"
 		case modeRecents:
-			return "↑/↓ move · enter run · q quit"
+			return "↑↓/wasd move · enter/space run · q quit"
 		case modeSettings:
-			return "↑/↓ move · enter select · q quit"
+			return "↑↓/wasd move · enter/space select · q quit"
 		default: // modeModels
-			return "↑/↓ move · enter run · c copy · / search · del delete · q quit"
+			return "↑↓/wasd move · enter/space run · c copy · / search · del delete · q quit"
 		}
 	}
-	return "←/→ tabs · ↑/↓ move · q quit"
+	return "←→/ad tabs · ↑↓/wasd move · q quit"
 }
 
 // renderLeftPaneContent renders whichever tab's content is active. The
@@ -717,6 +733,30 @@ func (m Model) renderVRAMHeader() string {
 	return fmt.Sprintf("%s %s", barStyle.Render(bar), profileStyle.Render(fmt.Sprintf("%.1f/%.1fG", usedGB, totalGB)))
 }
 
+// computeSplitHeights returns the running/details content heights for the
+// right column, honouring a user-dragged rightSplitOverride when set.
+func (m Model) computeSplitHeights(leftH int) (runningH, detailsH int) {
+	if m.rightSplitOverride > 0 {
+		budget := leftH - 2
+		if budget < 8 {
+			budget = 8
+		}
+		runningH = m.rightSplitOverride
+		if runningH < 3 {
+			runningH = 3
+		}
+		if runningH > budget-3 {
+			runningH = budget - 3
+		}
+		detailsH = budget - runningH
+		if detailsH < 3 {
+			detailsH = 3
+		}
+		return
+	}
+	return splitPaneHeight(leftH, len(m.running))
+}
+
 // splitPaneHeight divides the right column so its total rendered height
 // (including each box's own border) matches leftHeight, the left pane's
 // content height. Running entries are one line each, so that box is sized
@@ -804,9 +844,17 @@ func (m Model) mainDetailsGeometry() (rightW, runningH, detailsH int) {
 	rightMeasureStyle := lipgloss.NewStyle().Width(rightW).Padding(0, 1)
 
 	leftH := max(lipgloss.Height(leftMeasureStyle.Render(m.renderLeftPaneContent(leftW))), targetLeftH)
-	runningH, detailsH = splitPaneHeight(leftH, len(m.running))
+	runningH, detailsH = m.computeSplitHeights(leftH)
 	if n := lipgloss.Height(rightMeasureStyle.Render(m.renderRunning())); n > runningH {
 		runningH = n
+		budget := leftH - 2
+		if budget < 8 {
+			budget = 8
+		}
+		detailsH = budget - runningH
+		if detailsH < 3 {
+			detailsH = 3
+		}
 	}
 
 	rightAsLeftH := runningH + detailsH + 2
@@ -933,6 +981,18 @@ func tabInstructions(mode leftMode) string {
 func (m Model) renderRateMeter(key string, rate float64) string {
 	const barWidth = 16
 	peak := m.tokPeak[key]
+
+	// Use the persisted all-time max as the bar ceiling — it survives restarts
+	// and gives a stable scale from the first token of a new session.
+	parts := strings.SplitN(key, "/", 2)
+	if len(parts) == 2 {
+		if mdl, ok := m.cfg.Models[parts[0]]; ok {
+			if p, ok := mdl.Profiles[parts[1]]; ok && p.MaxTokPerSec > peak {
+				peak = p.MaxTokPerSec
+			}
+		}
+	}
+
 	if peak <= 0 {
 		peak = rate
 	}

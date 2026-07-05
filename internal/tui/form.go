@@ -22,6 +22,10 @@ type formField struct {
 // formState backs the "New Profile"/"Edit Profile" screen. Focus indices
 // 0..len(fields)-1 are the text fields, len(fields) is the Flash Attention
 // toggle, and len(fields)+1 is the Save action.
+//
+// navigating=true is navigate mode (arrow/WASD moves between fields; Enter
+// activates a field for editing). navigating=false is edit mode (keystrokes
+// go to the focused textinput; Enter commits and returns to navigate mode).
 type formState struct {
 	modelKey             string
 	editing              bool
@@ -36,6 +40,7 @@ type formState struct {
 	descDir              int
 	descPause            int
 	err                  string
+	navigating           bool
 	flagFocus            bool
 	flagInput            textinput.Model
 	flagOverrides        map[string]string
@@ -188,6 +193,7 @@ const (
 	fieldCacheV
 	fieldExtraArgs
 	fieldNotes
+	fieldRPCEnabled
 )
 
 var formLabels = []string{
@@ -197,6 +203,7 @@ var formLabels = []string{
 	"Parallel Slots", "Continuous Batching", "Prompt Cache", "Cache RAM",
 	"Reasoning", "Reasoning Budget", "Reasoning Format", "Cache Type K", "Cache Type V",
 	"Extra Args (space-separated)", "Notes",
+	"RPC Enabled",
 }
 
 func buildFormFields(defaults []string) []formField {
@@ -210,7 +217,6 @@ func buildFormFields(defaults []string) []formField {
 		ti.Width = 40
 		fields[i] = formField{label: label, input: ti}
 	}
-	fields[0].input.Focus()
 	return fields
 }
 
@@ -274,6 +280,8 @@ func formFieldDescription(idx int) string {
 		return "Additional raw llama.cpp arguments, split by spaces, for advanced or experimental features."
 	case fieldNotes:
 		return "Optional notes for this profile that help you remember how it was intended to be used."
+	case fieldRPCEnabled:
+		return "Override the global RPC setting for this profile. Leave blank to follow the global setting; set true to force RPC on, false to force it off."
 	case len(formLabels):
 		return "The Flash Attention toggle enables hardware-optimized attention when supported by your build."
 	case len(formLabels) + 1:
@@ -297,9 +305,7 @@ func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
 	f.resetDescriptionScroll()
-	if f.focus < len(f.fields) {
-		f.fields[f.focus].input.Focus()
-	}
+	// Don't auto-focus the text input: navigate mode controls activation via Enter.
 	f.ensureVisible(visibleRows, total)
 	f.syncFlagInput()
 }
@@ -401,6 +407,7 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 	defaults[fieldCacheV] = ""
 	defaults[fieldExtraArgs] = ""
 	defaults[fieldNotes] = ""
+	defaults[fieldRPCEnabled] = ""
 
 	for idx, val := range overrides {
 		if idx >= 0 && idx < len(defaults) {
@@ -416,6 +423,7 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 		initialFlash:         true,
 		flash:                true,
 		focus:                0,
+		navigating:           true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
@@ -473,6 +481,7 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldCacheV] = p.CacheTypeV
 	defaults[fieldExtraArgs] = strings.Join(p.ExtraArgs, " ")
 	defaults[fieldNotes] = p.Notes
+	defaults[fieldRPCEnabled] = boolPtrOrEmpty(p.RPCEnabled)
 
 	fi := buildFlagInput()
 	m.form = formState{
@@ -484,6 +493,7 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 		initialFlash:         p.FlashAttn,
 		flash:                p.FlashAttn,
 		focus:                0,
+		navigating:           true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
@@ -551,17 +561,10 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.form.commitFlagInput()
 			m.form.flagFocus = false
 			m.form.flagInput.Blur()
-			// Re-focus the form field so typing works immediately after returning.
-			if m.form.focus < len(m.form.fields) {
-				m.form.fields[m.form.focus].input.Focus()
-			}
 		case "enter":
 			m.form.commitFlagInput()
 			m.form.flagFocus = false
 			m.form.flagInput.Blur()
-			if m.form.focus < len(m.form.fields) {
-				m.form.fields[m.form.focus].input.Focus()
-			}
 		default:
 			var cmd tea.Cmd
 			m.form.flagInput, cmd = m.form.flagInput.Update(msg)
@@ -570,6 +573,27 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Edit mode: keystrokes go to the focused text input.
+	// Enter commits and returns to navigate mode; Esc cancels without committing.
+	if !m.form.navigating {
+		switch msg.String() {
+		case "esc":
+			m.form.blurAll()
+			m.form.navigating = true
+		case "enter":
+			m.form.blurAll()
+			m.form.navigating = true
+		default:
+			if m.form.focus < len(m.form.fields) {
+				var cmd tea.Cmd
+				m.form.fields[m.form.focus].input, cmd = m.form.fields[m.form.focus].input.Update(msg)
+				return m, cmd
+			}
+		}
+		return m, nil
+	}
+
+	// Navigate mode: arrows/WASD move between fields; Enter activates a field.
 	switch msg.String() {
 	case "esc":
 		if m.form.dirty() {
@@ -581,55 +605,39 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, nil
 
-	case "right":
+	case "right", "d":
 		if flag := m.form.focusedFlag(); flag != "" {
-			atEnd := m.form.focus >= len(m.form.fields)
-			if !atEnd {
-				ti := m.form.fields[m.form.focus].input
-				atEnd = ti.Position() >= len([]rune(ti.Value()))
-			}
-			if atEnd {
-				m.form.flagFocus = true
-				m.form.flagInput.Focus()
-				if m.form.focus < len(m.form.fields) {
-					m.form.fields[m.form.focus].input.Blur()
-				}
-				return m, nil
+			m.form.flagFocus = true
+			m.form.flagInput.Focus()
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Blur()
 			}
 		}
+		return m, nil
 
-	case "tab", "down":
+	case "tab", "down", "j", "s":
 		m.form.moveFocus(1, m.formVisibleRows())
 		return m, nil
 
-	case "shift+tab", "up":
+	case "shift+tab", "up", "k", "w":
 		m.form.moveFocus(-1, m.formVisibleRows())
 		return m, nil
-
-	case " ":
-		if m.form.focus == len(m.form.fields) {
-			m.form.flash = !m.form.flash
-			return m, nil
-		}
 
 	case "enter":
 		switch m.form.focus {
 		case len(m.form.fields):
 			m.form.flash = !m.form.flash
-			return m, nil
 		case len(m.form.fields) + 1:
 			return m.submitForm()
 		default:
-			m.form.moveFocus(1, m.formVisibleRows())
-			return m, nil
+			m.form.navigating = false
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Focus()
+			}
 		}
+		return m, nil
 	}
 
-	if m.form.focus < len(m.form.fields) {
-		var cmd tea.Cmd
-		m.form.fields[m.form.focus].input, cmd = m.form.fields[m.form.focus].input.Update(msg)
-		return m, cmd
-	}
 	return m, nil
 }
 
@@ -760,6 +768,12 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	rpcEnabled, err := parseBoolPtr(value(fieldRPCEnabled))
+	if err != nil {
+		m.form.err = "rpc enabled must be true or false"
+		return m, nil
+	}
+
 	// Space-separated so multi-token flags like "-np 1" or "--spec-type
 	// draft-mtp" split into the right argv elements — exec.Command passes
 	// each ExtraArgs entry as a literal argument with no shell-splitting,
@@ -805,8 +819,9 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		ReasoningFormat:   value(fieldReasoningFormat),
 		CacheTypeK:        value(fieldCacheK),
 		CacheTypeV:        value(fieldCacheV),
-		ExtraArgs:     extraArgs,
-		Notes:         value(fieldNotes),
+		ExtraArgs:      extraArgs,
+		Notes:          value(fieldNotes),
+		RPCEnabled:     rpcEnabled,
 		FlagOverrides: func() map[string]string {
 			m.form.commitFlagInput()
 			if len(m.form.flagOverrides) == 0 {
