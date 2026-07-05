@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"os/user"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -60,6 +61,39 @@ type netPickerState struct {
 type netConnectionsMsg struct {
 	role        netPickerRole
 	connections []netConnection
+}
+
+// isNetworkAuthError reports whether err is a polkit "not authorized" failure
+// from nmcli, which requires a system-level fix rather than a retry.
+func isNetworkAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not authorized") || strings.Contains(msg, "authorization failed")
+}
+
+// networkFixCommand returns the shell command that grants the current user
+// network control without a password prompt via the netdev group.
+func networkFixCommand() string {
+	username := "$USER"
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		username = u.Username
+	}
+	return "sudo usermod -aG netdev " + username
+}
+
+// copyNetworkFix copies the polkit fix command to the clipboard.
+func (m Model) copyNetworkFix() (tea.Model, tea.Cmd) {
+	if !isNetworkAuthError(m.err) {
+		return m, nil
+	}
+	if err := writeClipboard(networkFixCommand()); err != nil {
+		m.setError(fmt.Errorf("copy: %w", err), "")
+		return m, nil
+	}
+	m.clearError()
+	return m, nil
 }
 
 // netRowSwitchRPC … netRowCount are the fixed cursor positions in the
@@ -340,6 +374,15 @@ func (m Model) renderNetworkDetails(width int) string {
 	case netRowSetRPC:
 		b.WriteString(sectionTitleStyle.Render("Set RPC conn…") + "\n")
 		b.WriteString(profileStyle.Render("Pick which nmcli connection profile to use\nas the RPC link to the Windows machine.\n\nCurrently: "+m.netRPCConn) + "\n")
+	}
+
+	if isNetworkAuthError(m.err) {
+		b.WriteString("\n")
+		b.WriteString(downStyle.Render("Not authorized to control networking") + "\n\n")
+		b.WriteString(sectionTitleStyle.Render("Fix") + "\n")
+		b.WriteString(profileStyle.Render("Add your user to the netdev group,\nthen log out and back in:") + "\n\n")
+		b.WriteString(selectedProfileStyle.Render(networkFixCommand()) + "\n\n")
+		b.WriteString(helpStyle.Render("c to copy command") + "\n")
 	}
 
 	return b.String()
