@@ -34,7 +34,7 @@ The main app is organized around tabs:
 - **Recents**: quickly rerun recently used model profiles.
 - **Settings**: configure directories, llama-server binary, and RPC settings.
 - **Running**: inspect running servers, preview output, view logs, or stop them.
-- **Network** *(Linux only, shown when RPC is enabled)*: manage network connections for RPC offload.
+- **Network** *(Linux only — requires RPC enabled and Network Tab enabled in Settings)*: manage network connections for RPC offload.
 
 ## Requirements
 
@@ -106,8 +106,8 @@ to `llama-server` (or `llama-server.exe` on Windows). This is useful when the
 binary is not on your `PATH` — common on Windows where the build output lands
 in a deep `Release` subdirectory.
 
-The config field behind this is:
-(depends on your install location)
+The config field behind this is (depends on your install location):
+
 ```yaml
 llama_server_bin: C:\llama.cpp\build\bin\Release\llama-server.exe
 ```
@@ -175,6 +175,15 @@ Selecting an existing profile opens a Run/Edit choice. Choose **Edit** to update
 the saved profile. Long descriptions and parameter help stay inside fixed panes
 so the TUI does not grow beyond the terminal viewport.
 
+## Export A Profile
+
+A profile's full `llama-server` command can be exported as a shell script or
+copied directly. Select a profile, choose **Export**, and pick your format.
+
+<p align="center">
+  <img src="readmeassets/export.jpg" alt="export profile modal" width="800">
+</p>
+
 ## Run A Profile
 
 <p align="center">
@@ -198,6 +207,17 @@ llmctl run <model> <profile>
 
 The main screen shows currently running profiles, their ports, health, token
 rate when active, and GPU memory when `nvidia-smi` is available.
+
+A colored dot indicates the current state:
+
+- **Yellow ●** — `loading`: the process started but the server is still
+  initialising and not yet accepting requests.
+- **Green ●** — `up`: the server passed its health check and is ready.
+- **Red ●** — `down`: the server is not responding.
+
+<p align="center">
+  <img src="readmeassets/modelrunning_loading.jpg" alt="running model in loading state" width="800">
+</p>
 
 List running profiles from the command line:
 
@@ -314,8 +334,12 @@ Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private
 
 ### Linux setup
 
-Enable RPC in **Settings → RPC Server** in the TUI, then set the endpoint to
-the Windows machine's IP and port (e.g. `192.168.50.1:50052`).
+In **Settings → RPC Server**, toggle RPC on and set the endpoint to the Windows
+machine's IP and port (e.g. `192.168.50.1:50052`).
+
+<p align="center">
+  <img src="readmeassets/settingsrpc.jpg" alt="settings RPC server page" width="800">
+</p>
 
 If connecting over a direct ethernet cable (not through a router), set a
 static IP on the Linux side to match the Windows machine's subnet:
@@ -330,13 +354,25 @@ nmcli connection up "Wired connection 1"
 
 ### Network tab (Linux only)
 
-When RPC is enabled, a **Network** tab appears in the TUI. It shows live link
-status (active connection, link state, speed, carrier) and lets you switch
-between your internet and RPC network profiles without leaving llmctl.
+The Network tab lets you switch between your internet and RPC ethernet
+connections and monitor link state without leaving llmctl. It is separate from
+RPC being enabled — you opt into it explicitly.
+
+**To enable:** go to **Settings → RPC Server**, navigate to **Network Tab**, and
+press `enter` to toggle it on. llmctl checks that `nmcli` is available before
+enabling; if it is not found, an error is shown with instructions.
+
+<p align="center">
+  <img src="readmeassets/networktab.jpg" alt="network tab" width="800">
+</p>
 
 Navigate to **Network → Configure** to assign which nmcli connection profile
 is your internet connection and which is your RPC link. These assignments are
 saved to `config.yaml` and restored on next launch.
+
+<p align="center">
+  <img src="readmeassets/networktab_picker.jpg" alt="network connection picker" width="800">
+</p>
 
 The switch brings up the target connection and lets NetworkManager handle
 any conflict on the same interface automatically — no manual `down` required.
@@ -365,7 +401,7 @@ sudo usermod -aG netdev $USER
 ```
 
 If the TUI shows "Not authorized to control networking", the Network tab's
-Details pane will display the fix command and let you copy it with `c`.
+Details pane displays the fix command and lets you copy it with `c`.
 
 #### Multi-interface setups (ethernet + wifi)
 
@@ -410,5 +446,20 @@ llmctl logs <model> <profile>
 
 The most common causes are an invalid `llama-server` flag, a missing model file,
 or a port already in use.
+
+### Network Tab toggle is greyed out or shows an error
+
+The Network Tab requires `nmcli` (NetworkManager). Install it with your
+package manager:
+
+```bash
+# Ubuntu / Debian
+sudo apt install network-manager
+
+# Arch
+sudo pacman -S networkmanager
+```
+
+Then re-attempt the toggle in **Settings → RPC Server**.
 
 </details>
