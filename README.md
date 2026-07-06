@@ -71,9 +71,17 @@ On first launch, `llmctl` creates or loads its config. By default it looks for:
 1. `./config/config.yaml`
 2. `~/.llmctl/config.yaml`
 
-The footer shows the available hotkeys for the current screen. In the main TUI,
-use arrow keys to move, `enter` to select or run, `s` to stop, `e` to view logs,
-`del` to delete where supported, and `q` to quit.
+### Quick Reference
+
+| Key | Action |
+| :--- | :--- |
+| `Arrows` / `Enter` | Navigate and select |
+| `s` | Stop running instance |
+| `e` | View logs |
+| `c` | Copy OpenAI-compatible endpoint |
+| `/` | Search/filter models |
+| `del` | Delete (where supported) |
+| `q` | Quit |
 
 ## Configure Model Directories
 
@@ -240,10 +248,13 @@ llmctl logs <model> <profile>
 llmctl logs -f <model> <profile>
 ```
 
+<details>
+<summary><b>Configuration File Format</b></summary>
+<br>
+
 ## Configuration
 
-You'll never need to manually edit the config, its maintained by llmctl, however if youre curious this is how its formatted.
-Example config:
+You'll never need to manually edit the config since it's maintained by llmctl, but if you're curious, here is how it's formatted:
 
 ```yaml
 llama_server_bin: llama-server
@@ -267,6 +278,12 @@ On Windows, if `llama-server` is not on `PATH`, set:
 ```yaml
 llama_server_bin: D:\path\to\llama-server.exe
 ```
+
+</details>
+
+<details>
+<summary><b>RPC Offload (Linux → Windows GPU)</b></summary>
+<br>
 
 ## RPC Offload (Linux → Windows GPU)
 
@@ -358,6 +375,12 @@ NetworkManager routes RPC traffic over ethernet automatically via the
 `192.168.50.0/24` subnet route. No switching is needed in this case; just
 bring up the RPC ethernet connection once and leave both active.
 
+</details>
+
+<details>
+<summary><b>Troubleshooting</b></summary>
+<br>
+
 ## Troubleshooting
 
 ### `llama-server` not found
@@ -387,3 +410,5 @@ llmctl logs <model> <profile>
 
 The most common causes are an invalid `llama-server` flag, a missing model file,
 or a port already in use.
+
+</details>
