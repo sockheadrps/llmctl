@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -150,7 +151,14 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		return m.openRPCBinForm()
 	case 3:
 		if m.netSupported && m.cfg.RPCEnabled {
+			if !m.cfg.NetworkTabEnabled {
+				if _, err := exec.LookPath("nmcli"); err != nil {
+					m.settings.rpc.err = "nmcli not found — install NetworkManager to use the Network tab"
+					return m, nil
+				}
+			}
 			m.cfg.NetworkTabEnabled = !m.cfg.NetworkTabEnabled
+			m.settings.rpc.err = ""
 			if err := m.saveConfig(); err != nil {
 				m.settings.rpc.err = err.Error()
 			}
