@@ -28,12 +28,13 @@ live, and the config file is plain YAML so it is easy to version or share.
 
 ## Overview
 
-The main app is organized around four tabs:
+The main app is organized around tabs:
 
 - **Models**: browse imported models, create/edit profiles, and run them.
 - **Recents**: quickly rerun recently used model profiles.
-- **Settings**: configure directories that are scanned for GGUF model files.
+- **Settings**: configure directories, llama-server binary, and RPC settings.
 - **Running**: inspect running servers, preview output, view logs, or stop them.
+- **Network** *(Linux only, shown when RPC is enabled)*: manage network connections for RPC offload.
 
 ## Requirements
 
@@ -266,6 +267,96 @@ On Windows, if `llama-server` is not on `PATH`, set:
 ```yaml
 llama_server_bin: D:\path\to\llama-server.exe
 ```
+
+## RPC Offload (Linux → Windows GPU)
+
+llmctl supports llama.cpp's RPC backend, which lets a Linux machine offload
+model layers to a GPU on a Windows machine over a direct ethernet or LAN
+connection.
+
+### Windows setup
+
+Start the RPC server on the Windows machine, binding to all interfaces:
+
+```powershell
+ggml-rpc-server.exe -H 0.0.0.0 -p 50052
+```
+
+Open port 50052 in Windows Firewall (run PowerShell as Administrator):
+
+```powershell
+netsh advfirewall firewall add rule name="GGML RPC Server" dir=in action=allow protocol=TCP localport=50052
+```
+
+If the Windows ethernet adapter is classified as a Public network, change it
+to Private so firewall rules apply correctly:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private
+```
+
+### Linux setup
+
+Enable RPC in **Settings → RPC Server** in the TUI, then set the endpoint to
+the Windows machine's IP and port (e.g. `192.168.50.1:50052`).
+
+If connecting over a direct ethernet cable (not through a router), set a
+static IP on the Linux side to match the Windows machine's subnet:
+
+```bash
+nmcli connection modify "Wired connection 1" \
+  ipv4.method manual \
+  ipv4.addresses "192.168.50.2/24" \
+  ipv4.gateway ""
+nmcli connection up "Wired connection 1"
+```
+
+### Network tab (Linux only)
+
+When RPC is enabled, a **Network** tab appears in the TUI. It shows live link
+status (active connection, link state, speed, carrier) and lets you switch
+between your internet and RPC network profiles without leaving llmctl.
+
+Navigate to **Network → Configure** to assign which nmcli connection profile
+is your internet connection and which is your RPC link. These assignments are
+saved to `config.yaml` and restored on next launch.
+
+The switch brings up the target connection and lets NetworkManager handle
+any conflict on the same interface automatically — no manual `down` required.
+
+#### Granting network control without a password
+
+nmcli requires polkit authorization to bring connections up and down. On
+Ubuntu, create a local authority file to grant the `netdev` group permission:
+
+```bash
+sudo mkdir -p /etc/polkit-1/localauthority/50-local.d/
+sudo tee /etc/polkit-1/localauthority/50-local.d/10-llmctl-network.pkla <<'EOF'
+[NetworkManager netdev group]
+Identity=unix-group:netdev
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+EOF
+```
+
+Then add your user to the `netdev` group and log out and back in:
+
+```bash
+sudo usermod -aG netdev $USER
+```
+
+If the TUI shows "Not authorized to control networking", the Network tab's
+Details pane will display the fix command and let you copy it with `c`.
+
+#### Multi-interface setups (ethernet + wifi)
+
+If your internet and RPC connections use different physical interfaces (e.g.
+wifi for internet, ethernet for RPC), both can be active simultaneously —
+NetworkManager routes RPC traffic over ethernet automatically via the
+`192.168.50.0/24` subnet route. No switching is needed in this case; just
+bring up the RPC ethernet connection once and leave both active.
 
 ## Troubleshooting
 

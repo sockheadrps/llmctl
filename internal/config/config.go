@@ -21,7 +21,12 @@ type Config struct {
 	RPCEnabled   bool   `yaml:"rpc_enabled,omitempty"`
 	RPCEndpoint  string `yaml:"rpc_endpoint,omitempty"`
 	RPCServerBin string `yaml:"rpc_server_bin,omitempty"`
-	Models      map[string]models.Model `yaml:"models"`
+
+	NetworkInternetConn string `yaml:"network_internet_conn,omitempty"`
+	NetworkRPCConn      string `yaml:"network_rpc_conn,omitempty"`
+	NetworkIface        string `yaml:"network_iface,omitempty"`
+
+	Models map[string]models.Model `yaml:"models"`
 }
 
 // Load reads and parses the config file at path. If the file doesn't exist,

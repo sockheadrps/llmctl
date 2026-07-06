@@ -219,9 +219,9 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		tokHistory:      map[string][]float64{},
 		gpuAvailable:    gpu.Available(),
 		netSupported:    runtimeos.GOOS == "linux",
-		netInternetConn: netInternetConn,
-		netRPCConn:      netRPCConn,
-		netIface:        netIface,
+		netInternetConn: firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
+		netRPCConn:      firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
+		netIface:        firstNonEmpty(cfg.NetworkIface, netIface),
 	}
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
@@ -535,7 +535,7 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
 	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
-	if m.netSupported {
+	if m.netSupported && m.cfg.RPCEnabled {
 		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
 	}
 	if m.gpuAvailable {

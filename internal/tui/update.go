@@ -447,9 +447,12 @@ func (m Model) updateNetworkPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch m.netPicker.role {
 			case netPickerRoleInternet:
 				m.netInternetConn = conn.name
+				m.cfg.NetworkInternetConn = conn.name
 			case netPickerRoleRPC:
 				m.netRPCConn = conn.name
+				m.cfg.NetworkRPCConn = conn.name
 			}
+			_ = m.saveConfig()
 		}
 		m.screen = screenMain
 	}
@@ -525,7 +528,7 @@ func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
 		maxMode := modeRunning
-		if m.netSupported {
+		if m.netSupported && m.cfg.RPCEnabled {
 			maxMode = modeNetwork
 		}
 		if m.leftMode < maxMode {

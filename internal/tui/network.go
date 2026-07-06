@@ -63,6 +63,16 @@ type netConnectionsMsg struct {
 	connections []netConnection
 }
 
+// firstNonEmpty returns the first non-empty string from the arguments.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // isNetworkAuthError reports whether err is a polkit "not authorized" failure
 // from nmcli, which requires a system-level fix rather than a retry.
 func isNetworkAuthError(err error) bool {
@@ -167,18 +177,11 @@ func checkNetworkStatusCmd(iface, internetConn, rpcConn string) tea.Cmd {
 // one via nmcli, matching the behaviour of cmd/network.go.
 func switchNetworkCmd(toRPC bool, internetConn, rpcConn string) tea.Cmd {
 	return func() tea.Msg {
-		var downConn, upConn string
+		var upConn string
 		if toRPC {
-			downConn = internetConn
 			upConn = rpcConn
 		} else {
-			downConn = rpcConn
 			upConn = internetConn
-		}
-
-		if strings.TrimSpace(downConn) != "" {
-			// Ignore down errors — the profile may already be inactive.
-			exec.Command("nmcli", "connection", "down", downConn).Run() //nolint:errcheck
 		}
 
 		if strings.TrimSpace(upConn) == "" {
