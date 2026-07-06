@@ -541,7 +541,7 @@ func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
 		maxMode := modeRunning
-		if m.netSupported && m.cfg.RPCEnabled {
+		if m.networkTabVisible() {
 			maxMode = modeNetwork
 		}
 		if m.leftMode < maxMode {

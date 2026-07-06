@@ -267,7 +267,7 @@ func (m Model) renderLeftPaneContent(leftW int) string {
 	case modeRunning:
 		return m.renderRunningTabList(leftW)
 	case modeNetwork:
-		if m.netSupported && m.cfg.RPCEnabled {
+		if m.networkTabVisible() {
 			return m.renderNetworkList(leftW)
 		}
 		return m.renderModelsTree(leftW)
@@ -311,7 +311,7 @@ func (m Model) renderTabBarLabels() string {
 		{modeSettings, "Settings"},
 		{modeRunning, "Running"},
 	}
-	if m.netSupported && m.cfg.RPCEnabled {
+	if m.networkTabVisible() {
 		tabs = append(tabs, struct {
 			mode  leftMode
 			label string

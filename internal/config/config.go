@@ -22,6 +22,7 @@ type Config struct {
 	RPCEndpoint  string `yaml:"rpc_endpoint,omitempty"`
 	RPCServerBin string `yaml:"rpc_server_bin,omitempty"`
 
+	NetworkTabEnabled   bool   `yaml:"network_tab_enabled,omitempty"`
 	NetworkInternetConn string `yaml:"network_internet_conn,omitempty"`
 	NetworkRPCConn      string `yaml:"network_rpc_conn,omitempty"`
 	NetworkIface        string `yaml:"network_iface,omitempty"`

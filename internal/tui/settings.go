@@ -32,7 +32,7 @@ var settingsCategories = []settingsCategoryDef{
 // Directories, but a struct (rather than dirsContentState directly) leaves
 // room to add another category's state alongside it later.
 type rpcContentState struct {
-	cursor     int // 0 = toggle, 1 = endpoint, 2 = binary
+	cursor     int // 0 = toggle RPC, 1 = endpoint, 2 = binary, 3 = network tab (Linux only)
 	editing    bool
 	input      textinput.Model
 	binEditing bool
@@ -108,11 +108,15 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "rpc":
+		maxRPCCursor := 2
+		if m.netSupported && m.cfg.RPCEnabled {
+			maxRPCCursor = 3
+		}
 		next := m.settings.rpc.cursor + delta
 		switch {
 		case next < 0:
 			m.focus = focusLeft
-		case next <= 2:
+		case next <= maxRPCCursor:
 			m.settings.rpc.cursor = next
 		}
 		return m, nil
@@ -131,7 +135,11 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 	switch m.settings.rpc.cursor {
 	case 0:
+		wasEnabled := m.cfg.RPCEnabled
 		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
+		if m.cfg.RPCEnabled && !wasEnabled {
+			m.cfg.NetworkTabEnabled = true
+		}
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
 		}
@@ -140,6 +148,14 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		return m.openRPCEndpointForm()
 	case 2:
 		return m.openRPCBinForm()
+	case 3:
+		if m.netSupported && m.cfg.RPCEnabled {
+			m.cfg.NetworkTabEnabled = !m.cfg.NetworkTabEnabled
+			if err := m.saveConfig(); err != nil {
+				m.settings.rpc.err = err.Error()
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }

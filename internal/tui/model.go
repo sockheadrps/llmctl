@@ -537,7 +537,7 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
 	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
-	if m.netSupported && m.cfg.RPCEnabled {
+	if m.networkTabVisible() {
 		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
 	}
 	if m.gpuAvailable {

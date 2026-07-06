@@ -63,6 +63,12 @@ type netConnectionsMsg struct {
 	connections []netConnection
 }
 
+// networkTabVisible reports whether the Network tab should be shown and polled.
+// Requires Linux, RPC enabled, and the network-management toggle also enabled.
+func (m Model) networkTabVisible() bool {
+	return m.netSupported && m.cfg.RPCEnabled && m.cfg.NetworkTabEnabled
+}
+
 // firstNonEmpty returns the first non-empty string from the arguments.
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {

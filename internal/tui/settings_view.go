@@ -86,7 +86,16 @@ func (m Model) renderRPCContent() string {
 		enabledLabel = "Enabled"
 	}
 
-	for i, label := range []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"} {
+	rows := []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"}
+	if m.netSupported && m.cfg.RPCEnabled {
+		netTabLabel := "Network Tab (Disabled)"
+		if m.cfg.NetworkTabEnabled {
+			netTabLabel = "Network Tab (Enabled)"
+		}
+		rows = append(rows, netTabLabel)
+	}
+
+	for i, label := range rows {
 		cursor := "  "
 		style := profileStyle
 		if focused && m.settings.rpc.cursor == i {
@@ -109,8 +118,24 @@ func (m Model) renderRPCContent() string {
 	b.WriteString("\n")
 	b.WriteString(profileStyle.Render("Binary:   " + rpcBin))
 	b.WriteString("\n")
-	b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
-	b.WriteString("\n")
+
+	if focused && m.settings.rpc.cursor == 3 && m.netSupported && m.cfg.RPCEnabled {
+		b.WriteString("\n")
+		b.WriteString(sectionTitleStyle.Render("Network Tab") + "\n")
+		b.WriteString(profileStyle.Render(
+			"Adds a Network tab to the TUI for managing nmcli connection\n"+
+				"profiles without leaving llmctl. Use it to switch between your\n"+
+				"internet and RPC ethernet connections when offloading model\n"+
+				"layers to a Windows GPU over direct ethernet.\n\n"+
+				"Requires: nmcli (NetworkManager) and polkit authorization.\n"+
+				"Optional: ethtool for link speed and carrier detection.\n\n"+
+				"Disable this if you manage network switching yourself and\n"+
+				"don't need llmctl to control NetworkManager.",
+		) + "\n")
+	} else {
+		b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
+		b.WriteString("\n")
+	}
 
 	if m.settings.rpc.editing {
 		b.WriteString("\n")
