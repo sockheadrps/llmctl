@@ -142,9 +142,10 @@ type Model struct {
 
 	settingsCursor int
 
-	running       []models.Running
-	runningCursor int
-	health        healthMsg
+	running          []models.Running
+	runningCursor    int
+	health           healthMsg
+	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
 
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
@@ -211,12 +212,13 @@ type Model struct {
 func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetConn, netRPCConn, netIface string) Model {
 	m := Model{
 		cfg: cfg, cfgPath: cfgPath, mgr: mgr,
-		health:          healthMsg{},
-		focus:           focusTabs,
-		tokSamples:      map[string]tokSample{},
-		tokRates:        map[string]float64{},
-		tokPeak:         map[string]float64{},
-		tokHistory:      map[string][]float64{},
+		health:           healthMsg{},
+		pendingInstances: map[string]bool{},
+		focus:            focusTabs,
+		tokSamples:       map[string]tokSample{},
+		tokRates:         map[string]float64{},
+		tokPeak:          map[string]float64{},
+		tokHistory:       map[string][]float64{},
 		gpuAvailable:    gpu.Available(),
 		netSupported:    runtimeos.GOOS == "linux",
 		netInternetConn: firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),

@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 )
 
@@ -35,7 +36,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scrollTickCmd()
 
 	case healthMsg:
-		m.health = msg
+		for key, status := range msg {
+			if m.pendingInstances[key] {
+				if status == health.StatusUp {
+					delete(m.pendingInstances, key)
+					m.health[key] = status
+				}
+				// While pending and still down, leave health as StatusLoading (zero/default).
+			} else {
+				m.health[key] = status
+			}
+		}
 		return m, nil
 
 	case slotsMsg:
@@ -76,6 +87,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshRunning(false)
 		m.rebuildRecentRows()
 		m.clearError()
+		key := msg.modelKey + "/" + msg.profileKey
+		m.pendingInstances[key] = true
 		return m, m.backgroundChecks()
 
 	case stopResultMsg:
