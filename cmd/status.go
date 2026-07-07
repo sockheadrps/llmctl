@@ -49,7 +49,7 @@ var statusCmd = &cobra.Command{
 					ProfileName: r.ProfileName,
 					Port:        r.Port,
 					PID:         r.PID,
-					Status:      string(health.Check(r.Port)),
+					Status:      string(health.Check(r.Host, r.Port)),
 					UptimeSec:   now - r.StartedAt,
 				}
 			}
@@ -69,7 +69,7 @@ var statusCmd = &cobra.Command{
 		for _, r := range running {
 			fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
 				r.ModelName, r.ProfileName, r.Port, r.PID,
-				health.Check(r.Port), formatUptime(now-r.StartedAt))
+				health.Check(r.Host, r.Port), formatUptime(now-r.StartedAt))
 		}
 		return w.Flush()
 	},

@@ -11,14 +11,21 @@ func (m Model) viewConfirmModal() string {
 
 	runOpt := "  Run  "
 	editOpt := "  Edit  "
+	exportOpt := "  Export Args  "
 	if m.confirm.selected == confirmRun {
 		runOpt = selectedProfileStyle.Render("[ Run ]")
 		editOpt = profileStyle.Render(editOpt)
-	} else {
+		exportOpt = profileStyle.Render(exportOpt)
+	} else if m.confirm.selected == confirmEdit {
 		runOpt = profileStyle.Render(runOpt)
 		editOpt = selectedProfileStyle.Render("[ Edit ]")
+		exportOpt = profileStyle.Render(exportOpt)
+	} else {
+		runOpt = profileStyle.Render(runOpt)
+		editOpt = profileStyle.Render(editOpt)
+		exportOpt = selectedProfileStyle.Render("[ Export Args ]")
 	}
-	options := fmt.Sprintf("%s    %s", runOpt, editOpt)
+	options := fmt.Sprintf("%s    %s    %s", runOpt, editOpt, exportOpt)
 
 	help := helpStyle.Render("←/→ choose  enter confirm  esc cancel")
 

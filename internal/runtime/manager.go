@@ -8,6 +8,7 @@ import (
 	"net"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/config"
@@ -97,7 +98,20 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 		p.Port = resolvedPort
 	}
 
-	pid, err := process.Start(cfg.LlamaServerBin, m, p, logPath)
+	rpcEndpoint := ""
+	useRPC := cfg.RPCEnabled
+	if p.RPCEnabled != nil {
+		useRPC = *p.RPCEnabled
+	}
+	if useRPC && strings.TrimSpace(cfg.RPCEndpoint) != "" {
+		rpcEndpoint = strings.TrimSpace(cfg.RPCEndpoint)
+	}
+
+	bin := cfg.LlamaServerBin
+	if useRPC && strings.TrimSpace(cfg.RPCServerBin) != "" {
+		bin = strings.TrimSpace(cfg.RPCServerBin)
+	}
+	pid, err := process.Start(bin, m, p, logPath, rpcEndpoint)
 	if err != nil {
 		return models.Running{}, err
 	}
@@ -111,6 +125,7 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 		ModelName:   m.Name,
 		ProfileKey:  profileKey,
 		ProfileName: p.Name,
+		Host:        p.Host,
 		Port:        p.Port,
 		PID:         pid,
 		LogFile:     logPath,

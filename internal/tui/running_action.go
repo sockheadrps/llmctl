@@ -42,19 +42,19 @@ func (m Model) updateRunningAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenMain
 		return m, nil
 
-	case "left", "h":
+	case "left", "h", "a":
 		if m.runningAction.selected > runningActionViewOutput {
 			m.runningAction.selected--
 		}
 		return m, nil
 
-	case "right", "l":
+	case "right", "l", "d":
 		if m.runningAction.selected < runningActionStop {
 			m.runningAction.selected++
 		}
 		return m, nil
 
-	case "enter":
+	case "enter", " ":
 		m.screen = screenMain
 		switch m.runningAction.selected {
 		case runningActionCopyEndpoint:

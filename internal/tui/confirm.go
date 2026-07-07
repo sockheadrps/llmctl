@@ -8,10 +8,11 @@ type confirmAction int
 const (
 	confirmRun confirmAction = iota
 	confirmEdit
+	confirmExportArgs
 )
 
 // confirmState backs the screen shown after pressing Enter on a profile:
-// a Run/Edit choice, defaulting to Run.
+// a Run/Edit/Export choice, defaulting to Run.
 type confirmState struct {
 	modelKey   string
 	profileKey string
@@ -38,19 +39,25 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenMain
 		return m, nil
 
-	case "left", "h":
-		m.confirm.selected = confirmRun
+	case "left", "h", "a":
+		if m.confirm.selected > confirmRun {
+			m.confirm.selected--
+		}
 		return m, nil
 
-	case "right", "l":
-		m.confirm.selected = confirmEdit
+	case "right", "l", "d":
+		if m.confirm.selected < confirmExportArgs {
+			m.confirm.selected++
+		}
 		return m, nil
 
-	case "enter":
+	case "enter", " ":
 		m.screen = screenMain
 		switch m.confirm.selected {
 		case confirmEdit:
 			return m.openEditForm(m.confirm.modelKey, m.confirm.profileKey)
+		case confirmExportArgs:
+			return m.openExportArgs(row{kind: rowProfile, modelKey: m.confirm.modelKey, profileKey: m.confirm.profileKey, label: m.confirm.label})
 		default:
 			return m.runProfile(row{kind: rowProfile, modelKey: m.confirm.modelKey, profileKey: m.confirm.profileKey, label: m.confirm.label})
 		}

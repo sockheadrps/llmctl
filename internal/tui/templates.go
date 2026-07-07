@@ -76,15 +76,15 @@ func (m Model) updateTemplatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.screen = screenMain
 		return m, nil
-	case "up", "k":
+	case "up", "k", "w":
 		if m.templatePicker.cursor > 0 {
 			m.templatePicker.cursor--
 		}
-	case "down", "j":
+	case "down", "j", "s":
 		if m.templatePicker.cursor < len(profileTemplates)-1 {
 			m.templatePicker.cursor++
 		}
-	case "enter":
+	case "enter", " ":
 		t := profileTemplates[m.templatePicker.cursor]
 		return m.openForm(m.templatePicker.modelKey, t.overrides)
 	}
@@ -111,6 +111,6 @@ func (m Model) viewTemplatePicker() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/k ↓/j move · enter select · esc cancel"))
+	b.WriteString(helpStyle.Render("↑↓/wasd move · enter/space select · esc cancel"))
 	return b.String()
 }

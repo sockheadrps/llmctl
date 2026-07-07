@@ -6,6 +6,7 @@ package tui
 
 import (
 	"fmt"
+	runtimeos "runtime"
 	"sort"
 	"strings"
 	"time"
@@ -33,6 +34,9 @@ const (
 	screenRunningAction
 	screenStopConfirm
 	screenProfileTemplate
+	screenExportArgs
+	screenNetworkSwitch
+	screenNetworkPicker
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -61,6 +65,7 @@ const (
 	modeRecents
 	modeSettings
 	modeRunning
+	modeNetwork
 )
 
 // rowKind identifies what a flattened tree row represents.
@@ -137,9 +142,10 @@ type Model struct {
 
 	settingsCursor int
 
-	running       []models.Running
-	runningCursor int
-	health        healthMsg
+	running          []models.Running
+	runningCursor    int
+	health           healthMsg
+	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
 
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
@@ -173,9 +179,27 @@ type Model struct {
 	settings       settingsState
 	runningAction  runningActionState
 	stopConfirm    stopConfirmState
+	exportArgs     exportArgsState
 	templatePicker templatePickerState
 
 	tokHistory map[string][]float64
+
+	dividerDragging      bool
+	leftWidthOverride    int // 0 = auto (avail*2/5); positive = user-dragged override
+	rightDividerDragging bool
+	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
+
+	netSupported bool // false on non-Linux; tab is hidden entirely
+
+	netStatus    netStatusMsg
+	netSwitching bool
+	netCursor    int
+	netSwitch    netSwitchState
+	netPicker    netPickerState
+
+	netInternetConn string
+	netRPCConn      string
+	netIface        string
 
 	width  int
 	height int
@@ -185,16 +209,21 @@ type Model struct {
 // cfgPath is where changes made in the TUI (new models/profiles) are persisted.
 // Focus starts on the tab bar (Models tab active) rather than dropping
 // straight into the tree.
-func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager) Model {
+func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetConn, netRPCConn, netIface string) Model {
 	m := Model{
 		cfg: cfg, cfgPath: cfgPath, mgr: mgr,
-		health:       healthMsg{},
-		focus:        focusTabs,
-		tokSamples:   map[string]tokSample{},
-		tokRates:     map[string]float64{},
-		tokPeak:      map[string]float64{},
-		tokHistory:   map[string][]float64{},
-		gpuAvailable: gpu.Available(),
+		health:           healthMsg{},
+		pendingInstances: map[string]bool{},
+		focus:            focusTabs,
+		tokSamples:       map[string]tokSample{},
+		tokRates:         map[string]float64{},
+		tokPeak:          map[string]float64{},
+		tokHistory:       map[string][]float64{},
+		gpuAvailable:    gpu.Available(),
+		netSupported:    runtimeos.GOOS == "linux",
+		netInternetConn: firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
+		netRPCConn:      firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
+		netIface:        firstNonEmpty(cfg.NetworkIface, netIface),
 	}
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
@@ -412,6 +441,23 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 
 	m.running = running
 
+	// Mark any instance that just appeared as pending so health checks keep
+	// it in the "loading" state until it passes its first health check.
+	for _, r := range m.running {
+		key := r.ModelKey + "/" + r.ProfileKey
+		if !runningContains(prev, r) {
+			m.pendingInstances[key] = true
+		}
+	}
+	// Clean up pending/health state for instances that are no longer running.
+	for _, r := range prev {
+		if !runningContains(m.running, r) {
+			key := r.ModelKey + "/" + r.ProfileKey
+			delete(m.pendingInstances, key)
+			delete(m.health, key)
+		}
+	}
+
 	if m.runningCursor >= len(m.running) {
 		m.runningCursor = len(m.running) - 1
 	}
@@ -454,6 +500,7 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 				m.tokRates[key] = rate
 				if rate > m.tokPeak[key] {
 					m.tokPeak[key] = rate
+					m.persistPeakIfRecord(key, rate)
 				}
 				hist := append(m.tokHistory[key], rate)
 				const maxHistLen = 30
@@ -478,10 +525,38 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 	}
 }
 
+// persistPeakIfRecord saves rate to the profile's MaxTokPerSec when it beats
+// the previously stored all-time peak, so the rate-meter scale survives restarts.
+func (m *Model) persistPeakIfRecord(key string, rate float64) {
+	parts := strings.SplitN(key, "/", 2)
+	if len(parts) != 2 {
+		return
+	}
+	modelKey, profileKey := parts[0], parts[1]
+	mdl, ok := m.cfg.Models[modelKey]
+	if !ok {
+		return
+	}
+	p, ok := mdl.Profiles[profileKey]
+	if !ok {
+		return
+	}
+	if rate <= p.MaxTokPerSec {
+		return
+	}
+	p.MaxTokPerSec = rate
+	mdl.Profiles[profileKey] = p
+	m.cfg.Models[modelKey] = mdl
+	_ = m.saveConfig()
+}
+
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
 	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
+	if m.networkTabVisible() {
+		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
+	}
 	if m.gpuAvailable {
 		cmds = append(cmds, checkVRAMCmd())
 	}
@@ -538,7 +613,7 @@ func checkHealthCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(healthMsg, len(running))
 		for _, r := range running {
-			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Port)
+			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Host, r.Port)
 		}
 		return result
 	}
@@ -552,7 +627,7 @@ func checkSlotsCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(slotsMsg, len(running))
 		for _, r := range running {
-			slots, err := health.Slots(r.Port)
+			slots, err := health.Slots(r.Host, r.Port)
 			if err != nil {
 				continue
 			}

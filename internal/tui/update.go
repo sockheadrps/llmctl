@@ -6,7 +6,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
+	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 )
 
@@ -18,6 +20,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if m.screen == screenLogs {
+			m.refreshLogs()
+			return m, tickCmd()
+		}
 		if m.screen != screenMain {
 			return m, tickCmd()
 		}
@@ -34,7 +40,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scrollTickCmd()
 
 	case healthMsg:
-		m.health = msg
+		for key, status := range msg {
+			if m.pendingInstances[key] {
+				if status == health.StatusUp {
+					delete(m.pendingInstances, key)
+					m.health[key] = status
+				}
+				// While pending and still down, leave health as StatusLoading (zero/default).
+			} else {
+				m.health[key] = status
+			}
+		}
 		return m, nil
 
 	case slotsMsg:
@@ -44,6 +60,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuByPID = msg.byPID
+		return m, nil
+
+	case netStatusMsg:
+		m.netStatus = msg
+		return m, nil
+
+	case netSwitchResultMsg:
+		if msg.err != nil {
+			m.netSwitching = false
+			m.setError(msg.err, "")
+			return m, nil
+		}
+		m.clearError()
+		// Keep netSwitching=true while we verify the link came up.
+		return m, verifyNetworkSwitchCmd(msg.toRPC, m.netInternetConn, m.netRPCConn)
+
+	case netSwitchVerifyMsg:
+		m.netSwitching = false
+		// If nmcli couldn't be reached both flags are false — don't surface a
+		// spurious error; the status panel will self-correct on the next poll.
+		if msg.actualIsRPC || msg.actualIsInternet {
+			if msg.toRPC && !msg.actualIsRPC {
+				m.setError(fmt.Errorf("switch to RPC (%s) may have failed — connection not detected as active", m.netRPCConn), "")
+			} else if !msg.toRPC && !msg.actualIsInternet {
+				m.setError(fmt.Errorf("switch to internet (%s) may have failed — connection not detected as active", m.netInternetConn), "")
+			}
+		}
+		return m, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)
+
+	case netConnectionsMsg:
+		m.netPicker.loading = false
+		m.netPicker.connections = msg.connections
+		m.netPicker.cursor = 0
 		return m, nil
 
 	case startResultMsg:
@@ -56,6 +105,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshRunning(false)
 		m.rebuildRecentRows()
 		m.clearError()
+		key := msg.modelKey + "/" + msg.profileKey
+		m.pendingInstances[key] = true
 		return m, m.backgroundChecks()
 
 	case stopResultMsg:
@@ -67,6 +118,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refreshRunning(false)
 		m.clearError()
+		return m, nil
+
+	case tea.MouseMsg:
+		if m.screen == screenMain {
+			return m.updateMouse(msg)
+		}
+		if m.screen == screenExportArgs {
+			return m.updateExportArgs(msg)
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -87,11 +147,85 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateStopConfirm(msg)
 		case screenProfileTemplate:
 			return m.updateTemplatePicker(msg)
+		case screenExportArgs:
+			return m.updateExportArgs(msg)
+		case screenNetworkSwitch:
+			return m.updateNetworkSwitch(msg)
+		case screenNetworkPicker:
+			return m.updateNetworkPicker(msg)
 		default:
 			return m.updateMain(msg)
 		}
 	}
 
+	return m, nil
+}
+
+func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	leftW, _, _ := m.paneDimensions()
+	dividerLeft := leftW + 1  // right border of left pane
+	dividerRight := leftW + 2 // left border of right pane
+
+	// Use the actual rendered runningH (accounts for content overflow) to
+	// locate the horizontal divider. Y=0 header, Y=1 body top border, so
+	// divider row = 1 (top border) + runningH + 1 (bottom border of running) = runningH+2.
+	_, actualRunningH, actualDetailsH := m.mainDetailsGeometry()
+	hDividerY := actualRunningH + 2
+	inRightColumn := msg.X > dividerRight
+
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button != tea.MouseButtonLeft {
+			break
+		}
+		if msg.X == dividerLeft || msg.X == dividerRight {
+			m.dividerDragging = true
+		} else if inRightColumn && m.leftMode != modeRunning {
+			if msg.Y >= hDividerY-1 && msg.Y <= hDividerY+2 {
+				m.rightDividerDragging = true
+			}
+		}
+
+	case tea.MouseActionMotion:
+		if m.dividerDragging {
+			newLeft := msg.X - 1
+			avail := m.width - 4
+			if newLeft < minLeftWidth {
+				newLeft = minLeftWidth
+			}
+			if newLeft > avail-minRightWidth {
+				newLeft = avail - minRightWidth
+			}
+			m.leftWidthOverride = newLeft
+		}
+		if m.rightDividerDragging {
+			// newRunningH = drag Y minus header row minus body top border.
+			// The minimum is the raw content line count of the running list
+			// (so the box is never set smaller than its content — that would
+			// trigger the overflow correction which can push leftH past the
+			// terminal height). actualRunningH is the rendered box height
+			// (padded/filled), not the content height, so we measure content
+			// directly.
+			_, rightW, _ := m.paneDimensions()
+			rightMeasure := lipgloss.NewStyle().Width(rightW).Padding(0, 1)
+			contentH := lipgloss.Height(rightMeasure.Render(m.renderRunning()))
+			minRunning := max(3, contentH)
+
+			newRunningH := msg.Y - 2
+			totalBudget := actualRunningH + actualDetailsH
+			if newRunningH < minRunning {
+				newRunningH = minRunning
+			}
+			if newRunningH > totalBudget-3 {
+				newRunningH = totalBudget - 3
+			}
+			m.rightSplitOverride = newRunningH
+		}
+
+	case tea.MouseActionRelease:
+		m.dividerDragging = false
+		m.rightDividerDragging = false
+	}
 	return m, nil
 }
 
@@ -130,6 +264,32 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.bin.input, cmd = m.settings.bin.input.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.rpc.editing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.editing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRPCEndpointForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.input, cmd = m.settings.rpc.input.Update(msg)
+		return m, cmd
+	}
+	if m.focus == focusSettingsContent && m.settings.rpc.binEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.binEditing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRPCBinForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.binInput, cmd = m.settings.rpc.binInput.Update(msg)
+		return m, cmd
+	}
 
 	// Any key other than a repeated Delete cancels a pending delete
 	// confirmation, so it only fires when pressed twice in a row on the
@@ -166,9 +326,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Copy):
 		return m.copyOrDuplicateSelected()
 
-	case key.Matches(msg, keys.Stop):
-		return m.stopSelected()
-
 	case key.Matches(msg, keys.Delete):
 		return m.deleteSelected()
 
@@ -182,10 +339,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if msg.String() == "x" && m.focus == focusLeft {
+		if r, ok := m.currentRow(); ok && r.kind == rowProfile {
+			return m.openExportArgs(r)
+		}
+	}
+
 	return m, nil
 }
 
 func (m Model) copyOrDuplicateSelected() (tea.Model, tea.Cmd) {
+	if m.leftMode == modeNetwork {
+		return m.copyNetworkFix()
+	}
 	if m.leftMode == modeRunning || m.focus == focusRunning {
 		return m.copySelectedEndpoint()
 	}
@@ -288,6 +454,75 @@ func uniqueProfileKey(existing map[string]models.Profile, base string) string {
 	}
 }
 
+func (m Model) openNetworkPicker(role netPickerRole) (tea.Model, tea.Cmd) {
+	m.netPicker = netPickerState{role: role, loading: true}
+	m.screen = screenNetworkPicker
+	return m, listNetworkConnectionsCmd(role)
+}
+
+func (m Model) updateNetworkPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenMain
+	case "up", "w", "k":
+		if m.netPicker.cursor > 0 {
+			m.netPicker.cursor--
+		}
+	case "down", "s", "j":
+		if m.netPicker.cursor < len(m.netPicker.connections)-1 {
+			m.netPicker.cursor++
+		}
+	case "enter", " ":
+		if !m.netPicker.loading && m.netPicker.cursor < len(m.netPicker.connections) {
+			conn := m.netPicker.connections[m.netPicker.cursor]
+			switch m.netPicker.role {
+			case netPickerRoleInternet:
+				m.netInternetConn = conn.name
+				m.cfg.NetworkInternetConn = conn.name
+			case netPickerRoleRPC:
+				m.netRPCConn = conn.name
+				m.cfg.NetworkRPCConn = conn.name
+			}
+			_ = m.saveConfig()
+		}
+		m.screen = screenMain
+	}
+	return m, nil
+}
+
+func (m Model) openNetworkSwitch() (tea.Model, tea.Cmd) {
+	toRPC := m.netCursor == netRowSwitchRPC
+	if toRPC && m.netStatus.isRPC {
+		m.setError(fmt.Errorf("already connected via RPC (%s)", m.netRPCConn), "")
+		return m, nil
+	}
+	if !toRPC && m.netStatus.isInternet {
+		m.setError(fmt.Errorf("already connected via internet (%s)", m.netInternetConn), "")
+		return m, nil
+	}
+	m.netSwitch = netSwitchState{toRPC: toRPC, cursor: 0}
+	m.screen = screenNetworkSwitch
+	return m, nil
+}
+
+func (m Model) updateNetworkSwitch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h", "a":
+		m.netSwitch.cursor = 0
+	case "right", "l", "d":
+		m.netSwitch.cursor = 1
+	case "esc":
+		m.screen = screenMain
+	case "enter", " ":
+		m.screen = screenMain
+		if m.netSwitch.cursor == 0 {
+			m.netSwitching = true
+			return m, switchNetworkCmd(m.netSwitch.toRPC, m.netInternetConn, m.netRPCConn)
+		}
+	}
+	return m, nil
+}
+
 // moveFocusLeft steps back up the focus hierarchy: Running -> left content
 // -> tab bar. At the tab bar it steps to the previous tab.
 func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
@@ -329,7 +564,11 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
-		if m.leftMode < modeRunning {
+		maxMode := modeRunning
+		if m.networkTabVisible() {
+			maxMode = modeNetwork
+		}
+		if m.leftMode < maxMode {
 			m.leftMode++
 		}
 	case focusLeft:
@@ -401,6 +640,16 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 				m.focus = focusTabs
 			case next < len(m.running):
 				m.runningCursor = next
+			}
+			return m, nil
+
+		case modeNetwork:
+			next := m.netCursor + delta
+			switch {
+			case next < 0:
+				m.focus = focusTabs
+			case next < netRowCount:
+				m.netCursor = next
 			}
 			return m, nil
 
@@ -559,24 +808,32 @@ func (m Model) currentRow() (row, bool) {
 	}
 }
 
-// selectRow handles Enter on whichever kind of row is under the cursor:
-// open the Run/Edit confirm for a profile, the add-model picker, or the
-// new-profile form. On the tab bar, Enter just drops into that tab's
-// content, same as pressing Down. It's a no-op from the Running pane —
-// that pane's rows aren't run/edit targets, just use 's' to stop one.
+// selectRow handles Enter on whichever kind of row is under the cursor.
 func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
-		if m.leftMode == modeModels {
-			m.focus = focusLeft
-		} else {
-			m.focus = focusLeft
-		}
+		m.focus = focusLeft
 		return m, nil
 	case focusRunning:
+		if m.runningCursor >= 0 && m.runningCursor < len(m.running) {
+			run := m.running[m.runningCursor]
+			return m.openRunningAction(run.ModelKey, run.ProfileKey, run.Label())
+		}
 		return m, nil
 	case focusSettingsContent:
 		return m.activateSettingsContentRow()
+	}
+
+	if m.leftMode == modeNetwork && m.focus == focusLeft {
+		switch m.netCursor {
+		case netRowSwitchRPC, netRowSwitchInternet:
+			return m.openNetworkSwitch()
+		case netRowSetInternet:
+			return m.openNetworkPicker(netPickerRoleInternet)
+		case netRowSetRPC:
+			return m.openNetworkPicker(netPickerRoleRPC)
+		}
+		return m, nil
 	}
 
 	r, ok := m.currentRow()
@@ -619,29 +876,6 @@ func (m Model) enterModel(modelKey string) (tea.Model, tea.Cmd) {
 		m.cursor = idx
 	}
 	return m, nil
-}
-
-func (m Model) stopSelected() (tea.Model, tea.Cmd) {
-	if m.focus == focusRunning {
-		if m.runningCursor < 0 || m.runningCursor >= len(m.running) {
-			return m, nil
-		}
-		run := m.running[m.runningCursor]
-		return m.openStopConfirm(run.ModelKey, run.ProfileKey, run.Label())
-	}
-
-	if m.focus != focusLeft {
-		return m, nil
-	}
-	r, ok := m.currentRow()
-	if !ok || (r.kind != rowProfile && r.kind != rowRunning) {
-		return m, nil
-	}
-	// Only confirm if a profile is currently running; otherwise silently no-op.
-	if _, running := m.findRunning(r.modelKey, r.profileKey); !running {
-		return m, nil
-	}
-	return m.openStopConfirm(r.modelKey, r.profileKey, r.label)
 }
 
 // deleteSelected implements press-twice-to-confirm deletion of a profile:

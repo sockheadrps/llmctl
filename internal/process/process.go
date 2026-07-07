@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/models"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 func formatFloat(f float64) string {
@@ -28,14 +29,11 @@ func flag(p models.Profile, def string) string {
 	return def
 }
 
-// BuildArgs converts a Model+Profile pair into llama-server CLI flags.
-func BuildArgs(m models.Model, p models.Profile) []string {
+// BuildProfileArgs returns the llama-server CLI flags for a Profile, excluding
+// the model source (--model / -hf). Useful for exporting/displaying a
+// profile's settings as a copyable parameter string.
+func BuildProfileArgs(p models.Profile) []string {
 	var args []string
-	if m.IsRemote() {
-		args = append(args, "-hf", m.HFRepo)
-	} else {
-		args = append(args, "--model", m.Path)
-	}
 	args = append(args, flag(p, "--port"), strconv.Itoa(p.Port))
 	if p.Host != "" {
 		args = append(args, flag(p, "--host"), p.Host)
@@ -142,10 +140,22 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 	return args
 }
 
+// BuildArgs converts a Model+Profile pair into llama-server CLI flags.
+func BuildArgs(m models.Model, p models.Profile) []string {
+	var args []string
+	if m.IsRemote() {
+		args = append(args, "-hf", m.HFRepo)
+	} else {
+		args = append(args, "--model", m.Path)
+	}
+	return append(args, BuildProfileArgs(p)...)
+}
+
 // Start launches bin (typically "llama-server") with args from the given
 // profile, detached from the parent process group so it survives the CLI
 // invocation exiting, with stdout/stderr redirected to logPath.
-func Start(bin string, m models.Model, p models.Profile, logPath string) (pid int, err error) {
+// rpcEndpoint, when non-empty, appends --rpc <endpoint> to the args.
+func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndpoint string) (pid int, err error) {
 	resolvedBin, err := resolveExecutable(bin)
 	if err != nil {
 		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
@@ -156,7 +166,11 @@ func Start(bin string, m models.Model, p models.Profile, logPath string) (pid in
 		return 0, fmt.Errorf("create log file %s: %w", logPath, err)
 	}
 
-	cmd := exec.Command(resolvedBin, BuildArgs(m, p)...)
+	args := BuildArgs(m, p)
+	if rpcEndpoint != "" {
+		args = append(args, "--rpc", rpcEndpoint)
+	}
+	cmd := exec.Command(resolvedBin, args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	configureProcess(cmd)
@@ -180,6 +194,10 @@ func resolveExecutable(bin string) (string, error) {
 	bin = strings.TrimSpace(bin)
 	if bin == "" {
 		bin = "llama-server"
+	}
+
+	if expanded, err := util.ExpandHome(bin); err == nil {
+		bin = expanded
 	}
 
 	if resolved, err := exec.LookPath(bin); err == nil {

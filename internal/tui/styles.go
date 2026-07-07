@@ -74,6 +74,11 @@ var (
 				Bold(true).
 				Width(30)
 
+	formEditingLabelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("214")).
+				Bold(true).
+				Width(30)
+
 	sectionTitleStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("213")).
 				Bold(true)

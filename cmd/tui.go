@@ -7,6 +7,12 @@ import (
 	"github.com/sockheadrps/llmctl/internal/tui"
 )
 
+var (
+	tuiInternetConn = defaultNetworkInternetConn
+	tuiRPCConn      = defaultNetworkRPCConn
+	tuiIface        = defaultNetworkIface
+)
+
 // tuiCmd explicitly launches the interactive TUI (rootCmd does the same
 // when invoked with no subcommand).
 var tuiCmd = &cobra.Command{
@@ -18,6 +24,9 @@ var tuiCmd = &cobra.Command{
 }
 
 func init() {
+	tuiCmd.Flags().StringVar(&tuiInternetConn, "internet-conn", defaultNetworkInternetConn, "nmcli connection name for internet access")
+	tuiCmd.Flags().StringVar(&tuiRPCConn, "rpc-conn", defaultNetworkRPCConn, "nmcli connection name for the RPC link")
+	tuiCmd.Flags().StringVar(&tuiIface, "iface", defaultNetworkIface, "network interface for status checks")
 	rootCmd.AddCommand(tuiCmd)
 }
 
@@ -37,5 +46,5 @@ func runTUI() error {
 		return err
 	}
 
-	return tui.Run(cfg, cfgPath, mgr)
+	return tui.Run(cfg, cfgPath, mgr, tuiInternetConn, tuiRPCConn, tuiIface)
 }

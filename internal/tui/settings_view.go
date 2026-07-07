@@ -27,6 +27,8 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 		b.WriteString(m.renderDirsContent())
 	case "llama_bin":
 		b.WriteString(m.renderBinContent())
+	case "rpc":
+		b.WriteString(m.renderRPCContent())
 	}
 
 	if categoryID == "model_dirs" && m.settings.dirs.err != "" {
@@ -36,6 +38,10 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 	if categoryID == "llama_bin" && m.settings.bin.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.bin.err))
+	}
+	if categoryID == "rpc" && m.settings.rpc.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.rpc.err))
 	}
 
 	return b.String()
@@ -65,6 +71,80 @@ func (m Model) renderBinContent() string {
 	if m.settings.bin.editing {
 		b.WriteString("\n")
 		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.bin.input.View())
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m Model) renderRPCContent() string {
+	var b strings.Builder
+	focused := m.focus == focusSettingsContent
+
+	enabledLabel := "Disabled"
+	if m.cfg.RPCEnabled {
+		enabledLabel = "Enabled"
+	}
+
+	rows := []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"}
+	if m.netSupported && m.cfg.RPCEnabled {
+		netTabLabel := "Network Tab (Disabled)"
+		if m.cfg.NetworkTabEnabled {
+			netTabLabel = "Network Tab (Enabled)"
+		}
+		rows = append(rows, netTabLabel)
+	}
+
+	for i, label := range rows {
+		cursor := "  "
+		style := profileStyle
+		if focused && m.settings.rpc.cursor == i {
+			cursor = cursorStyle.Render("> ")
+			style = selectedProfileStyle
+		}
+		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
+	}
+
+	endpoint := m.cfg.RPCEndpoint
+	if endpoint == "" {
+		endpoint = "(not set)"
+	}
+	rpcBin := m.cfg.RPCServerBin
+	if rpcBin == "" {
+		rpcBin = "(uses default binary)"
+	}
+	b.WriteString("\n")
+	b.WriteString(profileStyle.Render("Endpoint: " + endpoint))
+	b.WriteString("\n")
+	b.WriteString(profileStyle.Render("Binary:   " + rpcBin))
+	b.WriteString("\n")
+
+	if focused && m.settings.rpc.cursor == 3 && m.netSupported && m.cfg.RPCEnabled {
+		b.WriteString("\n")
+		b.WriteString(sectionTitleStyle.Render("Network Tab") + "\n")
+		b.WriteString(profileStyle.Render(
+			"Adds a Network tab to the TUI for managing nmcli connection\n"+
+				"profiles without leaving llmctl. Use it to switch between your\n"+
+				"internet and RPC ethernet connections when offloading model\n"+
+				"layers to a Windows GPU over direct ethernet.\n\n"+
+				"Requires: nmcli (NetworkManager) and polkit authorization.\n"+
+				"Optional: ethtool for link speed and carrier detection.\n\n"+
+				"Disable this if you manage network switching yourself and\n"+
+				"don't need llmctl to control NetworkManager.",
+		) + "\n")
+	} else {
+		b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
+		b.WriteString("\n")
+	}
+
+	if m.settings.rpc.editing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Endpoint:") + " " + m.settings.rpc.input.View())
+		b.WriteString("\n")
+	}
+	if m.settings.rpc.binEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.rpc.binInput.View())
 		b.WriteString("\n")
 	}
 

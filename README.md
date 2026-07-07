@@ -28,12 +28,13 @@ live, and the config file is plain YAML so it is easy to version or share.
 
 ## Overview
 
-The main app is organized around four tabs:
+The main app is organized around tabs:
 
 - **Models**: browse imported models, create/edit profiles, and run them.
 - **Recents**: quickly rerun recently used model profiles.
-- **Settings**: configure directories that are scanned for GGUF model files.
+- **Settings**: configure directories, llama-server binary, and RPC settings.
 - **Running**: inspect running servers, preview output, view logs, or stop them.
+- **Network** *(Linux only — requires RPC enabled and Network Tab enabled in Settings)*: manage network connections for RPC offload.
 
 ## Requirements
 
@@ -70,9 +71,17 @@ On first launch, `llmctl` creates or loads its config. By default it looks for:
 1. `./config/config.yaml`
 2. `~/.llmctl/config.yaml`
 
-The footer shows the available hotkeys for the current screen. In the main TUI,
-use arrow keys to move, `enter` to select or run, `s` to stop, `e` to view logs,
-`del` to delete where supported, and `q` to quit.
+### Quick Reference
+
+| Key | Action |
+| :--- | :--- |
+| `Arrows` / `Enter` | Navigate and select |
+| `s` | Stop running instance |
+| `e` | View logs |
+| `c` | Copy OpenAI-compatible endpoint |
+| `/` | Search/filter models |
+| `del` | Delete (where supported) |
+| `q` | Quit |
 
 ## Configure Model Directories
 
@@ -97,8 +106,8 @@ to `llama-server` (or `llama-server.exe` on Windows). This is useful when the
 binary is not on your `PATH` — common on Windows where the build output lands
 in a deep `Release` subdirectory.
 
-The config field behind this is:
-(depends on your install location)
+The config field behind this is (depends on your install location):
+
 ```yaml
 llama_server_bin: C:\llama.cpp\build\bin\Release\llama-server.exe
 ```
@@ -156,15 +165,14 @@ When editing a profile:
 - Press `esc` to exit. If you changed anything, `llmctl` asks whether to save or
   exit without saving.
 
-## Edit A Profile
+## Export A Profile
+
+A profile's full `llama-server` command can be exported as a shell script or
+copied directly. Select a profile, choose **Export**, and pick your format.
 
 <p align="center">
-  <img src="readmeassets/modeledit.jpg" alt="model profile editor" width="800">
+  <img src="readmeassets/export.jpg" alt="export profile modal" width="800">
 </p>
-
-Selecting an existing profile opens a Run/Edit choice. Choose **Edit** to update
-the saved profile. Long descriptions and parameter help stay inside fixed panes
-so the TUI does not grow beyond the terminal viewport.
 
 ## Run A Profile
 
@@ -189,6 +197,17 @@ llmctl run <model> <profile>
 
 The main screen shows currently running profiles, their ports, health, token
 rate when active, and GPU memory when `nvidia-smi` is available.
+
+A colored dot indicates the current state:
+
+- **Yellow ●** — `loading`: the process started but the server is still
+  initialising and not yet accepting requests.
+- **Green ●** — `up`: the server passed its health check and is ready.
+- **Red ●** — `down`: the server is not responding.
+
+<p align="center">
+  <img src="readmeassets/modelrunning_loading.jpg" alt="running model in loading state" width="800">
+</p>
 
 List running profiles from the command line:
 
@@ -239,10 +258,13 @@ llmctl logs <model> <profile>
 llmctl logs -f <model> <profile>
 ```
 
+<details>
+<summary><b>Configuration File Format</b></summary>
+<br>
+
 ## Configuration
 
-You'll never need to manually edit the config, its maintained by llmctl, however if youre curious this is how its formatted.
-Example config:
+You'll never need to manually edit the config since it's maintained by llmctl, but if you're curious, here is how it's formatted:
 
 ```yaml
 llama_server_bin: llama-server
@@ -266,6 +288,124 @@ On Windows, if `llama-server` is not on `PATH`, set:
 ```yaml
 llama_server_bin: D:\path\to\llama-server.exe
 ```
+
+</details>
+
+<details>
+<summary><b>RPC Offload (Linux → Windows GPU)</b></summary>
+<br>
+
+## RPC Offload (Linux → Windows GPU)
+
+llmctl supports llama.cpp's RPC backend, which lets a Linux machine offload
+model layers to a GPU on a Windows machine over a direct ethernet or LAN
+connection.
+
+### Windows setup
+
+Start the RPC server on the Windows machine, binding to all interfaces:
+
+```powershell
+ggml-rpc-server.exe -H 0.0.0.0 -p 50052
+```
+
+Open port 50052 in Windows Firewall (run PowerShell as Administrator):
+
+```powershell
+netsh advfirewall firewall add rule name="GGML RPC Server" dir=in action=allow protocol=TCP localport=50052
+```
+
+If the Windows ethernet adapter is classified as a Public network, change it
+to Private so firewall rules apply correctly:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private
+```
+
+### Linux setup
+
+In **Settings → RPC Server**, toggle RPC on and set the endpoint to the Windows
+machine's IP and port (e.g. `192.168.50.1:50052`).
+
+<p align="center">
+  <img src="readmeassets/settingsrpc.jpg" alt="settings RPC server page" width="800">
+</p>
+
+If connecting over a direct ethernet cable (not through a router), set a
+static IP on the Linux side to match the Windows machine's subnet:
+
+```bash
+nmcli connection modify "Wired connection 1" \
+  ipv4.method manual \
+  ipv4.addresses "192.168.50.2/24" \
+  ipv4.gateway ""
+nmcli connection up "Wired connection 1"
+```
+
+### Network tab (Linux only)
+
+The Network tab lets you switch between your internet and RPC ethernet
+connections and monitor link state without leaving llmctl. It is separate from
+RPC being enabled — you opt into it explicitly.
+
+**To enable:** go to **Settings → RPC Server**, navigate to **Network Tab**, and
+press `enter` to toggle it on. llmctl checks that `nmcli` is available before
+enabling; if it is not found, an error is shown with instructions.
+
+<p align="center">
+  <img src="readmeassets/networktab.jpg" alt="network tab" width="800">
+</p>
+
+Navigate to **Network → Configure** to assign which nmcli connection profile
+is your internet connection and which is your RPC link. These assignments are
+saved to `config.yaml` and restored on next launch.
+
+<p align="center">
+  <img src="readmeassets/networktab_picker.jpg" alt="network connection picker" width="800">
+</p>
+
+The switch brings up the target connection and lets NetworkManager handle
+any conflict on the same interface automatically — no manual `down` required.
+
+#### Granting network control without a password
+
+nmcli requires polkit authorization to bring connections up and down. On
+Ubuntu, create a local authority file to grant the `netdev` group permission:
+
+```bash
+sudo mkdir -p /etc/polkit-1/localauthority/50-local.d/
+sudo tee /etc/polkit-1/localauthority/50-local.d/10-llmctl-network.pkla <<'EOF'
+[NetworkManager netdev group]
+Identity=unix-group:netdev
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+EOF
+```
+
+Then add your user to the `netdev` group and log out and back in:
+
+```bash
+sudo usermod -aG netdev $USER
+```
+
+If the TUI shows "Not authorized to control networking", the Network tab's
+Details pane displays the fix command and lets you copy it with `c`.
+
+#### Multi-interface setups (ethernet + wifi)
+
+If your internet and RPC connections use different physical interfaces (e.g.
+wifi for internet, ethernet for RPC), both can be active simultaneously —
+NetworkManager routes RPC traffic over ethernet automatically via the
+`192.168.50.0/24` subnet route. No switching is needed in this case; just
+bring up the RPC ethernet connection once and leave both active.
+
+</details>
+
+<details>
+<summary><b>Troubleshooting</b></summary>
+<br>
 
 ## Troubleshooting
 
@@ -296,3 +436,20 @@ llmctl logs <model> <profile>
 
 The most common causes are an invalid `llama-server` flag, a missing model file,
 or a port already in use.
+
+### Network Tab toggle is greyed out or shows an error
+
+The Network Tab requires `nmcli` (NetworkManager). Install it with your
+package manager:
+
+```bash
+# Ubuntu / Debian
+sudo apt install network-manager
+
+# Arch
+sudo pacman -S networkmanager
+```
+
+Then re-attempt the toggle in **Settings → RPC Server**.
+
+</details>

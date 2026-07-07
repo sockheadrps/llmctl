@@ -16,9 +16,18 @@ type Config struct {
 	LlamaServerBin string `yaml:"llama_server_bin,omitempty"`
 	// ModelsDir is the deprecated single-directory predecessor of
 	// ModelsDirs. Load migrates it in and Save never writes it back out.
-	ModelsDir  string                  `yaml:"models_dir,omitempty"`
-	ModelsDirs []string                `yaml:"models_dirs,omitempty"`
-	Models     map[string]models.Model `yaml:"models"`
+	ModelsDir   string                  `yaml:"models_dir,omitempty"`
+	ModelsDirs  []string                `yaml:"models_dirs,omitempty"`
+	RPCEnabled   bool   `yaml:"rpc_enabled,omitempty"`
+	RPCEndpoint  string `yaml:"rpc_endpoint,omitempty"`
+	RPCServerBin string `yaml:"rpc_server_bin,omitempty"`
+
+	NetworkTabEnabled   bool   `yaml:"network_tab_enabled,omitempty"`
+	NetworkInternetConn string `yaml:"network_internet_conn,omitempty"`
+	NetworkRPCConn      string `yaml:"network_rpc_conn,omitempty"`
+	NetworkIface        string `yaml:"network_iface,omitempty"`
+
+	Models map[string]models.Model `yaml:"models"`
 }
 
 // Load reads and parses the config file at path. If the file doesn't exist,

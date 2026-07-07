@@ -65,13 +65,47 @@ func (m Model) openLogs(path, label string) (tea.Model, tea.Cmd) {
 	if err != nil {
 		state.err = err
 	} else {
-		state.lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+		state.lines = logDisplayLines(string(data), m.width)
 		state.offset = max(0, len(state.lines)-logsVisibleHeight(m.height))
 	}
 
 	m.logs = state
 	m.screen = screenLogs
 	return m, nil
+}
+
+// logDisplayLines converts raw log file content into display lines — one
+// element per terminal row — by applying the same word-wrap used in the
+// Running tab preview. This ensures the pane Height constraint (in terminal
+// rows) matches the slice length exactly, avoiding content clipping.
+func logDisplayLines(raw string, termWidth int) []string {
+	boxWidth := termWidth - 4
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+	lines := wrappedLogPreviewLines(strings.TrimRight(raw, "\n"), boxWidth)
+	if len(lines) == 0 {
+		// fall back to raw split so empty/short logs still display
+		return strings.Split(strings.TrimRight(raw, "\n"), "\n")
+	}
+	return lines
+}
+
+// refreshLogs re-reads the log file in place. If the viewer was scrolled to
+// the bottom it stays there; otherwise the offset is preserved.
+func (m *Model) refreshLogs() {
+	data, err := os.ReadFile(m.logs.path)
+	if err != nil {
+		m.logs.err = err
+		return
+	}
+	lines := logDisplayLines(string(data), m.width)
+	visible := logsVisibleHeight(m.height)
+	atBottom := len(m.logs.lines) == 0 || m.logs.offset >= max(0, len(m.logs.lines)-visible)
+	m.logs.lines = lines
+	if atBottom {
+		m.logs.offset = max(0, len(lines)-visible)
+	}
 }
 
 func (m Model) updateLogs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

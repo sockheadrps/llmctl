@@ -22,6 +22,10 @@ type formField struct {
 // formState backs the "New Profile"/"Edit Profile" screen. Focus indices
 // 0..len(fields)-1 are the text fields, len(fields) is the Flash Attention
 // toggle, and len(fields)+1 is the Save action.
+//
+// navigating=true is navigate mode (arrow/WASD moves between fields; Enter
+// activates a field for editing). navigating=false is edit mode (keystrokes
+// go to the focused textinput; Enter commits and returns to navigate mode).
 type formState struct {
 	modelKey             string
 	editing              bool
@@ -36,10 +40,14 @@ type formState struct {
 	descDir              int
 	descPause            int
 	err                  string
+	navigating           bool
 	flagFocus            bool
 	flagInput            textinput.Model
 	flagOverrides        map[string]string
 	initialFlagOverrides map[string]string
+	importEditing        bool
+	importInput          textinput.Model
+	importErr            string
 }
 
 // fieldDefaultFlag returns the default llama-server CLI flag for a form field
@@ -148,6 +156,238 @@ func buildFlagInput() textinput.Model {
 	return ti
 }
 
+func buildImportInput() textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = ""
+	ti.Placeholder = "paste CLI args here..."
+	ti.CharLimit = 1024
+	ti.Width = 40
+	return ti
+}
+
+func splitCLIArgs(argsStr string) []string {
+	var tokens []string
+	var cur strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+	started := false
+
+	flush := func() {
+		if started {
+			tokens = append(tokens, cur.String())
+			cur.Reset()
+			started = false
+		}
+	}
+
+	for _, r := range argsStr {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			escaped = false
+			started = true
+		case r == '\\' && !inSingle:
+			escaped = true
+			started = true
+		case r == '\'' && !inDouble:
+			inSingle = !inSingle
+			started = true
+		case r == '"' && !inSingle:
+			inDouble = !inDouble
+			started = true
+		case !inSingle && !inDouble && (r == ' ' || r == '\t' || r == '\n' || r == '\r'):
+			flush()
+		default:
+			cur.WriteRune(r)
+			started = true
+		}
+	}
+	flush()
+	return tokens
+}
+
+func isNumericToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] == '-' {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	dotSeen := false
+	digitSeen := false
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] >= '0' && s[i] <= '9':
+			digitSeen = true
+		case s[i] == '.':
+			if dotSeen {
+				return false
+			}
+			dotSeen = true
+		default:
+			return false
+		}
+	}
+	return digitSeen
+}
+
+// parseProfileArgs parses a space-separated CLI arg string (e.g. copied from
+// export) and returns a map of field-index → value. Index len(formLabels) is
+// used for the flash-attention toggle.
+func parseProfileArgs(argsStr string) (map[int]string, []string) {
+	tokens := splitCLIArgs(argsStr)
+	result := make(map[int]string)
+	extra := make([]string, 0)
+	sawRelevantFlag := false
+
+	flagToField := make(map[string]int)
+	for i := 0; i < len(formLabels); i++ {
+		if f := fieldDefaultFlag(i); f != "" {
+			flagToField[f] = i
+		}
+	}
+
+	isKnownFlag := func(tok string) bool {
+		if tok == "--flash-attn" {
+			return true
+		}
+		if strings.HasPrefix(tok, "--no-") {
+			return true
+		}
+		if eqIdx := strings.Index(tok, "="); eqIdx > 0 && strings.HasPrefix(tok, "-") {
+			tok = tok[:eqIdx]
+		}
+		_, ok := flagToField[tok]
+		return ok
+	}
+
+	consumeValue := func(i int) (string, bool, int) {
+		if i+1 >= len(tokens) {
+			return "", false, i
+		}
+		next := tokens[i+1]
+		if isKnownFlag(next) {
+			return "", false, i
+		}
+		if strings.HasPrefix(next, "-") && !isNumericToken(next) {
+			return "", false, i
+		}
+		return next, true, i + 1
+	}
+
+	skipModelSource := func(i int) int {
+		if i+1 < len(tokens) && !strings.HasPrefix(tokens[i+1], "-") {
+			return i + 2
+		}
+		return i + 1
+	}
+
+	i := 0
+	for i < len(tokens) {
+		tok := tokens[i]
+
+		// Drop the leading binary token from a pasted full command line.
+		if i == 0 && !strings.HasPrefix(tok, "-") {
+			i++
+			continue
+		}
+
+		if tok == "--model" || tok == "-m" || tok == "-hf" {
+			i = skipModelSource(i)
+			continue
+		}
+
+		if tok == "llama-server" || tok == "llama-server.exe" {
+			i++
+			continue
+		}
+
+		// --flash-attn[=value]
+		if tok == "--flash-attn" || strings.HasPrefix(tok, "--flash-attn=") {
+			sawRelevantFlag = true
+			val := "on"
+			if eqIdx := strings.Index(tok, "="); eqIdx > 0 {
+				raw := strings.ToLower(strings.TrimSpace(tok[eqIdx+1:]))
+				if raw == "off" || raw == "false" || raw == "0" {
+					val = "off"
+				}
+				result[len(formLabels)] = val
+				i++
+				continue
+			}
+			if next, ok, nextIdx := consumeValue(i); ok {
+				raw := strings.ToLower(strings.TrimSpace(next))
+				if raw == "off" || raw == "false" || raw == "0" {
+					val = "off"
+				}
+				result[len(formLabels)] = val
+				i = nextIdx + 1
+				continue
+			}
+			result[len(formLabels)] = val
+			i++
+			continue
+		}
+
+		// --flag=value
+		if eqIdx := strings.Index(tok, "="); eqIdx > 0 && strings.HasPrefix(tok, "-") {
+			flagPart := tok[:eqIdx]
+			if fieldIdx, ok := flagToField[flagPart]; ok {
+				sawRelevantFlag = true
+				result[fieldIdx] = tok[eqIdx+1:]
+			} else {
+				extra = append(extra, tok)
+			}
+			i++
+			continue
+		}
+
+		// --no-flag → bool false
+		if strings.HasPrefix(tok, "--no-") {
+			posFlag := "--" + tok[len("--no-"):]
+			if fieldIdx, ok := flagToField[posFlag]; ok {
+				sawRelevantFlag = true
+				result[fieldIdx] = "false"
+			} else {
+				extra = append(extra, tok)
+			}
+			i++
+			continue
+		}
+
+		// --flag value  or  bare --flag (= true)
+		if strings.HasPrefix(tok, "-") {
+			if fieldIdx, ok := flagToField[tok]; ok {
+				sawRelevantFlag = true
+				if next, ok, nextIdx := consumeValue(i); ok {
+					result[fieldIdx] = next
+					i = nextIdx + 1
+				} else {
+					result[fieldIdx] = "true"
+					i++
+				}
+				continue
+			}
+		}
+
+		if !sawRelevantFlag && !strings.HasPrefix(tok, "-") {
+			i++
+			continue
+		}
+
+		extra = append(extra, tok)
+		i++
+	}
+	if len(extra) > 0 {
+		result[fieldExtraArgs] = strings.Join(extra, " ")
+	}
+	return result, extra
+}
+
 func copyStringMap(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m))
 	for k, v := range m {
@@ -188,6 +428,7 @@ const (
 	fieldCacheV
 	fieldExtraArgs
 	fieldNotes
+	fieldRPCEnabled
 )
 
 var formLabels = []string{
@@ -197,6 +438,7 @@ var formLabels = []string{
 	"Parallel Slots", "Continuous Batching", "Prompt Cache", "Cache RAM",
 	"Reasoning", "Reasoning Budget", "Reasoning Format", "Cache Type K", "Cache Type V",
 	"Extra Args (space-separated)", "Notes",
+	"RPC Enabled",
 }
 
 func buildFormFields(defaults []string) []formField {
@@ -210,7 +452,6 @@ func buildFormFields(defaults []string) []formField {
 		ti.Width = 40
 		fields[i] = formField{label: label, input: ti}
 	}
-	fields[0].input.Focus()
 	return fields
 }
 
@@ -274,6 +515,8 @@ func formFieldDescription(idx int) string {
 		return "Additional raw llama.cpp arguments, split by spaces, for advanced or experimental features."
 	case fieldNotes:
 		return "Optional notes for this profile that help you remember how it was intended to be used."
+	case fieldRPCEnabled:
+		return "Override the global RPC setting for this profile. Leave blank to follow the global setting; set true to force RPC on, false to force it off."
 	case len(formLabels):
 		return "The Flash Attention toggle enables hardware-optimized attention when supported by your build."
 	case len(formLabels) + 1:
@@ -297,9 +540,7 @@ func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
 	f.resetDescriptionScroll()
-	if f.focus < len(f.fields) {
-		f.fields[f.focus].input.Focus()
-	}
+	// Don't auto-focus the text input: navigate mode controls activation via Enter.
 	f.ensureVisible(visibleRows, total)
 	f.syncFlagInput()
 }
@@ -358,6 +599,41 @@ func (f *formState) ensureVisible(visibleRows int, totalRows int) {
 	}
 }
 
+func (f *formState) openImportModal() {
+	f.importEditing = true
+	f.importErr = ""
+	f.importInput = buildImportInput()
+	f.importInput.Focus()
+}
+
+func (f *formState) closeImportModal() {
+	f.importEditing = false
+	f.importErr = ""
+	f.importInput.Blur()
+}
+
+func (f *formState) applyImportedArgs(argsStr string) error {
+	values, extra := parseProfileArgs(argsStr)
+	if len(values) == 0 && len(extra) == 0 {
+		return fmt.Errorf("no recognizable CLI args found")
+	}
+
+	for idx, val := range values {
+		switch idx {
+		case len(formLabels):
+			f.flash = strings.EqualFold(val, "on") || strings.EqualFold(val, "true") || val == "1"
+		default:
+			if idx >= 0 && idx < len(f.fields) {
+				f.fields[idx].input.SetValue(val)
+			}
+		}
+	}
+
+	f.syncFlagInput()
+	f.importErr = ""
+	return nil
+}
+
 // openForm switches to the new-profile screen for modelKey, pre-filling a
 // suggested free port. overrides is an optional map of field index → value
 // that overwrites specific defaults (used by template presets).
@@ -401,6 +677,7 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 	defaults[fieldCacheV] = ""
 	defaults[fieldExtraArgs] = ""
 	defaults[fieldNotes] = ""
+	defaults[fieldRPCEnabled] = ""
 
 	for idx, val := range overrides {
 		if idx >= 0 && idx < len(defaults) {
@@ -416,11 +693,13 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 		initialFlash:         true,
 		flash:                true,
 		focus:                0,
+		navigating:           true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
 		flagOverrides:        make(map[string]string),
 		initialFlagOverrides: make(map[string]string),
+		importInput:          buildImportInput(),
 	}
 	m.form.syncFlagInput()
 	m.screen = screenNewProfile
@@ -473,6 +752,7 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldCacheV] = p.CacheTypeV
 	defaults[fieldExtraArgs] = strings.Join(p.ExtraArgs, " ")
 	defaults[fieldNotes] = p.Notes
+	defaults[fieldRPCEnabled] = boolPtrOrEmpty(p.RPCEnabled)
 
 	fi := buildFlagInput()
 	m.form = formState{
@@ -484,11 +764,13 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 		initialFlash:         p.FlashAttn,
 		flash:                p.FlashAttn,
 		focus:                0,
+		navigating:           true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
 		flagOverrides:        copyStringMap(p.FlagOverrides),
 		initialFlagOverrides: copyStringMap(p.FlagOverrides),
+		importInput:          buildImportInput(),
 	}
 	m.form.syncFlagInput()
 	m.screen = screenNewProfile
@@ -545,23 +827,35 @@ func suggestPort(cfg *config.Config) int {
 
 func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Flag override input in the details panel has focus — route keys there.
+	if m.form.importEditing {
+		switch msg.String() {
+		case "esc":
+			m.form.closeImportModal()
+			return m, nil
+		case "enter":
+			if err := m.form.applyImportedArgs(m.form.importInput.Value()); err != nil {
+				m.form.importErr = err.Error()
+				return m, nil
+			}
+			m.form.closeImportModal()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.form.importInput, cmd = m.form.importInput.Update(msg)
+			return m, cmd
+		}
+	}
+
 	if m.form.flagFocus {
 		switch msg.String() {
 		case "esc", "left":
 			m.form.commitFlagInput()
 			m.form.flagFocus = false
 			m.form.flagInput.Blur()
-			// Re-focus the form field so typing works immediately after returning.
-			if m.form.focus < len(m.form.fields) {
-				m.form.fields[m.form.focus].input.Focus()
-			}
 		case "enter":
 			m.form.commitFlagInput()
 			m.form.flagFocus = false
 			m.form.flagInput.Blur()
-			if m.form.focus < len(m.form.fields) {
-				m.form.fields[m.form.focus].input.Focus()
-			}
 		default:
 			var cmd tea.Cmd
 			m.form.flagInput, cmd = m.form.flagInput.Update(msg)
@@ -570,6 +864,27 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Edit mode: keystrokes go to the focused text input.
+	// Enter commits and returns to navigate mode; Esc cancels without committing.
+	if !m.form.navigating {
+		switch msg.String() {
+		case "esc":
+			m.form.blurAll()
+			m.form.navigating = true
+		case "enter":
+			m.form.blurAll()
+			m.form.navigating = true
+		default:
+			if m.form.focus < len(m.form.fields) {
+				var cmd tea.Cmd
+				m.form.fields[m.form.focus].input, cmd = m.form.fields[m.form.focus].input.Update(msg)
+				return m, cmd
+			}
+		}
+		return m, nil
+	}
+
+	// Navigate mode: arrows/WASD move between fields; Enter activates a field.
 	switch msg.String() {
 	case "esc":
 		if m.form.dirty() {
@@ -581,55 +896,43 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, nil
 
-	case "right":
+	case "right", "d":
 		if flag := m.form.focusedFlag(); flag != "" {
-			atEnd := m.form.focus >= len(m.form.fields)
-			if !atEnd {
-				ti := m.form.fields[m.form.focus].input
-				atEnd = ti.Position() >= len([]rune(ti.Value()))
-			}
-			if atEnd {
-				m.form.flagFocus = true
-				m.form.flagInput.Focus()
-				if m.form.focus < len(m.form.fields) {
-					m.form.fields[m.form.focus].input.Blur()
-				}
-				return m, nil
+			m.form.flagFocus = true
+			m.form.flagInput.Focus()
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Blur()
 			}
 		}
+		return m, nil
 
-	case "tab", "down":
+	case "x":
+		m.form.openImportModal()
+		return m, nil
+
+	case "tab", "down", "j", "s":
 		m.form.moveFocus(1, m.formVisibleRows())
 		return m, nil
 
-	case "shift+tab", "up":
+	case "shift+tab", "up", "k", "w":
 		m.form.moveFocus(-1, m.formVisibleRows())
 		return m, nil
-
-	case " ":
-		if m.form.focus == len(m.form.fields) {
-			m.form.flash = !m.form.flash
-			return m, nil
-		}
 
 	case "enter":
 		switch m.form.focus {
 		case len(m.form.fields):
 			m.form.flash = !m.form.flash
-			return m, nil
 		case len(m.form.fields) + 1:
 			return m.submitForm()
 		default:
-			m.form.moveFocus(1, m.formVisibleRows())
-			return m, nil
+			m.form.navigating = false
+			if m.form.focus < len(m.form.fields) {
+				m.form.fields[m.form.focus].input.Focus()
+			}
 		}
+		return m, nil
 	}
 
-	if m.form.focus < len(m.form.fields) {
-		var cmd tea.Cmd
-		m.form.fields[m.form.focus].input, cmd = m.form.fields[m.form.focus].input.Update(msg)
-		return m, cmd
-	}
 	return m, nil
 }
 
@@ -760,6 +1063,12 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	rpcEnabled, err := parseBoolPtr(value(fieldRPCEnabled))
+	if err != nil {
+		m.form.err = "rpc enabled must be true or false"
+		return m, nil
+	}
+
 	// Space-separated so multi-token flags like "-np 1" or "--spec-type
 	// draft-mtp" split into the right argv elements — exec.Command passes
 	// each ExtraArgs entry as a literal argument with no shell-splitting,
@@ -805,8 +1114,9 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		ReasoningFormat:   value(fieldReasoningFormat),
 		CacheTypeK:        value(fieldCacheK),
 		CacheTypeV:        value(fieldCacheV),
-		ExtraArgs:     extraArgs,
-		Notes:         value(fieldNotes),
+		ExtraArgs:      extraArgs,
+		Notes:          value(fieldNotes),
+		RPCEnabled:     rpcEnabled,
 		FlagOverrides: func() map[string]string {
 			m.form.commitFlagInput()
 			if len(m.form.flagOverrides) == 0 {

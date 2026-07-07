@@ -19,15 +19,15 @@ func (m Model) updateFormExit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenNewProfile
 		return m, nil
 
-	case "left", "h":
+	case "left", "h", "a":
 		m.formExit.selected = formExitDiscard
 		return m, nil
 
-	case "right", "l":
+	case "right", "l", "d":
 		m.formExit.selected = formExitSave
 		return m, nil
 
-	case "enter":
+	case "enter", " ":
 		switch m.formExit.selected {
 		case formExitSave:
 			m.screen = screenNewProfile

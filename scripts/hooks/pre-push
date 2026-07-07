@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Auto-bump the patch version (v0.1.1 -> v0.1.2) before every push to dev.
+# Install once per clone: git config core.hooksPath scripts/hooks
+
+set -e
+
+VERSION_FILE="internal/build/version.go"
+
+while read -r local_ref _local_sha remote_ref _remote_sha; do
+    case "$remote_ref" in
+        refs/heads/dev|dev)
+            # Extract current version number (strip the leading v)
+            current=$(grep 'var Version' "$VERSION_FILE" | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | tr -d 'v')
+            if [ -z "$current" ]; then
+                echo "pre-push: could not parse version from $VERSION_FILE" >&2
+                exit 1
+            fi
+
+            IFS='.' read -r major minor patch <<< "$current"
+            patch=$((patch + 1))
+            new_version="v${major}.${minor}.${patch}"
+
+            # Rewrite the version string in-place
+            tmp=$(mktemp)
+            sed "s/var Version = \"v[0-9]*\.[0-9]*\.[0-9]*\"/var Version = \"${new_version}\"/" \
+                "$VERSION_FILE" > "$tmp" && mv "$tmp" "$VERSION_FILE"
+
+            git add "$VERSION_FILE"
+            git commit -m "Bump version to ${new_version}"
+
+            echo "pre-push: bumped version to ${new_version}"
+            ;;
+    esac
+done
+
+exit 0

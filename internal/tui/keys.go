@@ -10,7 +10,6 @@ type keyMap struct {
 	Right  key.Binding
 	Run    key.Binding
 	Copy   key.Binding
-	Stop   key.Binding
 	Delete key.Binding
 	Logs   key.Binding
 	Quit   key.Binding
@@ -18,32 +17,28 @@ type keyMap struct {
 
 var keys = keyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "up"),
+		key.WithKeys("up", "k", "w"),
+		key.WithHelp("↑/k/w", "up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "down"),
+		key.WithKeys("down", "j", "s"),
+		key.WithHelp("↓/j/s", "down"),
 	),
 	Left: key.NewBinding(
-		key.WithKeys("left", "h"),
-		key.WithHelp("←/h", "models pane"),
+		key.WithKeys("left", "h", "a"),
+		key.WithHelp("←/h/a", "models pane"),
 	),
 	Right: key.NewBinding(
-		key.WithKeys("right", "l"),
-		key.WithHelp("→/l", "running pane"),
+		key.WithKeys("right", "l", "d"),
+		key.WithHelp("→/l/d", "running pane"),
 	),
 	Run: key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "run profile"),
+		key.WithKeys("enter", " "),
+		key.WithHelp("enter/space", "run/select"),
 	),
 	Copy: key.NewBinding(
 		key.WithKeys("c"),
 		key.WithHelp("c", "copy profile"),
-	),
-	Stop: key.NewBinding(
-		key.WithKeys("s"),
-		key.WithHelp("s", "stop"),
 	),
 	Delete: key.NewBinding(
 		key.WithKeys("delete"),

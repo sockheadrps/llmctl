@@ -44,6 +44,8 @@ type Profile struct {
 	CacheTypeV        string   `yaml:"cache_type_v,omitempty"`
 	ExtraArgs         []string          `yaml:"extra_args,omitempty"`
 	Notes             string            `yaml:"notes,omitempty"`
+	RPCEnabled        *bool             `yaml:"rpc_enabled,omitempty"`
+	MaxTokPerSec      float64           `yaml:"max_tok_per_sec,omitempty"`
 	FlagOverrides     map[string]string `yaml:"flag_overrides,omitempty"`
 }
 
@@ -73,6 +75,7 @@ type Running struct {
 	ModelName   string `json:"model_name"`
 	ProfileKey  string `json:"profile_key"`
 	ProfileName string `json:"profile_name"`
+	Host        string `json:"host,omitempty"`
 	Port        int    `json:"port"`
 	PID         int    `json:"pid"`
 	LogFile     string `json:"log_file"`

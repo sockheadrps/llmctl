@@ -13,9 +13,11 @@ import (
 // run as a tea.Cmd rather than inline in Update to avoid freezing the UI.
 // logPath is set even on success, so the log viewer has somewhere to look.
 type startResultMsg struct {
-	label   string
-	logPath string
-	err     error
+	modelKey   string
+	profileKey string
+	label      string
+	logPath    string
+	err        error
 }
 
 func (m Model) startProfileCmd(r row) tea.Cmd {
@@ -27,7 +29,7 @@ func (m Model) startProfileCmd(r row) tea.Cmd {
 		if err != nil && !logFileHasContent(logPath) {
 			logPath = ""
 		}
-		return startResultMsg{label: label, logPath: logPath, err: err}
+		return startResultMsg{modelKey: modelKey, profileKey: profileKey, label: label, logPath: logPath, err: err}
 	}
 }
 
