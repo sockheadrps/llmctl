@@ -730,6 +730,10 @@ func (m Model) renderRPCConnectionTab() string {
 		b.WriteString(cursor + style.Render("RPC Connection") + "  " + runningStyle.Render("● connected"))
 		b.WriteString("\n")
 		b.WriteString("  " + profileStyle.Render(m.discoveredRPCEndpoint))
+	} else if m.remoteStatus != nil {
+		b.WriteString(cursor + style.Render("RPC Connection") + "  " + runningStyle.Render("● reachable"))
+		b.WriteString("\n")
+		b.WriteString("  " + detailMutedStyle.Render(m.cfg.RemoteStatusAddr))
 	} else if m.cfg.RemoteStatusAddr != "" {
 		b.WriteString(cursor + style.Render("RPC Connection") + "  " + loadingStyle.Render("● polling…"))
 		b.WriteString("\n")

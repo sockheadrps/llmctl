@@ -171,7 +171,8 @@ type Model struct {
 	statusServer          *statusserver.Server
 	remoteStatus          *statusserver.Status
 	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
-	rpcAddrCopied         bool   // true briefly after copying the status server address
+	rpcAddrCopied         bool // true briefly after copying the status server address
+	rpcIPCursor           int  // which LAN IP is selected on the RPC Server tab
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view
