@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -878,6 +879,17 @@ func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
 		fmt.Fprintf(&b, "%s  %s\n", header, detailMutedStyle.Render("not started"))
 	default:
 		fmt.Fprintf(&b, "%s  %s  %s\n", header, loadingStyle.Render("loading"), endpoint)
+	}
+
+	if m.cfg.StatusServerEnabled && m.statusServer != nil {
+		n := m.statusServer.RecentClientCount(45 * time.Second)
+		if n == 1 {
+			fmt.Fprintf(&b, "%s\n", profileStyle.Render("1 client connected"))
+		} else if n > 1 {
+			fmt.Fprintf(&b, "%s\n", profileStyle.Render(strconv.Itoa(n)+" clients connected"))
+		} else {
+			fmt.Fprintf(&b, "%s\n", detailMutedStyle.Render("no clients connected"))
+		}
 	}
 	b.WriteString("\n")
 
