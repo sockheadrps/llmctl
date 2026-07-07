@@ -29,7 +29,7 @@ jobs:
             goarch: arm64
             binary_name: llmctl
             archive_name: llmctl-${{ github.ref_name }}-linux-arm64.tar.gz
-- os: windows-latest
+          - os: windows-latest
             name: windows-amd64
             goos: windows
             goarch: amd64
