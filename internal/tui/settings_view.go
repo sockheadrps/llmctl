@@ -70,7 +70,7 @@ func (m Model) renderBinContent() string {
 
 	if m.settings.bin.editing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.bin.input.View())
+		b.WriteString(formLabelStyle.Render("Binary:"));b.WriteString(" ");b.WriteString(m.settings.bin.input.View())
 		b.WriteString("\n")
 	}
 
@@ -121,17 +121,17 @@ func (m Model) renderRPCContent() string {
 
 	if focused && m.settings.rpc.cursor == 3 && m.netSupported && m.cfg.RPCEnabled {
 		b.WriteString("\n")
-		b.WriteString(sectionTitleStyle.Render("Network Tab") + "\n")
+		b.WriteString(sectionTitleStyle.Render("Network Tab"));b.WriteString("\n")
 		b.WriteString(profileStyle.Render(
-			"Adds a Network tab to the TUI for managing nmcli connection\n"+
-				"profiles without leaving llmctl. Use it to switch between your\n"+
-				"internet and RPC ethernet connections when offloading model\n"+
-				"layers to a Windows GPU over direct ethernet.\n\n"+
-				"Requires: nmcli (NetworkManager) and polkit authorization.\n"+
-				"Optional: ethtool for link speed and carrier detection.\n\n"+
-				"Disable this if you manage network switching yourself and\n"+
-				"don't need llmctl to control NetworkManager.",
-		) + "\n")
+	"Adds a Network tab to the TUI for managing nmcli connection\n" +
+		"profiles without leaving llmctl. Use it to switch between your\n" +
+		"internet and RPC ethernet connections when offloading model\n" +
+		"layers to a Windows GPU over direct ethernet.\n\n" +
+		"Requires: nmcli (NetworkManager) and polkit authorization.\n" +
+		"Optional: ethtool for link speed and carrier detection.\n\n" +
+		"Disable this if you manage network switching yourself and\n" +
+		"don't need llmctl to control NetworkManager.",
+));b.WriteString("\n")
 	} else {
 		b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
 		b.WriteString("\n")
@@ -139,12 +139,12 @@ func (m Model) renderRPCContent() string {
 
 	if m.settings.rpc.editing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Endpoint:") + " " + m.settings.rpc.input.View())
+		b.WriteString(formLabelStyle.Render("Endpoint:"));b.WriteString(" ");b.WriteString(m.settings.rpc.input.View())
 		b.WriteString("\n")
 	}
 	if m.settings.rpc.binEditing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.rpc.binInput.View())
+		b.WriteString(formLabelStyle.Render("Binary:"));b.WriteString(" ");b.WriteString(m.settings.rpc.binInput.View())
 		b.WriteString("\n")
 	}
 
@@ -200,7 +200,7 @@ func (m Model) renderDirsContent() string {
 		if m.settings.dirs.editingIdx >= 0 {
 			label = "Edit Directory:"
 		}
-		b.WriteString(formLabelStyle.Render(label) + " " + m.settings.dirs.input.View())
+		b.WriteString(formLabelStyle.Render(label));b.WriteString(" ");b.WriteString(m.settings.dirs.input.View())
 		b.WriteString("\n")
 	}
 

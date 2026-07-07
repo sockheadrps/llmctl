@@ -295,7 +295,11 @@ func dashWrap(totalWidth int, content string, focused bool) string {
 	left := remaining / 2
 	right := remaining - left
 
-	dashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
+	dashColor := lipgloss.Color("30")
+	if focused {
+		dashColor = lipgloss.Color("240")
+	}
+	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
 	return dashStyle.Render(strings.Repeat("─", left)) + content + dashStyle.Render(strings.Repeat("─", right))
 }
 
@@ -387,7 +391,7 @@ func (m Model) renderModelsTree(width int) string {
 		if m.searchEditing {
 			prefix = cursorStyle.Render("/ ")
 		}
-		b.WriteString(prefix + detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
+		b.WriteString(prefix);b.WriteString(detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
 		b.WriteString("\n\n")
 	}
 
@@ -671,7 +675,7 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	fmt.Fprintf(&b, "%s\n", header)
 	if hasMeter {
 		rate := m.tokRates[key]
-		b.WriteString(m.renderRateMeter(key, rate) + "\n")
+		b.WriteString(m.renderRateMeter(key, rate));b.WriteString("\n")
 	}
 	b.WriteString("\n")
 	if tail := tailFittingHeight(run.LogFile, rightW, budget); tail != "" {
@@ -970,7 +974,7 @@ func (m Model) renderModelPreview(modelKey string) string {
 		if p.Temp != nil {
 			text += fmt.Sprintf("  temp %.2g", *p.Temp)
 		}
-		b.WriteString(detailMutedStyle.Render("• "+text) + "\n")
+		b.WriteString(detailMutedStyle.Render("• " + text));b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
@@ -1068,39 +1072,6 @@ func (m Model) modelRunningStatus(modelKey string) (running bool, status health.
 	return
 }
 
-// renderSparkline converts a slice of rate samples into a compact bar
-// chart string using Unicode block elements, scaled to the slice max.
-func renderSparkline(history []float64, width int) string {
-	if len(history) == 0 || width <= 0 {
-		return ""
-	}
-	peak := 0.0
-	for _, v := range history {
-		if v > peak {
-			peak = v
-		}
-	}
-	if peak == 0 {
-		return ""
-	}
-	blocks := []rune("▁▂▃▄▅▆▇█")
-	n := len(blocks)
-	data := history
-	if len(data) > width {
-		data = data[len(data)-width:]
-	}
-	var b strings.Builder
-	for _, v := range data {
-		idx := int((v / peak) * float64(n-1))
-		if idx < 0 {
-			idx = 0
-		} else if idx >= n {
-			idx = n - 1
-		}
-		b.WriteRune(blocks[idx])
-	}
-	return b.String()
-}
 
 type detailPair struct {
 	label string
