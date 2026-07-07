@@ -338,8 +338,7 @@ func (m Model) renderStatusServerContent() string {
 		b.WriteString(loadingStyle.Render("Windows Firewall may block inbound connections on Public networks."))
 		b.WriteString("\n")
 		b.WriteString(detailMutedStyle.Render(
-			"Fix: set your network to Private in Windows settings, or\n" +
-				"copy the firewall rule above and run it as Administrator."))
+			"Copy the firewall rule above and run it as Administrator."))
 		b.WriteString("\n")
 	}
 

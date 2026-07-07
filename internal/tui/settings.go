@@ -393,7 +393,7 @@ func (m Model) copyFirewallRule() (tea.Model, tea.Cmd) {
 		port = 11435
 	}
 	rule := fmt.Sprintf(
-		`netsh advfirewall firewall add rule name="llmctl status server" dir=in action=allow protocol=TCP localport=%d profile=private`,
+		`netsh advfirewall firewall add rule name="llmctl status server" dir=in action=allow protocol=TCP localport=%d profile=any`,
 		port,
 	)
 	if err := writeClipboard(rule); err != nil {
