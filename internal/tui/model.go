@@ -168,9 +168,10 @@ type Model struct {
 	gpuUsage     gpu.Usage
 	gpuByPID     map[int]int64
 
-	statusServer         *statusserver.Server
-	remoteStatus         *statusserver.Status
+	statusServer          *statusserver.Server
+	remoteStatus          *statusserver.Status
 	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
+	rpcAddrCopied         bool   // true briefly after copying the status server address
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view

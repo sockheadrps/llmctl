@@ -687,6 +687,28 @@ func (m Model) renderRPCServerModeTab() string {
 		b.WriteString("\n")
 	}
 
+	if m.cfg.StatusServerEnabled {
+		b.WriteString("\n")
+		port := m.cfg.StatusServerPort
+		if port == 0 {
+			port = 11435
+		}
+		addrs := util.StatusServerAddrs(port)
+		if len(addrs) > 0 {
+			b.WriteString(sectionTitleStyle.Render("Status Server"))
+			b.WriteString("\n")
+			for _, a := range addrs {
+				fmt.Fprintf(&b, "  %s\n", runningStyle.Render(a))
+			}
+			if m.rpcAddrCopied {
+				b.WriteString(runningStyle.Render("  ✓ copied"))
+			} else {
+				b.WriteString(detailMutedStyle.Render("  c to copy"))
+			}
+			b.WriteString("\n")
+		}
+	}
+
 	return b.String()
 }
 

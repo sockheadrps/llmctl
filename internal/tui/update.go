@@ -465,6 +465,9 @@ func (m Model) copyOrDuplicateSelected() (tea.Model, tea.Cmd) {
 	if m.leftMode == modeNetwork {
 		return m.copyNetworkFix()
 	}
+	if m.leftMode == modeRPCServer && m.cfg.RPCMode == "server" {
+		return m.copyStatusServerAddr()
+	}
 	if m.leftMode == modeRunning || m.focus == focusRunning {
 		return m.copySelectedEndpoint()
 	}
