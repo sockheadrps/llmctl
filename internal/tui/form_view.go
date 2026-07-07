@@ -129,11 +129,11 @@ func (m Model) viewForm() string {
 	if currentFlag := m.form.focusedFlag(); currentFlag != "" {
 		m.form.flagInput.Width = formDescriptionTextWidth(detailsWidth) - 7
 		if m.form.flagFocus {
-			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:"));rightPane.WriteString(" ");rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
 			rightPane.WriteString(helpStyle.Render("← back  enter confirm"))
 		} else {
-			rightPane.WriteString(detailMutedStyle.Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString(detailMutedStyle.Render("Flag:"));rightPane.WriteString(" ");rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
 			rightPane.WriteString(helpStyle.Render("→/d to override"))
 		}

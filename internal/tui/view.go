@@ -1141,7 +1141,7 @@ func (m Model) renderDetails(width int) string {
 	var b strings.Builder
 
 	if m.leftMode == modeNetwork {
-		return m.renderNetworkDetails(width)
+		return m.renderNetworkDetails()
 	}
 
 	// Still at the outer tab bar — nothing's selected yet within a tab,
