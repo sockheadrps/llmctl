@@ -325,10 +325,14 @@ func (m Model) renderTabBarLabels() string {
 		}{modeNetwork, "Network"})
 	}
 	if m.cfg.RPCEnabled {
+		rpcTabLabel := "RPC Server"
+		if m.cfg.RPCMode == "client" {
+			rpcTabLabel = "RPC Connection"
+		}
 		tabs = append(tabs, struct {
 			mode  leftMode
 			label string
-		}{modeRPCServer, "RPC Server"})
+		}{modeRPCServer, rpcTabLabel})
 	}
 
 	tabFocused := m.focus == focusTabs
@@ -635,9 +639,17 @@ func (m Model) renderRunningTabList(width int) string {
 	return b.String()
 }
 
-// renderRPCServerTab renders the RPC Server tab's left pane: status, endpoint,
-// and config summary. Enter opens the start/stop/view-output modal.
+// renderRPCServerTab renders the RPC tab's left pane. Branches on RPCMode:
+// server mode shows ggml-rpc-server status + enter to start/stop;
+// client mode shows connection health and discovered endpoint.
 func (m Model) renderRPCServerTab() string {
+	if m.cfg.RPCMode == "client" {
+		return m.renderRPCConnectionTab()
+	}
+	return m.renderRPCServerModeTab()
+}
+
+func (m Model) renderRPCServerModeTab() string {
 	var b strings.Builder
 
 	focused := m.focus == focusLeft
@@ -670,24 +682,50 @@ func (m Model) renderRPCServerTab() string {
 	}
 	b.WriteString("\n\n")
 
-	if m.cfg.RemoteStatusAddr != "" {
-		b.WriteString(profileStyle.Render("Remote status: " + m.cfg.RemoteStatusAddr))
-		b.WriteString("\n")
-	}
-	if m.discoveredRPCEndpoint != "" {
-		b.WriteString(runningStyle.Render("Discovered RPC: " + m.discoveredRPCEndpoint))
-		b.WriteString("\n")
-	} else if m.cfg.RPCEndpoint != "" {
-		b.WriteString(profileStyle.Render("RPC endpoint: " + m.cfg.RPCEndpoint + " (manual)"))
-		b.WriteString("\n")
-	}
 	if m.cfg.RPCServerBin != "" {
 		b.WriteString(profileStyle.Render("Binary: " + m.cfg.RPCServerBin))
 		b.WriteString("\n")
 	}
 
-	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
+	return b.String()
+}
+
+// renderRPCConnectionTab renders the left pane for client mode: connection
+// health, discovered endpoint, and a summary of what's running remotely.
+func (m Model) renderRPCConnectionTab() string {
+	var b strings.Builder
+
+	focused := m.focus == focusLeft
+	cursor := "  "
+	style := profileStyle
+	if focused {
+		cursor = cursorStyle.Render("> ")
+		style = selectedProfileStyle
+	}
+
+	// Connection status row
+	if m.discoveredRPCEndpoint != "" {
+		b.WriteString(cursor + style.Render("RPC Connection") + "  " + runningStyle.Render("● connected"))
 		b.WriteString("\n")
+		b.WriteString("  " + profileStyle.Render(m.discoveredRPCEndpoint))
+	} else if m.cfg.RemoteStatusAddr != "" {
+		b.WriteString(cursor + style.Render("RPC Connection") + "  " + loadingStyle.Render("● polling…"))
+		b.WriteString("\n")
+		b.WriteString("  " + detailMutedStyle.Render(m.cfg.RemoteStatusAddr))
+	} else {
+		b.WriteString(cursor + style.Render("RPC Connection") + "  " + detailMutedStyle.Render("not configured"))
+		b.WriteString("\n")
+		b.WriteString("  " + detailMutedStyle.Render("set Remote Status Address in Settings → RPC"))
+	}
+	b.WriteString("\n\n")
+
+	if m.cfg.RPCEndpoint != "" {
+		b.WriteString(detailMutedStyle.Render("Manual endpoint: " + m.cfg.RPCEndpoint))
+		b.WriteString("\n\n")
+	}
+
+	// Remote running models
+	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
 		b.WriteString(sectionTitleStyle.Render("Remote"))
 		b.WriteString("\n")
 		for _, ri := range m.remoteStatus.Running {
@@ -702,8 +740,7 @@ func (m Model) renderRPCServerTab() string {
 			b.WriteString("  " + runningStyle.Render("●") + " " + profileStyle.Render(label) + detailMutedStyle.Render(meta))
 			b.WriteString("\n")
 		}
-	} else if m.cfg.RPCEndpoint != "" && m.remoteStatus != nil && len(m.remoteStatus.Running) == 0 {
-		b.WriteString("\n")
+	} else if m.remoteStatus != nil {
 		b.WriteString(detailMutedStyle.Render("Remote: no models running"))
 		b.WriteString("\n")
 	}
@@ -735,9 +772,9 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	var b strings.Builder
 
 	if m.focus == focusTabs {
-		b.WriteString(modelStyle.Render(tabTitle(m.leftMode)))
+		b.WriteString(modelStyle.Render(m.tabTitle(m.leftMode)))
 		b.WriteString("\n\n")
-		b.WriteString(profileStyle.Render(tabInstructions(m.leftMode)))
+		b.WriteString(profileStyle.Render(m.tabInstructions(m.leftMode)))
 		return b.String()
 	}
 
@@ -794,6 +831,13 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 }
 
 func (m Model) renderRPCServerOutputPane(rightW, innerH int) string {
+	if m.cfg.RPCMode == "client" {
+		return m.renderRPCConnectionOutputPane(innerH)
+	}
+	return m.renderRPCServerModeOutputPane(rightW, innerH)
+}
+
+func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
 	var b strings.Builder
 
 	header := modelStyle.Render("RPC Server")
@@ -810,22 +854,6 @@ func (m Model) renderRPCServerOutputPane(rightW, innerH int) string {
 		fmt.Fprintf(&b, "%s  %s  %s\n", header, loadingStyle.Render("loading"), endpoint)
 	}
 	b.WriteString("\n")
-
-	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
-		b.WriteString(sectionTitleStyle.Render("Remote") + "\n")
-		for _, ri := range m.remoteStatus.Running {
-			label := ri.Model + " / " + ri.Profile
-			var meta string
-			if ri.TokS > 0 {
-				meta = fmt.Sprintf("  %.0f tok/s", ri.TokS)
-			}
-			if ri.VRAMMiB > 0 {
-				meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
-			}
-			b.WriteString("  " + runningStyle.Render("●") + " " + profileStyle.Render(label) + detailMutedStyle.Render(meta) + "\n")
-		}
-		b.WriteString("\n")
-	}
 
 	if rpcStatus == health.StatusNotStarted {
 		b.WriteString(detailMutedStyle.Render("(no output — server has not been started)"))
@@ -844,6 +872,75 @@ func (m Model) renderRPCServerOutputPane(rightW, innerH int) string {
 	}
 	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("enter start/stop · e view full output"))
+	return b.String()
+}
+
+func (m Model) renderRPCConnectionOutputPane(innerH int) string {
+	var b strings.Builder
+
+	b.WriteString(modelStyle.Render("RPC Connection"))
+	b.WriteString("\n\n")
+
+	// Status server connection
+	if m.cfg.RemoteStatusAddr == "" {
+		b.WriteString(detailMutedStyle.Render("No remote status address configured."))
+		b.WriteString("\n")
+		b.WriteString(detailMutedStyle.Render("Set one in Settings → RPC → Remote Status Address."))
+		return b.String()
+	}
+
+	if m.remoteStatus != nil {
+		fmt.Fprintf(&b, "%s%s  %s\n", profileStyle.Render("Status server:  "), runningStyle.Render("● reachable"), detailMutedStyle.Render(m.cfg.RemoteStatusAddr))
+	} else {
+		fmt.Fprintf(&b, "%s%s  %s\n", profileStyle.Render("Status server:  "), loadingStyle.Render("● polling…"), detailMutedStyle.Render(m.cfg.RemoteStatusAddr))
+	}
+
+	if m.discoveredRPCEndpoint != "" {
+		fmt.Fprintf(&b, "%s%s\n", profileStyle.Render("RPC endpoint:   "), runningStyle.Render("● "+m.discoveredRPCEndpoint))
+	} else if m.cfg.RPCEndpoint != "" {
+		fmt.Fprintf(&b, "%s%s\n", profileStyle.Render("RPC endpoint:   "), detailMutedStyle.Render(m.cfg.RPCEndpoint+" (manual, not verified)"))
+	} else {
+		fmt.Fprintf(&b, "%s%s\n", profileStyle.Render("RPC endpoint:   "), detailMutedStyle.Render("not discovered yet"))
+	}
+	b.WriteString("\n")
+
+	// Remote version and GPU
+	if m.remoteStatus != nil {
+		if m.remoteStatus.Version != "" {
+			b.WriteString(detailMutedStyle.Render("Remote llmctl " + m.remoteStatus.Version))
+			b.WriteString("\n")
+		}
+		if m.remoteStatus.GPU != nil {
+			g := m.remoteStatus.GPU
+			usedGB := float64(g.UsedMiB) / 1024
+			totalGB := float64(g.TotalMiB) / 1024
+			b.WriteString(profileStyle.Render(fmt.Sprintf("GPU: %s  %.1f/%.1fG", g.Name, usedGB, totalGB)))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// Remote running models
+	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
+		b.WriteString(sectionTitleStyle.Render("Running on remote"))
+		b.WriteString("\n")
+		for _, ri := range m.remoteStatus.Running {
+			label := ri.Model + " / " + ri.Profile
+			var meta string
+			if ri.TokS > 0 {
+				meta = fmt.Sprintf("  %.0f tok/s", ri.TokS)
+			}
+			if ri.VRAMMiB > 0 {
+				meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
+			}
+			fmt.Fprintf(&b, "  %s %s%s\n", runningStyle.Render("●"), profileStyle.Render(label), detailMutedStyle.Render(meta))
+		}
+	} else if m.remoteStatus != nil {
+		b.WriteString(detailMutedStyle.Render("No models running on remote."))
+		b.WriteString("\n")
+	}
+
+	_ = innerH
 	return b.String()
 }
 
@@ -1237,7 +1334,7 @@ func (m Model) renderModelPreview(modelKey string) string {
 // while focus is still at the outer tab bar — before arrowing down into a
 // tab, there's no row selected yet to show details for, so explain what's
 // in there instead of falling back to a generic empty-state message.
-func tabTitle(mode leftMode) string {
+func (m Model) tabTitle(mode leftMode) string {
 	switch mode {
 	case modeRecents:
 		return "Recents"
@@ -1248,13 +1345,16 @@ func tabTitle(mode leftMode) string {
 	case modeNetwork:
 		return "Network"
 	case modeRPCServer:
+		if m.cfg.RPCMode == "client" {
+			return "RPC Connection"
+		}
 		return "RPC Server"
 	default:
 		return "Models"
 	}
 }
 
-func tabInstructions(mode leftMode) string {
+func (m Model) tabInstructions(mode leftMode) string {
 	switch mode {
 	case modeRecents:
 		return "Select from your most recently run profiles to quickly re-run one."
@@ -1265,6 +1365,9 @@ func tabInstructions(mode leftMode) string {
 	case modeNetwork:
 		return "Switch between the RPC and internet network profiles, and view link status."
 	case modeRPCServer:
+		if m.cfg.RPCMode == "client" {
+			return "View the health of your RPC connection and remote llmctl status."
+		}
 		return "Enter to start or stop the RPC server. Press e to view its output log."
 	default:
 		return "Select from saved model profiles, or add new model profiles."
@@ -1374,9 +1477,9 @@ func (m Model) renderDetails(width int) string {
 	// so explain what arrowing down into it will show instead of an empty
 	// "(select a profile...)" placeholder that doesn't fit Recents/Settings.
 	if m.focus == focusTabs {
-		b.WriteString(modelStyle.Render(tabTitle(m.leftMode)))
+		b.WriteString(modelStyle.Render(m.tabTitle(m.leftMode)))
 		b.WriteString("\n\n")
-		b.WriteString(profileStyle.Render(tabInstructions(m.leftMode)))
+		b.WriteString(profileStyle.Render(m.tabInstructions(m.leftMode)))
 		return b.String()
 	}
 

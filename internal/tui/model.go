@@ -464,7 +464,7 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 
 	m.running = running
 
-	if m.cfg.RPCEnabled {
+	if m.cfg.RPCEnabled && m.cfg.RPCMode == "server" {
 		state, alive := m.mgr.RPCServerStatus()
 		m.rpcServerState = state
 		m.rpcServerAlive = alive
@@ -610,7 +610,7 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 		Running: running,
 	}
 
-	if m.cfg.RPCEnabled && m.rpcServerAlive {
+	if m.cfg.RPCEnabled && m.cfg.RPCMode == "server" && m.rpcServerAlive {
 		rpcInfo := &statusserver.RPCInfo{
 			Up:   true,
 			Host: m.cfg.RPCServerHost,
@@ -657,9 +657,13 @@ func (m Model) backgroundChecks() tea.Cmd {
 		cmds = append(cmds, checkVRAMCmd())
 	}
 	if m.cfg.RPCEnabled {
-		cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
-		if m.cfg.RemoteStatusAddr != "" {
-			cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
+		switch m.cfg.RPCMode {
+		case "server":
+			cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
+		case "client":
+			if m.cfg.RemoteStatusAddr != "" {
+				cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
+			}
 		}
 	}
 	return tea.Batch(cmds...)

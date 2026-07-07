@@ -37,16 +37,23 @@ var settingsCategories = []settingsCategoryDef{
 // Directories, but a struct (rather than dirsContentState directly) leaves
 // room to add another category's state alongside it later.
 type rpcContentState struct {
-	cursor              int // 0=toggle, 1=remote status addr, 2=endpoint, 3=binary(win)/nettab, 4=port(win)
-	remoteAddrEditing   bool
-	remoteAddrInput     textinput.Model
-	editing             bool
-	input               textinput.Model
-	rpcBinEditing       bool
-	rpcBinInput         textinput.Model
-	portEditing         bool
-	portInput           textinput.Model
-	err                 string
+	// cursor positions:
+	// 0 = toggle enabled
+	// 1 = select Client mode
+	// 2 = select Server mode
+	// when client: 3 = remote status addr, 4 = manual endpoint
+	// when server (windows): 3 = binary, 4 = port
+	// when server (linux+net): 3 = network tab
+	cursor            int
+	remoteAddrEditing bool
+	remoteAddrInput   textinput.Model
+	editing           bool
+	input             textinput.Model
+	rpcBinEditing     bool
+	rpcBinInput       textinput.Model
+	portEditing       bool
+	portInput         textinput.Model
+	err               string
 }
 
 type statusServerContentState struct {
@@ -132,11 +139,19 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "rpc":
-		maxRPCCursor := 2
-		if runtime.GOOS == "windows" {
-			maxRPCCursor = 4
-		} else if m.netSupported && m.cfg.RPCEnabled {
-			maxRPCCursor = 3
+		maxRPCCursor := 0
+		if m.cfg.RPCEnabled {
+			maxRPCCursor = 2 // mode selector rows always visible when enabled
+			switch m.cfg.RPCMode {
+			case "client":
+				maxRPCCursor = 4
+			case "server":
+				if runtime.GOOS == "windows" {
+					maxRPCCursor = 4
+				} else if m.netSupported {
+					maxRPCCursor = 3
+				}
+			}
 		}
 		next := m.settings.rpc.cursor + delta
 		switch {
@@ -173,6 +188,11 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 	case 0:
 		wasEnabled := m.cfg.RPCEnabled
 		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
+		if !m.cfg.RPCEnabled {
+			// clear mode when disabling so next enable starts fresh
+			m.cfg.RPCMode = ""
+			m.settings.rpc.cursor = 0
+		}
 		if m.cfg.RPCEnabled && !wasEnabled {
 			m.cfg.NetworkTabEnabled = true
 		}
@@ -181,30 +201,50 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case 1:
-		return m.openRemoteStatusAddrForm()
-	case 2:
-		return m.openRPCEndpointForm()
-	case 3:
-		if runtime.GOOS == "windows" {
-			return m.openRPCServerBinForm()
+		// Select Client mode
+		m.cfg.RPCMode = "client"
+		if err := m.saveConfig(); err != nil {
+			m.settings.rpc.err = err.Error()
 		}
-		if m.netSupported && m.cfg.RPCEnabled {
-			if !m.cfg.NetworkTabEnabled {
-				if _, err := exec.LookPath("nmcli"); err != nil {
-					m.settings.rpc.err = "nmcli not found — install NetworkManager to use the Network tab"
-					return m, nil
-				}
+		return m, nil
+	case 2:
+		// Select Server mode
+		m.cfg.RPCMode = "server"
+		if err := m.saveConfig(); err != nil {
+			m.settings.rpc.err = err.Error()
+		}
+		return m, nil
+	case 3:
+		switch m.cfg.RPCMode {
+		case "client":
+			return m.openRemoteStatusAddrForm()
+		case "server":
+			if runtime.GOOS == "windows" {
+				return m.openRPCServerBinForm()
 			}
-			m.cfg.NetworkTabEnabled = !m.cfg.NetworkTabEnabled
-			m.settings.rpc.err = ""
-			if err := m.saveConfig(); err != nil {
-				m.settings.rpc.err = err.Error()
+			if m.netSupported && m.cfg.RPCEnabled {
+				if !m.cfg.NetworkTabEnabled {
+					if _, err := exec.LookPath("nmcli"); err != nil {
+						m.settings.rpc.err = "nmcli not found — install NetworkManager to use the Network tab"
+						return m, nil
+					}
+				}
+				m.cfg.NetworkTabEnabled = !m.cfg.NetworkTabEnabled
+				m.settings.rpc.err = ""
+				if err := m.saveConfig(); err != nil {
+					m.settings.rpc.err = err.Error()
+				}
 			}
 		}
 		return m, nil
 	case 4:
-		if runtime.GOOS == "windows" {
-			return m.openRPCServerPortForm()
+		switch m.cfg.RPCMode {
+		case "client":
+			return m.openRPCEndpointForm()
+		case "server":
+			if runtime.GOOS == "windows" {
+				return m.openRPCServerPortForm()
+			}
 		}
 		return m, nil
 	}

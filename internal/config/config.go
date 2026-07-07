@@ -19,6 +19,7 @@ type Config struct {
 	ModelsDir   string                  `yaml:"models_dir,omitempty"`
 	ModelsDirs  []string                `yaml:"models_dirs,omitempty"`
 	RPCEnabled       bool   `yaml:"rpc_enabled,omitempty"`
+	RPCMode          string `yaml:"rpc_mode,omitempty"` // "client" or "server"
 	RPCEndpoint      string `yaml:"rpc_endpoint,omitempty"`
 	RPCServerBin     string `yaml:"rpc_server_bin,omitempty"`
 	RPCServerHost    string `yaml:"rpc_server_host,omitempty"`
