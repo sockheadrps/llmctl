@@ -136,9 +136,8 @@ func (m Model) renderRPCContent() string {
 	if m.cfg.RPCMode == "server" {
 		serverLabel = "[✓ Server ]"
 	}
-	fmt.Fprintf(&b, "%s%s  %s%s\n",
-		clientCursor, clientStyle.Render(clientLabel),
-		serverCursor, serverStyle.Render(serverLabel))
+	fmt.Fprintf(&b, "%s%s\n", clientCursor, clientStyle.Render(clientLabel))
+	fmt.Fprintf(&b, "%s%s\n", serverCursor, serverStyle.Render(serverLabel))
 
 	b.WriteString("\n")
 
