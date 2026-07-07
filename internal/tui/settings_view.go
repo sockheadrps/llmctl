@@ -145,27 +145,40 @@ func (m Model) renderRPCContent() string {
 	case "client":
 		b.WriteString(sectionTitleStyle.Render("Client"))
 		b.WriteString("\n")
+
 		remoteAddrLabel := "Remote Status Address"
 		if m.cfg.RemoteStatusAddr != "" {
 			remoteAddrLabel += " (" + m.cfg.RemoteStatusAddr + ")"
 		}
 		row(3, remoteAddrLabel)
+		if m.settings.rpc.remoteAddrEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Address:"), m.settings.rpc.remoteAddrInput.View())
+		}
+		if focused && m.settings.rpc.cursor == 3 && !m.settings.rpc.remoteAddrEditing {
+			b.WriteString(detailMutedStyle.Render("  The status server address of the remote llmctl (host:port).\n  RPC endpoint is auto-discovered from the status poll."))
+			b.WriteString("\n")
+			if m.cfg.RemoteStatusAddr != "" {
+				if m.discoveredRPCEndpoint != "" {
+					b.WriteString(runningStyle.Render("  Discovered: " + m.discoveredRPCEndpoint))
+				} else {
+					b.WriteString(detailMutedStyle.Render("  Discovered: (polling…)"))
+				}
+				b.WriteString("\n")
+			}
+		}
+
 		endpointLabel := "Manual RPC Endpoint"
 		if m.cfg.RPCEndpoint != "" {
 			endpointLabel += " (" + m.cfg.RPCEndpoint + ")"
 		}
 		row(4, endpointLabel)
-		b.WriteString("\n")
-		if m.cfg.RemoteStatusAddr != "" {
-			if m.discoveredRPCEndpoint != "" {
-				b.WriteString(runningStyle.Render("Discovered: " + m.discoveredRPCEndpoint))
-			} else {
-				b.WriteString(detailMutedStyle.Render("Discovered: (polling " + m.cfg.RemoteStatusAddr + "…)"))
-			}
+		if m.settings.rpc.editing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Endpoint:"), m.settings.rpc.input.View())
+		}
+		if focused && m.settings.rpc.cursor == 4 && !m.settings.rpc.editing {
+			b.WriteString(detailMutedStyle.Render("  Optional: used only if auto-discovery hasn't resolved yet."))
 			b.WriteString("\n")
 		}
-		b.WriteString(detailMutedStyle.Render("Set the remote llmctl's status server address.\nThe RPC endpoint is discovered automatically when the remote is up."))
-		b.WriteString("\n")
 
 	case "server":
 		b.WriteString(sectionTitleStyle.Render("Server"))
@@ -176,26 +189,25 @@ func (m Model) renderRPCContent() string {
 				binLabel += " (" + m.cfg.RPCServerBin + ")"
 			}
 			row(3, binLabel)
+			if m.settings.rpc.rpcBinEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Binary:"), m.settings.rpc.rpcBinInput.View())
+			}
 			row(4, "Port ("+strconv.Itoa(m.cfg.RPCServerPort)+")")
-			b.WriteString("\n")
-			b.WriteString(detailMutedStyle.Render("Configure the ggml-rpc-server binary and port."))
-			b.WriteString("\n")
+			if m.settings.rpc.portEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.rpc.portInput.View())
+			}
 		} else if m.netSupported {
 			netTabLabel := "Network Tab (Disabled)"
 			if m.cfg.NetworkTabEnabled {
 				netTabLabel = "Network Tab (Enabled)"
 			}
 			row(3, netTabLabel)
-			b.WriteString("\n")
 			if focused && m.settings.rpc.cursor == 3 {
 				b.WriteString(profileStyle.Render(
-					"Adds a Network tab for switching nmcli connections\n" +
-						"between internet and RPC ethernet without leaving llmctl.\n\n" +
-						"Requires: nmcli (NetworkManager) and polkit authorization.\n" +
-						"Optional: ethtool for link speed and carrier detection."))
-				b.WriteString("\n")
-			} else {
-				b.WriteString(detailMutedStyle.Render("Manage network switching for RPC ethernet connections."))
+					"  Adds a Network tab for switching nmcli connections\n" +
+						"  between internet and RPC ethernet without leaving llmctl.\n\n" +
+						"  Requires: nmcli (NetworkManager) and polkit authorization.\n" +
+						"  Optional: ethtool for link speed and carrier detection."))
 				b.WriteString("\n")
 			}
 		} else {
@@ -206,36 +218,6 @@ func (m Model) renderRPCContent() string {
 
 	default:
 		b.WriteString(detailMutedStyle.Render("Select Client or Server above."))
-		b.WriteString("\n")
-	}
-
-	// Inline forms
-	if m.settings.rpc.remoteAddrEditing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Remote Status Address:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.rpc.remoteAddrInput.View())
-		b.WriteString("\n")
-	}
-	if m.settings.rpc.editing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Manual RPC Endpoint:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.rpc.input.View())
-		b.WriteString("\n")
-	}
-	if m.settings.rpc.rpcBinEditing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("RPC Server Binary:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.rpc.rpcBinInput.View())
-		b.WriteString("\n")
-	}
-	if m.settings.rpc.portEditing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("RPC Server Port:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.rpc.portInput.View())
 		b.WriteString("\n")
 	}
 

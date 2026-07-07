@@ -410,13 +410,15 @@ func visibleModelKeys(cfg *config.Config) []string {
 	return keys
 }
 
-// buildSettingsRows lists the Settings tab's menu, derived from
-// settingsCategories (the same list backs the dedicated Settings screen's
-// left container) so the two stay in sync automatically.
-func buildSettingsRows() []row {
-	rows := make([]row, len(settingsCategories))
-	for i, c := range settingsCategories {
-		rows[i] = row{kind: rowSettingsCategory, modelKey: c.id, label: c.label}
+// buildSettingsRows lists the Settings tab's menu. Status Server is hidden
+// when RPC is in client mode (clients don't serve status).
+func (m Model) buildSettingsRows() []row {
+	var rows []row
+	for _, c := range settingsCategories {
+		if c.id == "status_server" && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" {
+			continue
+		}
+		rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})
 	}
 	return rows
 }

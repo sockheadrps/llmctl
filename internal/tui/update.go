@@ -38,7 +38,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case screenNewProfile:
 			m.form.advanceDescriptionScroll(m.formDescriptionLineCount(), m.formDescriptionVisibleLines())
 		case screenMain:
-			m.advanceDetailsScroll(m.mainDetailsLineCount(), m.mainDetailsVisibleLines())
+			// Don't auto-scroll while the user is navigating settings content —
+			// it fights cursor movement and scrolls options off-screen.
+			if m.focus != focusSettingsContent {
+				m.advanceDetailsScroll(m.mainDetailsLineCount(), m.mainDetailsVisibleLines())
+			}
 		}
 		return m, scrollTickCmd()
 
@@ -752,7 +756,7 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 			switch {
 			case next < 0:
 				m.focus = focusTabs
-			case next < len(buildSettingsRows()):
+			case next < len(m.buildSettingsRows()):
 				m.settingsCursor = next
 			}
 			return m, nil
@@ -917,7 +921,7 @@ func (m Model) currentRow() (row, bool) {
 		return m.recentRows[m.recentCursor], true
 
 	case modeSettings:
-		rows := buildSettingsRows()
+		rows := m.buildSettingsRows()
 		if m.settingsCursor < 0 || m.settingsCursor >= len(rows) {
 			return row{}, false
 		}
@@ -954,7 +958,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 		return m.activateSettingsContentRow()
 	}
 
-	if m.leftMode == modeRPCServer && m.focus == focusLeft {
+	if m.leftMode == modeRPCServer && m.focus == focusLeft && m.cfg.RPCMode == "server" {
 		return m.openRPCServerAction()
 	}
 

@@ -360,7 +360,7 @@ func (m Model) renderTabBarLabels() string {
 // sub-pages (currently just Model Directories).
 func (m Model) renderSettingsList(width int) string {
 	var b strings.Builder
-	rows := buildSettingsRows()
+	rows := m.buildSettingsRows()
 	textWidth := formRowTextWidth(width)
 	inSettings := m.focus == focusLeft || m.focus == focusSettingsContent
 	for i, r := range rows {

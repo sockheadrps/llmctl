@@ -29,7 +29,7 @@ type settingsCategoryDef struct {
 var settingsCategories = []settingsCategoryDef{
 	{id: "model_dirs", label: "Model Directories"},
 	{id: "llama_bin", label: "llama-server Binary"},
-	{id: "rpc", label: "RPC Server"},
+	{id: "rpc", label: "RPC"},
 	{id: "status_server", label: "Status Server"},
 }
 
