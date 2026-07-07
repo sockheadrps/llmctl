@@ -40,6 +40,21 @@ func (s *Server) RecentClientCount(window time.Duration) int {
 	return n
 }
 
+// RecentClientIPs returns the distinct remote IPs that have polled /status
+// within the given window.
+func (s *Server) RecentClientIPs(window time.Duration) []string {
+	cutoff := time.Now().Add(-window)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var ips []string
+	for ip, t := range s.clients {
+		if t.After(cutoff) {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
 // SetStatus replaces the current snapshot atomically.
 func (s *Server) SetStatus(st Status) {
 	s.mu.Lock()

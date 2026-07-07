@@ -540,20 +540,46 @@ func (m Model) renderRunning() string {
 	}
 	b.WriteString("\n")
 
-	if m.cfg.RPCEnabled {
+	if m.cfg.RPCEnabled && m.cfg.RPCMode != "client" {
 		b.WriteString(sectionTitleStyle.Render("RPC Server"))
 		b.WriteString("\n")
-		switch m.rpcServerHealthStatus() {
+		rpcSt := m.rpcServerHealthStatus()
+		switch rpcSt {
 		case health.StatusUp:
-			b.WriteString(runningStyle.Render("●") + " " + runningStyle.Render("up") + "  " + m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort))
+			b.WriteString(runningStyle.Render("● up") + "  " + detailMutedStyle.Render(m.cfg.RPCServerHost+":"+strconv.Itoa(m.cfg.RPCServerPort)))
 		case health.StatusDown:
-			b.WriteString(downStyle.Render("●") + " " + downStyle.Render("down"))
+			b.WriteString(downStyle.Render("● down"))
 		case health.StatusNotStarted:
 			b.WriteString(detailMutedStyle.Render("● not started"))
 		default:
-			b.WriteString(loadingStyle.Render("●") + " " + loadingStyle.Render("loading"))
+			b.WriteString(loadingStyle.Render("● loading"))
 		}
-		b.WriteString("\n\n")
+		b.WriteString("\n")
+		// Client connections and their loaded models
+		if m.statusServer != nil && rpcSt == health.StatusUp {
+			n := m.statusServer.RecentClientCount(45 * time.Second)
+			if n == 1 {
+				b.WriteString(profileStyle.Render("1 client connected"))
+			} else if n > 1 {
+				fmt.Fprintf(&b, "%s\n", profileStyle.Render(strconv.Itoa(n)+" clients connected"))
+			} else {
+				b.WriteString(detailMutedStyle.Render("no clients connected"))
+			}
+			b.WriteString("\n")
+			for ip, st := range m.clientStatuses {
+				if st == nil || len(st.Running) == 0 {
+					continue
+				}
+				for _, ri := range st.Running {
+					label := ri.Model + " / " + ri.Profile
+					fmt.Fprintf(&b, "  %s %s %s\n",
+						detailMutedStyle.Render(ip),
+						runningStyle.Render("●"),
+						profileStyle.Render(label))
+				}
+			}
+		}
+		b.WriteString("\n")
 	}
 
 	if len(m.running) == 0 {

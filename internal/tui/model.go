@@ -170,7 +170,8 @@ type Model struct {
 
 	statusServer          *statusserver.Server
 	remoteStatus          *statusserver.Status
-	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
+	clientStatuses        map[string]*statusserver.Status // IP → status for clients polling our status server
+	discoveredRPCEndpoint string                          // derived from remote status poll: host:rpc_port
 	rpcAddrCopied         bool // true briefly after copying the status server address
 	rpcIPCursor           int  // which LAN IP is selected on the RPC Server tab
 
@@ -650,6 +651,30 @@ func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
 	}
 }
 
+// clientStatusesMsg carries back-polled statuses from all clients connected
+// to our status server (server mode only).
+type clientStatusesMsg map[string]*statusserver.Status
+
+// pollClientStatusesCmd polls each recently-seen client's status server at
+// their IP and the default status server port to discover which models they
+// have running.
+func pollClientStatusesCmd(ips []string, port int) tea.Cmd {
+	return func() tea.Msg {
+		result := make(clientStatusesMsg, len(ips))
+		for _, ip := range ips {
+			addr := fmt.Sprintf("%s:%d", ip, port)
+			st, err := statusserver.PollAddr(addr)
+			if err == nil {
+				st := st
+				result[ip] = &st
+			} else {
+				result[ip] = nil
+			}
+		}
+		return result
+	}
+}
+
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
@@ -664,6 +689,15 @@ func (m Model) backgroundChecks() tea.Cmd {
 		switch m.cfg.RPCMode {
 		case "server":
 			cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
+			if m.statusServer != nil {
+				port := m.cfg.StatusServerPort
+				if port == 0 {
+					port = 11435
+				}
+				if ips := m.statusServer.RecentClientIPs(45 * time.Second); len(ips) > 0 {
+					cmds = append(cmds, pollClientStatusesCmd(ips, port))
+				}
+			}
 		case "client":
 			if m.cfg.RemoteStatusAddr != "" {
 				cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
