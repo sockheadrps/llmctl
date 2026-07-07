@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderSettingsDetail shows the given settings category's content in the
@@ -284,6 +286,16 @@ func (m Model) renderStatusServerContent() string {
 	var b strings.Builder
 	focused := m.focus == focusSettingsContent
 
+	row := func(idx int, label string, style lipgloss.Style) {
+		cursor := "  "
+		s := style
+		if focused && m.settings.statusSrv.cursor == idx {
+			cursor = cursorStyle.Render("> ")
+			s = selectedProfileStyle
+		}
+		fmt.Fprintf(&b, "%s%s\n", cursor, s.Render(label))
+	}
+
 	enabledLabel := "Disabled"
 	if m.cfg.StatusServerEnabled {
 		enabledLabel = "Enabled"
@@ -294,19 +306,24 @@ func (m Model) renderStatusServerContent() string {
 		host = "0.0.0.0"
 	}
 
-	rows := []string{
-		"Toggle Status Server (" + enabledLabel + ")",
-		"Host (" + host + ")",
-		"Port (" + strconv.Itoa(m.cfg.StatusServerPort) + ")",
+	row(0, "Toggle Status Server ("+enabledLabel+")", profileStyle)
+	row(1, "Host ("+host+")", profileStyle)
+	if m.settings.statusSrv.hostEditing {
+		fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Host:"), m.settings.statusSrv.hostInput.View())
 	}
-	for i, label := range rows {
-		cursor := "  "
-		style := profileStyle
-		if focused && m.settings.statusSrv.cursor == i {
-			cursor = cursorStyle.Render("> ")
-			style = selectedProfileStyle
+	row(2, "Port ("+strconv.Itoa(m.cfg.StatusServerPort)+")", profileStyle)
+	if m.settings.statusSrv.portEditing {
+		fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.statusSrv.portInput.View())
+	}
+
+	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
+		copyLabel := "Copy Windows Firewall Rule"
+		copyStyle := profileStyle
+		if m.settings.statusSrv.copied {
+			copyLabel = "✓ Copied to clipboard"
+			copyStyle = runningStyle
 		}
-		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
+		row(3, copyLabel, copyStyle)
 	}
 
 	b.WriteString("\n")
@@ -316,18 +333,13 @@ func (m Model) renderStatusServerContent() string {
 			"Default: 0.0.0.0:11435 (accessible from other machines)."))
 	b.WriteString("\n")
 
-	if m.settings.statusSrv.hostEditing {
+	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Host:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.statusSrv.hostInput.View())
+		b.WriteString(loadingStyle.Render("Windows Firewall may block inbound connections on Public networks."))
 		b.WriteString("\n")
-	}
-	if m.settings.statusSrv.portEditing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Port:"))
-		b.WriteString(" ")
-		b.WriteString(m.settings.statusSrv.portInput.View())
+		b.WriteString(detailMutedStyle.Render(
+			"Fix: set your network to Private in Windows settings, or\n" +
+				"copy the firewall rule above and run it as Administrator."))
 		b.WriteString("\n")
 	}
 

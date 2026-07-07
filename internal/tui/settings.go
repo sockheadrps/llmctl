@@ -62,6 +62,7 @@ type statusServerContentState struct {
 	hostInput   textinput.Model
 	portEditing bool
 	portInput   textinput.Model
+	copied      bool // true briefly after copying the firewall rule
 	err         string
 }
 
@@ -162,7 +163,10 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "status_server":
-		const maxStatusSrvCursor = 2
+		maxStatusSrvCursor := 2
+		if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
+			maxStatusSrvCursor = 3
+		}
 		next := m.settings.statusSrv.cursor + delta
 		switch {
 		case next < 0:
@@ -375,7 +379,29 @@ func (m Model) activateStatusServerRow() (tea.Model, tea.Cmd) {
 		return m.openStatusServerHostForm()
 	case 2:
 		return m.openStatusServerPortForm()
+	case 3:
+		if runtime.GOOS == "windows" {
+			return m.copyFirewallRule()
+		}
 	}
+	return m, nil
+}
+
+func (m Model) copyFirewallRule() (tea.Model, tea.Cmd) {
+	port := m.cfg.StatusServerPort
+	if port == 0 {
+		port = 11435
+	}
+	rule := fmt.Sprintf(
+		`netsh advfirewall firewall add rule name="llmctl status server" dir=in action=allow protocol=TCP localport=%d profile=private`,
+		port,
+	)
+	if err := writeClipboard(rule); err != nil {
+		m.settings.statusSrv.err = "copy failed: " + err.Error()
+		return m, nil
+	}
+	m.settings.statusSrv.copied = true
+	m.settings.statusSrv.err = ""
 	return m, nil
 }
 
