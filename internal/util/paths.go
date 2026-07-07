@@ -51,6 +51,15 @@ func RecentFile() (string, error) {
 	return filepath.Join(home, "recent.json"), nil
 }
 
+// RPCStateFile returns the path to the JSON file tracking the RPC server state.
+func RPCStateFile() (string, error) {
+	home, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "rpc_state.json"), nil
+}
+
 // DefaultConfigPath returns the default location for config.yaml:
 // ~/.llmctl/config.yaml.
 func DefaultConfigPath() (string, error) {

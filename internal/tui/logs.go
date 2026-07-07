@@ -36,6 +36,19 @@ func (m Model) openLogsForCurrent() (tea.Model, tea.Cmd) {
 		return m.openLogs(m.errLogPath, "error")
 	}
 
+	if m.leftMode == modeRPCServer {
+		logPath := m.rpcServerState.LogFile
+		if logPath == "" {
+			var err error
+			logPath, err = runtime.RPCServerLogPath()
+			if err != nil {
+				m.setError(err, "")
+				return m, nil
+			}
+		}
+		return m.openLogs(logPath, "RPC Server")
+	}
+
 	if m.focus == focusRunning {
 		if m.runningCursor < 0 || m.runningCursor >= len(m.running) {
 			return m, nil

@@ -13,12 +13,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/runtime"
+	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
 // screen selects which full-screen view is active.
@@ -37,6 +39,7 @@ const (
 	screenExportArgs
 	screenNetworkSwitch
 	screenNetworkPicker
+	screenRPCServerAction
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.
@@ -66,6 +69,7 @@ const (
 	modeSettings
 	modeRunning
 	modeNetwork
+	modeRPCServer
 )
 
 // rowKind identifies what a flattened tree row represents.
@@ -113,6 +117,12 @@ type vramMsg struct {
 type tickMsg time.Time
 type scrollTickMsg time.Time
 
+// remoteStatusMsg carries the result of polling a remote llmctl's status server.
+type remoteStatusMsg struct {
+	status *statusserver.Status
+	err    error
+}
+
 const (
 	scrollTickInterval = 500 * time.Millisecond
 	scrollPauseTicks   = 2
@@ -144,6 +154,8 @@ type Model struct {
 
 	running          []models.Running
 	runningCursor    int
+	rpcServerState runtime.RPCServerState
+	rpcServerAlive bool
 	health           healthMsg
 	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
 
@@ -155,6 +167,10 @@ type Model struct {
 	gpuName      string
 	gpuUsage     gpu.Usage
 	gpuByPID     map[int]int64
+
+	statusServer         *statusserver.Server
+	remoteStatus         *statusserver.Status
+	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view
@@ -177,10 +193,11 @@ type Model struct {
 	confirm        confirmState
 	logs           logsState
 	settings       settingsState
-	runningAction  runningActionState
-	stopConfirm    stopConfirmState
-	exportArgs     exportArgsState
-	templatePicker templatePickerState
+	runningAction      runningActionState
+	rpcServerActionState rpcServerActionState
+	stopConfirm        stopConfirmState
+	exportArgs         exportArgsState
+	templatePicker     templatePickerState
 
 	tokHistory map[string][]float64
 
@@ -228,6 +245,12 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
 			m.gpuName = name
+		}
+	}
+	if cfg.StatusServerEnabled {
+		srv := statusserver.NewServer()
+		if err := srv.Start(cfg.StatusServerHost, cfg.StatusServerPort); err == nil {
+			m.statusServer = srv
 		}
 	}
 	m.rebuildRows()
@@ -441,6 +464,12 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 
 	m.running = running
 
+	if m.cfg.RPCEnabled {
+		state, alive := m.mgr.RPCServerStatus()
+		m.rpcServerState = state
+		m.rpcServerAlive = alive
+	}
+
 	// Mark any instance that just appeared as pending so health checks keep
 	// it in the "loading" state until it passes its first health check.
 	for _, r := range m.running {
@@ -550,6 +579,73 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 	_ = m.saveConfig()
 }
 
+// pushStatusServer updates the local status server snapshot with current state.
+// No-op when the status server is not running.
+func (m *Model) pushStatusServer() {
+	if m.statusServer == nil {
+		return
+	}
+	m.statusServer.SetStatus(m.buildStatusSnapshot())
+}
+
+// buildStatusSnapshot assembles a statusserver.Status from current model state.
+func (m Model) buildStatusSnapshot() statusserver.Status {
+	running := make([]statusserver.RunningInfo, 0, len(m.running))
+	for _, r := range m.running {
+		key := r.ModelKey + "/" + r.ProfileKey
+		info := statusserver.RunningInfo{
+			Model:   r.ModelName,
+			Profile: r.ProfileName,
+			Port:    r.Port,
+			TokS:    m.tokRates[key],
+		}
+		if mb, ok := m.gpuByPID[r.PID]; ok {
+			info.VRAMMiB = mb
+		}
+		running = append(running, info)
+	}
+
+	st := statusserver.Status{
+		Version: build.Version,
+		Running: running,
+	}
+
+	if m.cfg.RPCEnabled && m.rpcServerAlive {
+		rpcInfo := &statusserver.RPCInfo{
+			Up:   true,
+			Host: m.cfg.RPCServerHost,
+			Port: m.cfg.RPCServerPort,
+		}
+		if mb, ok := m.gpuByPID[m.rpcServerState.PID]; ok {
+			rpcInfo.VRAMMiB = mb
+		}
+		st.RPCServer = rpcInfo
+	}
+
+	if m.gpuAvailable && m.gpuUsage.TotalMiB > 0 {
+		st.GPU = &statusserver.GPUInfo{
+			Name:     m.gpuName,
+			TotalMiB: m.gpuUsage.TotalMiB,
+			UsedMiB:  m.gpuUsage.UsedMiB,
+		}
+	}
+
+	return st
+}
+
+// pollRemoteStatusCmd polls the remote llmctl's status server at remoteStatusAddr
+// ("host:port"). On success the caller derives the RPC endpoint from the
+// response's rpc_server fields using the same host.
+func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
+	return func() tea.Msg {
+		st, err := statusserver.PollAddr(remoteStatusAddr)
+		if err != nil {
+			return remoteStatusMsg{err: err}
+		}
+		return remoteStatusMsg{status: &st}
+	}
+}
+
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
@@ -559,6 +655,12 @@ func (m Model) backgroundChecks() tea.Cmd {
 	}
 	if m.gpuAvailable {
 		cmds = append(cmds, checkVRAMCmd())
+	}
+	if m.cfg.RPCEnabled {
+		cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
+		if m.cfg.RemoteStatusAddr != "" {
+			cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
+		}
 	}
 	return tea.Batch(cmds...)
 }
@@ -661,5 +763,29 @@ func checkVRAMCmd() tea.Cmd {
 			byPID = nil
 		}
 		return vramMsg{usage: usage, byPID: byPID}
+	}
+}
+
+// checkRPCServerHealthCmd checks the ggml-rpc-server health.
+// PID is the primary signal: if the process is alive, it's up — a TCP probe
+// would fail while the server is busy handling an existing RPC connection
+// (e.g. a model loading on the remote machine). The TCP probe is only used
+// as a fallback to detect an externally-started server with no state file.
+func checkRPCServerHealthCmd(mgr *runtime.Manager, host string, port int) tea.Cmd {
+	return func() tea.Msg {
+		state, running := mgr.RPCServerStatus()
+		if running {
+			_ = state
+			return healthMsg{"rpc-server": health.StatusUp}
+		}
+		// PID dead or no state file.
+		if mgr.HasRPCStateFile() {
+			return healthMsg{"rpc-server": health.StatusDown}
+		}
+		// No state file — check if something external is on the port.
+		if health.ProbeRPCPort(host, port) {
+			return healthMsg{"rpc-server": health.StatusUp}
+		}
+		return healthMsg{"rpc-server": health.StatusNotStarted}
 	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
+	"github.com/sockheadrps/llmctl/internal/runtime"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -28,6 +30,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tickCmd()
 		}
 		m.refreshRunning(true)
+		m.pushStatusServer()
 		return m, tea.Batch(tickCmd(), m.backgroundChecks())
 
 	case scrollTickMsg:
@@ -60,6 +63,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuByPID = msg.byPID
+		return m, nil
+
+	case remoteStatusMsg:
+		if msg.err == nil {
+			m.remoteStatus = msg.status
+			// Derive the RPC endpoint from the status response: same host the
+			// status server is on, but the ggml-rpc-server port from the payload.
+			if msg.status.RPCServer != nil && msg.status.RPCServer.Up && msg.status.RPCServer.Port > 0 {
+				host, _, err := net.SplitHostPort(m.cfg.RemoteStatusAddr)
+				if err != nil {
+					host = m.cfg.RemoteStatusAddr
+				}
+				m.discoveredRPCEndpoint = fmt.Sprintf("%s:%d", host, msg.status.RPCServer.Port)
+			} else {
+				m.discoveredRPCEndpoint = ""
+			}
+		} else {
+			m.discoveredRPCEndpoint = ""
+		}
 		return m, nil
 
 	case netStatusMsg:
@@ -120,6 +142,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, nil
 
+	case rpcServerStartMsg:
+		m.starting = false
+		m.startingLabel = ""
+		if msg.err != nil {
+			m.setError(msg.err, "")
+			return m, nil
+		}
+		m.refreshRunning(false)
+		m.clearError()
+		return m, m.backgroundChecks()
+
+	case rpcServerStopMsg:
+		m.stopping = false
+		m.stoppingLabel = ""
+		if msg.err != nil {
+			m.setError(msg.err, "")
+			return m, nil
+		}
+		m.refreshRunning(false)
+		m.clearError()
+		return m, m.backgroundChecks()
+
+	case rpcServerClearMsg:
+		if msg.err != nil {
+			m.setError(msg.err, "")
+			return m, nil
+		}
+		m.rpcServerState = runtime.RPCServerState{}
+		m.rpcServerAlive = false
+		delete(m.health, "rpc-server")
+		m.clearError()
+		return m, m.backgroundChecks()
+
 	case tea.MouseMsg:
 		if m.screen == screenMain {
 			return m.updateMouse(msg)
@@ -153,6 +208,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateNetworkSwitch(msg)
 		case screenNetworkPicker:
 			return m.updateNetworkPicker(msg)
+		case screenRPCServerAction:
+			return m.updateRPCServerAction(msg)
 		default:
 			return m.updateMain(msg)
 		}
@@ -264,6 +321,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.bin.input, cmd = m.settings.bin.input.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.rpc.remoteAddrEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.remoteAddrEditing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRemoteStatusAddrForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.remoteAddrInput, cmd = m.settings.rpc.remoteAddrInput.Update(msg)
+		return m, cmd
+	}
 	if m.focus == focusSettingsContent && m.settings.rpc.editing {
 		switch msg.String() {
 		case "esc":
@@ -277,17 +347,56 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.rpc.input, cmd = m.settings.rpc.input.Update(msg)
 		return m, cmd
 	}
-	if m.focus == focusSettingsContent && m.settings.rpc.binEditing {
+	if m.focus == focusSettingsContent && m.settings.rpc.rpcBinEditing {
 		switch msg.String() {
 		case "esc":
-			m.settings.rpc.binEditing = false
+			m.settings.rpc.rpcBinEditing = false
 			m.settings.rpc.err = ""
 			return m, nil
 		case "enter":
-			return m.submitRPCBinForm()
+			return m.submitRPCServerBinForm()
 		}
 		var cmd tea.Cmd
-		m.settings.rpc.binInput, cmd = m.settings.rpc.binInput.Update(msg)
+		m.settings.rpc.rpcBinInput, cmd = m.settings.rpc.rpcBinInput.Update(msg)
+		return m, cmd
+	}
+	if m.focus == focusSettingsContent && m.settings.rpc.portEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.portEditing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitRPCServerPortForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.portInput, cmd = m.settings.rpc.portInput.Update(msg)
+		return m, cmd
+	}
+	if m.focus == focusSettingsContent && m.settings.statusSrv.hostEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.statusSrv.hostEditing = false
+			m.settings.statusSrv.err = ""
+			return m, nil
+		case "enter":
+			return m.submitStatusServerHostForm()
+		}
+		var cmd tea.Cmd
+		m.settings.statusSrv.hostInput, cmd = m.settings.statusSrv.hostInput.Update(msg)
+		return m, cmd
+	}
+	if m.focus == focusSettingsContent && m.settings.statusSrv.portEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.statusSrv.portEditing = false
+			m.settings.statusSrv.err = ""
+			return m, nil
+		case "enter":
+			return m.submitStatusServerPortForm()
+		}
+		var cmd tea.Cmd
+		m.settings.statusSrv.portInput, cmd = m.settings.statusSrv.portInput.Update(msg)
 		return m, cmd
 	}
 
@@ -551,6 +660,13 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 	case focusTabs:
 		if m.leftMode > modeModels {
 			m.leftMode--
+			// Skip hidden optional tabs.
+			if m.leftMode == modeRPCServer && !m.cfg.RPCEnabled {
+				m.leftMode--
+			}
+			if m.leftMode == modeNetwork && !m.networkTabVisible() {
+				m.leftMode--
+			}
 		}
 	}
 	return m, nil
@@ -568,8 +684,15 @@ func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 		if m.networkTabVisible() {
 			maxMode = modeNetwork
 		}
+		if m.cfg.RPCEnabled {
+			maxMode = modeRPCServer
+		}
 		if m.leftMode < maxMode {
 			m.leftMode++
+			// Skip hidden optional tabs.
+			if m.leftMode == modeNetwork && !m.networkTabVisible() {
+				m.leftMode++
+			}
 		}
 	case focusLeft:
 		if m.leftMode == modeModels {
@@ -580,7 +703,8 @@ func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 		// The Running tab already shows this same list in the left pane
 		// itself, so jumping to the (now absent, for this tab) glance box
 		// would just strand focus with nothing visibly highlighted.
-		if m.leftMode != modeRunning && len(m.running) > 0 {
+		// The RPC Server tab similarly manages everything in the left pane.
+		if m.leftMode != modeRunning && m.leftMode != modeRPCServer && len(m.running) > 0 {
 			m.focus = focusRunning
 		}
 	}
@@ -640,6 +764,12 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 				m.focus = focusTabs
 			case next < len(m.running):
 				m.runningCursor = next
+			}
+			return m, nil
+
+		case modeRPCServer:
+			if delta < 0 {
+				m.focus = focusTabs
 			}
 			return m, nil
 
@@ -822,6 +952,10 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 		return m, nil
 	case focusSettingsContent:
 		return m.activateSettingsContentRow()
+	}
+
+	if m.leftMode == modeRPCServer && m.focus == focusLeft {
+		return m.openRPCServerAction()
 	}
 
 	if m.leftMode == modeNetwork && m.focus == focusLeft {

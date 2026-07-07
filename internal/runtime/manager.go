@@ -20,7 +20,8 @@ import (
 // Manager coordinates starting/stopping llama-server processes and
 // persisting their state to disk.
 type Manager struct {
-	statePath string
+	statePath   string
+	rpcStatePath string
 }
 
 // NewManager creates a Manager backed by the default state file location.
@@ -29,7 +30,11 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{statePath: statePath}, nil
+	rpcStatePath, err := util.RPCStateFile()
+	if err != nil {
+		return nil, err
+	}
+	return &Manager{statePath: statePath, rpcStatePath: rpcStatePath}, nil
 }
 
 // LogPath returns the deterministic log file location for a model+profile
@@ -71,7 +76,9 @@ func (mgr *Manager) List() ([]models.Running, error) {
 // Start launches modelKey/profileKey from cfg, records it in the state
 // file, and returns the resulting Running entry. It refuses to start a
 // model+profile pair that is already running.
-func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (models.Running, error) {
+// Start launches a model profile. rpcEndpointOverride, when non-empty, is used
+// as the --rpc endpoint instead of cfg.RPCEndpoint (e.g. an auto-discovered addr).
+func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEndpointOverride string) (models.Running, error) {
 	m, p, err := cfg.FindProfile(modelKey, profileKey)
 	if err != nil {
 		return models.Running{}, err
@@ -103,8 +110,12 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string) (mode
 	if p.RPCEnabled != nil {
 		useRPC = *p.RPCEnabled
 	}
-	if useRPC && strings.TrimSpace(cfg.RPCEndpoint) != "" {
-		rpcEndpoint = strings.TrimSpace(cfg.RPCEndpoint)
+	if useRPC {
+		if strings.TrimSpace(rpcEndpointOverride) != "" {
+			rpcEndpoint = strings.TrimSpace(rpcEndpointOverride)
+		} else if strings.TrimSpace(cfg.RPCEndpoint) != "" {
+			rpcEndpoint = strings.TrimSpace(cfg.RPCEndpoint)
+		}
 	}
 
 	bin := cfg.LlamaServerBin
@@ -244,4 +255,96 @@ func (mgr *Manager) Find(modelKey, profileKey string) (models.Running, bool, err
 		}
 	}
 	return models.Running{}, false, nil
+}
+
+// StartRPCServer launches the ggml-rpc-server using cfg settings, saves
+// its state, and returns the resulting RPCServerState.
+func (mgr *Manager) StartRPCServer(cfg *config.Config) error {
+	host := cfg.RPCServerHost
+	port := cfg.RPCServerPort
+
+	if !portAvailable(host, port) {
+		return fmt.Errorf("port %d is already in use", port)
+	}
+
+	logDir, err := util.LogDir()
+	if err != nil {
+		return err
+	}
+	logPath := filepath.Join(logDir, "rpc-server.log")
+
+	bin := cfg.RPCServerBin
+
+	pid, err := process.StartRPC(bin, host, port, logPath)
+	if err != nil {
+		return err
+	}
+
+	state := &RPCServerState{
+		PID:       pid,
+		Host:      host,
+		Port:      port,
+		LogFile:   logPath,
+		StartedAt: time.Now(),
+	}
+
+	if err := SaveRPCState(mgr.rpcStatePath, state); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// StopRPCServer terminates the ggml-rpc-server process and clears its state.
+func (mgr *Manager) StopRPCServer() error {
+	state, err := LoadRPCState(mgr.rpcStatePath)
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return fmt.Errorf("rpc-server is not running")
+	}
+
+	if err := process.Stop(state.PID); err != nil {
+		return err
+	}
+
+	return ClearRPCState(mgr.rpcStatePath)
+}
+
+// HasRPCStateFile reports whether a state file exists for the RPC server,
+// regardless of whether the stored PID is still alive. Use this to
+// distinguish "crashed/errored" (file exists, dead PID) from "not started"
+// (no file at all).
+func (mgr *Manager) HasRPCStateFile() bool {
+	raw, _ := LoadRPCStateRaw(mgr.rpcStatePath)
+	return raw != nil
+}
+
+// ClearRPCServer removes a stale RPC server state file without attempting
+// to kill any process. Use this to reset the "down/errored" state when the
+// process has already died on its own.
+func (mgr *Manager) ClearRPCServer() error {
+	return ClearRPCState(mgr.rpcStatePath)
+}
+
+// RPCServerLogPath returns the canonical log path for the RPC server,
+// regardless of whether it has been started yet.
+func RPCServerLogPath() (string, error) {
+	logDir, err := util.LogDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(logDir, "rpc-server.log"), nil
+}
+
+// RPCServerStatus returns the current RPC server state and whether it is
+// believed to be running. Returns zero state and false if no state file
+// exists or the PID is dead.
+func (mgr *Manager) RPCServerStatus() (RPCServerState, bool) {
+	state, err := LoadRPCState(mgr.rpcStatePath)
+	if err != nil || state == nil {
+		return RPCServerState{}, false
+	}
+	return *state, true
 }

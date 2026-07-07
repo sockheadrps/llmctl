@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +31,8 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 		b.WriteString(m.renderBinContent())
 	case "rpc":
 		b.WriteString(m.renderRPCContent())
+	case "status_server":
+		b.WriteString(m.renderStatusServerContent())
 	}
 
 	if categoryID == "model_dirs" && m.settings.dirs.err != "" {
@@ -42,6 +46,10 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 	if categoryID == "rpc" && m.settings.rpc.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.rpc.err))
+	}
+	if categoryID == "status_server" && m.settings.statusSrv.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.statusSrv.err))
 	}
 
 	return b.String()
@@ -86,7 +94,14 @@ func (m Model) renderRPCContent() string {
 		enabledLabel = "Enabled"
 	}
 
-	rows := []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"}
+	remoteAddrLabel := "Remote Status Address"
+	if m.cfg.RemoteStatusAddr != "" {
+		remoteAddrLabel += " (" + m.cfg.RemoteStatusAddr + ")"
+	}
+	rows := []string{"Toggle RPC (" + enabledLabel + ")", remoteAddrLabel, "Endpoint (manual fallback)"}
+	if runtime.GOOS == "windows" {
+		rows = append(rows, "RPC Server Binary", "RPC Server Port")
+	}
 	if m.netSupported && m.cfg.RPCEnabled {
 		netTabLabel := "Network Tab (Disabled)"
 		if m.cfg.NetworkTabEnabled {
@@ -105,19 +120,34 @@ func (m Model) renderRPCContent() string {
 		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
 	}
 
+	b.WriteString("\n")
+	if m.cfg.RemoteStatusAddr != "" {
+		b.WriteString(profileStyle.Render("Remote status: " + m.cfg.RemoteStatusAddr))
+		b.WriteString("\n")
+		if m.discoveredRPCEndpoint != "" {
+			b.WriteString(runningStyle.Render("Discovered RPC: " + m.discoveredRPCEndpoint))
+		} else {
+			b.WriteString(detailMutedStyle.Render("Discovered RPC: (waiting for status poll)"))
+		}
+		b.WriteString("\n")
+	}
 	endpoint := m.cfg.RPCEndpoint
 	if endpoint == "" {
 		endpoint = "(not set)"
 	}
-	rpcBin := m.cfg.RPCServerBin
-	if rpcBin == "" {
-		rpcBin = "(uses default binary)"
+	b.WriteString(profileStyle.Render("Manual endpoint: " + endpoint))
+	b.WriteString("\n")
+
+	if runtime.GOOS == "windows" {
+		rpcBin := m.cfg.RPCServerBin
+		if rpcBin == "" {
+			rpcBin = "(uses default binary)"
+		}
+		b.WriteString(profileStyle.Render("Server Bin:  " + rpcBin))
+		b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Server Port: " + strconv.Itoa(m.cfg.RPCServerPort)))
+		b.WriteString("\n")
 	}
-	b.WriteString("\n")
-	b.WriteString(profileStyle.Render("Endpoint: " + endpoint))
-	b.WriteString("\n")
-	b.WriteString(profileStyle.Render("Binary:   " + rpcBin))
-	b.WriteString("\n")
 
 	if focused && m.settings.rpc.cursor == 3 && m.netSupported && m.cfg.RPCEnabled {
 		b.WriteString("\n")
@@ -132,19 +162,34 @@ func (m Model) renderRPCContent() string {
 		"Disable this if you manage network switching yourself and\n" +
 		"don't need llmctl to control NetworkManager.",
 ));b.WriteString("\n")
+	} else if runtime.GOOS == "windows" {
+		b.WriteString(detailMutedStyle.Render("Configure the ggml-rpc-server binary path and listening port."))
+		b.WriteString("\n")
 	} else {
 		b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
 		b.WriteString("\n")
 	}
 
-	if m.settings.rpc.editing {
+	if m.settings.rpc.remoteAddrEditing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Endpoint:"));b.WriteString(" ");b.WriteString(m.settings.rpc.input.View())
+		b.WriteString(formLabelStyle.Render("Remote Status Address:"))
+		b.WriteString(" ")
+		b.WriteString(m.settings.rpc.remoteAddrInput.View())
 		b.WriteString("\n")
 	}
-	if m.settings.rpc.binEditing {
+	if m.settings.rpc.editing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:"));b.WriteString(" ");b.WriteString(m.settings.rpc.binInput.View())
+		b.WriteString(formLabelStyle.Render("Manual Endpoint:"));b.WriteString(" ");b.WriteString(m.settings.rpc.input.View())
+		b.WriteString("\n")
+	}
+	if m.settings.rpc.rpcBinEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("RPC Server Binary:"));b.WriteString(" ");b.WriteString(m.settings.rpc.rpcBinInput.View())
+		b.WriteString("\n")
+	}
+	if m.settings.rpc.portEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("RPC Server Port:"));b.WriteString(" ");b.WriteString(m.settings.rpc.portInput.View())
 		b.WriteString("\n")
 	}
 
@@ -201,6 +246,60 @@ func (m Model) renderDirsContent() string {
 			label = "Edit Directory:"
 		}
 		b.WriteString(formLabelStyle.Render(label));b.WriteString(" ");b.WriteString(m.settings.dirs.input.View())
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m Model) renderStatusServerContent() string {
+	var b strings.Builder
+	focused := m.focus == focusSettingsContent
+
+	enabledLabel := "Disabled"
+	if m.cfg.StatusServerEnabled {
+		enabledLabel = "Enabled"
+	}
+
+	host := m.cfg.StatusServerHost
+	if host == "" {
+		host = "0.0.0.0"
+	}
+
+	rows := []string{
+		"Toggle Status Server (" + enabledLabel + ")",
+		"Host (" + host + ")",
+		"Port (" + strconv.Itoa(m.cfg.StatusServerPort) + ")",
+	}
+	for i, label := range rows {
+		cursor := "  "
+		style := profileStyle
+		if focused && m.settings.statusSrv.cursor == i {
+			cursor = cursorStyle.Render("> ")
+			style = selectedProfileStyle
+		}
+		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
+	}
+
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render(
+		"Serves GET /status as JSON so other llmctl instances\n" +
+			"on the same LAN can poll model name, VRAM and tok/s.\n" +
+			"Default: 0.0.0.0:11435 (accessible from other machines)."))
+	b.WriteString("\n")
+
+	if m.settings.statusSrv.hostEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Host:"))
+		b.WriteString(" ")
+		b.WriteString(m.settings.statusSrv.hostInput.View())
+		b.WriteString("\n")
+	}
+	if m.settings.statusSrv.portEditing {
+		b.WriteString("\n")
+		b.WriteString(formLabelStyle.Render("Port:"))
+		b.WriteString(" ")
+		b.WriteString(m.settings.statusSrv.portInput.View())
 		b.WriteString("\n")
 	}
 

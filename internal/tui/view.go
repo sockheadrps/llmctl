@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -13,6 +14,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/process"
+	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -99,6 +101,8 @@ func (m Model) View() string {
 		return overlayCenter(m.viewMain(), m.viewNetworkSwitchModal())
 	case screenNetworkPicker:
 		return overlayCenter(m.viewMain(), m.viewNetworkPickerModal())
+	case screenRPCServerAction:
+		return overlayCenter(m.viewMain(), m.viewRPCServerActionModal())
 	default:
 		return m.viewMain()
 	}
@@ -130,15 +134,10 @@ func (m Model) viewMain() string {
 	leftH := max(lipgloss.Height(leftMeasureStyle.Render(leftContent)), targetLeftH)
 
 	var right string
-	if m.leftMode == modeRunning {
-		// The Running tab's own list already lives in the left pane, so
-		// the right column collapses to a single box — the selected
-		// instance's output — instead of the usual stacked Running+Details
-		// boxes, which would just repeat the same list a second time.
-		// Unlike the other panes, this content is unbounded (raw process
-		// output), so it's fit *into* leftH rather than growing leftH to
-		// match it — otherwise a large log tail blows both boxes past the
-		// terminal's actual height.
+	if m.leftMode == modeRunning || m.leftMode == modeRPCServer {
+		// These tabs manage their content entirely in the left pane; the
+		// right column shows a single log-tail box rather than the usual
+		// stacked Running+Details pair, which would repeat the same data.
 		right = m.renderRunningOutputColumn(rightW, leftH)
 	} else {
 		runningBoxStyle := paneStyle
@@ -239,6 +238,8 @@ func (m Model) helpText() string {
 		switch m.leftMode {
 		case modeRunning:
 			return "↑↓/wasd move · enter/space stop · c copy endpoint · q quit"
+		case modeRPCServer:
+			return "enter start/stop · e view output · q quit"
 		case modeRecents:
 			return "↑↓/wasd move · enter/space run · q quit"
 		case modeSettings:
@@ -271,6 +272,8 @@ func (m Model) renderLeftPaneContent(leftW int) string {
 			return m.renderNetworkList(leftW)
 		}
 		return m.renderModelsTree(leftW)
+	case modeRPCServer:
+		return m.renderRPCServerTab()
 	default:
 		return m.renderModelsTree(leftW)
 	}
@@ -320,6 +323,12 @@ func (m Model) renderTabBarLabels() string {
 			mode  leftMode
 			label string
 		}{modeNetwork, "Network"})
+	}
+	if m.cfg.RPCEnabled {
+		tabs = append(tabs, struct {
+			mode  leftMode
+			label string
+		}{modeRPCServer, "RPC Server"})
 	}
 
 	tabFocused := m.focus == focusTabs
@@ -526,6 +535,22 @@ func (m Model) renderRunning() string {
 	}
 	b.WriteString("\n")
 
+	if m.cfg.RPCEnabled {
+		b.WriteString(sectionTitleStyle.Render("RPC Server"))
+		b.WriteString("\n")
+		switch m.rpcServerHealthStatus() {
+		case health.StatusUp:
+			b.WriteString(runningStyle.Render("●") + " " + runningStyle.Render("up") + "  " + m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort))
+		case health.StatusDown:
+			b.WriteString(downStyle.Render("●") + " " + downStyle.Render("down"))
+		case health.StatusNotStarted:
+			b.WriteString(detailMutedStyle.Render("● not started"))
+		default:
+			b.WriteString(loadingStyle.Render("●") + " " + loadingStyle.Render("loading"))
+		}
+		b.WriteString("\n\n")
+	}
+
 	if len(m.running) == 0 {
 		b.WriteString(profileStyle.Render("(nothing running)"))
 		return b.String()
@@ -610,6 +635,82 @@ func (m Model) renderRunningTabList(width int) string {
 	return b.String()
 }
 
+// renderRPCServerTab renders the RPC Server tab's left pane: status, endpoint,
+// and config summary. Enter opens the start/stop/view-output modal.
+func (m Model) renderRPCServerTab() string {
+	var b strings.Builder
+
+	focused := m.focus == focusLeft
+	cursor := "  "
+	style := profileStyle
+	if focused {
+		cursor = cursorStyle.Render("> ")
+		style = selectedProfileStyle
+	}
+
+	rpcStatus := m.rpcServerHealthStatus()
+	endpoint := m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort)
+
+	var statusStr string
+	switch rpcStatus {
+	case health.StatusUp:
+		statusStr = runningStyle.Render("● up")
+		b.WriteString(cursor + style.Render("RPC Server") + "  " + statusStr)
+		b.WriteString("\n")
+		b.WriteString("  " + profileStyle.Render(endpoint))
+	case health.StatusDown:
+		statusStr = downStyle.Render("● down")
+		b.WriteString(cursor + style.Render("RPC Server") + "  " + statusStr)
+		b.WriteString("\n")
+		b.WriteString("  " + detailMutedStyle.Render("process exited — enter to view logs or clear"))
+	default: // StatusNotStarted
+		b.WriteString(cursor + style.Render("RPC Server") + "  " + detailMutedStyle.Render("not started"))
+		b.WriteString("\n")
+		b.WriteString("  " + profileStyle.Render(endpoint))
+	}
+	b.WriteString("\n\n")
+
+	if m.cfg.RemoteStatusAddr != "" {
+		b.WriteString(profileStyle.Render("Remote status: " + m.cfg.RemoteStatusAddr))
+		b.WriteString("\n")
+	}
+	if m.discoveredRPCEndpoint != "" {
+		b.WriteString(runningStyle.Render("Discovered RPC: " + m.discoveredRPCEndpoint))
+		b.WriteString("\n")
+	} else if m.cfg.RPCEndpoint != "" {
+		b.WriteString(profileStyle.Render("RPC endpoint: " + m.cfg.RPCEndpoint + " (manual)"))
+		b.WriteString("\n")
+	}
+	if m.cfg.RPCServerBin != "" {
+		b.WriteString(profileStyle.Render("Binary: " + m.cfg.RPCServerBin))
+		b.WriteString("\n")
+	}
+
+	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
+		b.WriteString("\n")
+		b.WriteString(sectionTitleStyle.Render("Remote"))
+		b.WriteString("\n")
+		for _, ri := range m.remoteStatus.Running {
+			label := ri.Model + " / " + ri.Profile
+			var meta string
+			if ri.TokS > 0 {
+				meta = fmt.Sprintf("  %.0f tok/s", ri.TokS)
+			}
+			if ri.VRAMMiB > 0 {
+				meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
+			}
+			b.WriteString("  " + runningStyle.Render("●") + " " + profileStyle.Render(label) + detailMutedStyle.Render(meta))
+			b.WriteString("\n")
+		}
+	} else if m.cfg.RPCEndpoint != "" && m.remoteStatus != nil && len(m.remoteStatus.Running) == 0 {
+		b.WriteString("\n")
+		b.WriteString(detailMutedStyle.Render("Remote: no models running"))
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
 // renderRunningOutputColumn builds the Running tab's single right-hand
 // box — a live-updating tail of the selected instance's output — in place
 // of the usual stacked Running+Details boxes. Unlike other panes, this
@@ -638,6 +739,10 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 		b.WriteString("\n\n")
 		b.WriteString(profileStyle.Render(tabInstructions(m.leftMode)))
 		return b.String()
+	}
+
+	if m.leftMode == modeRPCServer {
+		return m.renderRPCServerOutputPane(rightW, innerH)
 	}
 
 	r, ok := m.currentRow()
@@ -686,6 +791,131 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	b.WriteString("\n\n")
 	b.WriteString(help)
 	return b.String()
+}
+
+func (m Model) renderRPCServerOutputPane(rightW, innerH int) string {
+	var b strings.Builder
+
+	header := modelStyle.Render("RPC Server")
+	endpoint := m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort)
+	rpcStatus := m.rpcServerHealthStatus()
+	switch rpcStatus {
+	case health.StatusUp:
+		fmt.Fprintf(&b, "%s  %s  %s\n", header, runningStyle.Render("up"), endpoint)
+	case health.StatusDown:
+		fmt.Fprintf(&b, "%s  %s  %s\n", header, downStyle.Render("down"), endpoint)
+	case health.StatusNotStarted:
+		fmt.Fprintf(&b, "%s  %s\n", header, detailMutedStyle.Render("not started"))
+	default:
+		fmt.Fprintf(&b, "%s  %s  %s\n", header, loadingStyle.Render("loading"), endpoint)
+	}
+	b.WriteString("\n")
+
+	if m.remoteStatus != nil && len(m.remoteStatus.Running) > 0 {
+		b.WriteString(sectionTitleStyle.Render("Remote") + "\n")
+		for _, ri := range m.remoteStatus.Running {
+			label := ri.Model + " / " + ri.Profile
+			var meta string
+			if ri.TokS > 0 {
+				meta = fmt.Sprintf("  %.0f tok/s", ri.TokS)
+			}
+			if ri.VRAMMiB > 0 {
+				meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
+			}
+			b.WriteString("  " + runningStyle.Render("●") + " " + profileStyle.Render(label) + detailMutedStyle.Render(meta) + "\n")
+		}
+		b.WriteString("\n")
+	}
+
+	if rpcStatus == health.StatusNotStarted {
+		b.WriteString(detailMutedStyle.Render("(no output — server has not been started)"))
+	} else {
+		logPath := m.rpcServerState.LogFile
+		if logPath == "" {
+			if p, err := runtime.RPCServerLogPath(); err == nil {
+				logPath = p
+			}
+		}
+		if tail := tailFittingHeightRPC(logPath, rightW, innerH-5); tail != "" {
+			b.WriteString(profileStyle.Render(tail))
+		} else {
+			b.WriteString(profileStyle.Render("(no output yet)"))
+		}
+	}
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("enter start/stop · e view full output"))
+	return b.String()
+}
+
+// rpcLogNoisyPrefixes lists high-frequency ggml-rpc-server log patterns that
+// clutter the tail preview. Consecutive runs are collapsed to a single
+// summary line; the full log viewer (e) still shows everything.
+var rpcLogNoisyPrefixes = []string{
+	"Accepted client connection",
+	"Client connection closed",
+	"ggml_backend_cuda_graph_compute:",
+}
+
+func isNoisyRPCLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	for _, prefix := range rpcLogNoisyPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// compressRPCLogLines collapses consecutive runs of known-noisy lines into a
+// single summary entry, preserving all other lines in order.
+func compressRPCLogLines(lines []string) []string {
+	var result []string
+	noiseCount := 0
+
+	flush := func() {
+		if noiseCount == 0 {
+			return
+		}
+		if noiseCount == 1 {
+			// single occurrence — already appended, nothing extra to do
+		} else {
+			result = append(result, fmt.Sprintf("  [%d repeated lines — press e for full log]", noiseCount))
+		}
+		noiseCount = 0
+	}
+
+	for _, line := range lines {
+		if isNoisyRPCLine(line) {
+			if noiseCount == 0 {
+				result = append(result, line) // keep the first as context
+			}
+			noiseCount++
+		} else {
+			flush()
+			result = append(result, line)
+		}
+	}
+	flush()
+	return result
+}
+
+// tailFittingHeightRPC is like tailFittingHeight but compresses known-noisy
+// RPC server log patterns before fitting to the available height.
+func tailFittingHeightRPC(logPath string, boxWidth, maxLines int) string {
+	raw, err := process.TailLog(logPath, 500)
+	if err != nil || raw == "" {
+		return ""
+	}
+
+	lines := wrappedLogPreviewLines(raw, boxWidth)
+	if len(lines) == 0 {
+		return ""
+	}
+	lines = compressRPCLogLines(lines)
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // tailFittingHeight reads logPath's trailing output and drops the oldest
@@ -749,24 +979,45 @@ func (m Model) renderVRAMHeader() string {
 	}
 
 	const barWidth = 10
-	frac := float64(m.gpuUsage.UsedMiB) / float64(m.gpuUsage.TotalMiB)
+	total := float64(m.gpuUsage.TotalMiB)
+	frac := float64(m.gpuUsage.UsedMiB) / total
+
+	// RPC server VRAM segment shown at the start of the bar in amber.
+	var rpcBlocks int
+	if m.cfg.RPCEnabled && m.rpcServerAlive && m.rpcServerState.PID > 0 {
+		if rpcMiB, ok := m.gpuByPID[m.rpcServerState.PID]; ok && rpcMiB > 0 {
+			rpcBlocks = int(float64(rpcMiB) / total * barWidth)
+			if rpcBlocks > barWidth {
+				rpcBlocks = barWidth
+			}
+		}
+	}
+
 	filled := int(frac * barWidth)
 	if filled > barWidth {
 		filled = barWidth
 	}
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	llamaBlocks := filled - rpcBlocks
+	if llamaBlocks < 0 {
+		llamaBlocks = 0
+	}
+	emptyBlocks := barWidth - rpcBlocks - llamaBlocks
 
-	barStyle := runningStyle
+	llamaStyle := runningStyle
 	switch {
 	case frac >= 0.9:
-		barStyle = downStyle
+		llamaStyle = downStyle
 	case frac >= 0.7:
-		barStyle = loadingStyle
+		llamaStyle = loadingStyle
 	}
 
+	bar := loadingStyle.Render(strings.Repeat("█", rpcBlocks)) +
+		llamaStyle.Render(strings.Repeat("█", llamaBlocks)) +
+		strings.Repeat("░", emptyBlocks)
+
 	usedGB := float64(m.gpuUsage.UsedMiB) / 1024
-	totalGB := float64(m.gpuUsage.TotalMiB) / 1024
-	return fmt.Sprintf("%s %s", barStyle.Render(bar), profileStyle.Render(fmt.Sprintf("%.1f/%.1fG", usedGB, totalGB)))
+	totalGB := total / 1024
+	return fmt.Sprintf("%s %s", bar, profileStyle.Render(fmt.Sprintf("%.1f/%.1fG", usedGB, totalGB)))
 }
 
 // computeSplitHeights returns the running/details content heights for the
@@ -996,6 +1247,8 @@ func tabTitle(mode leftMode) string {
 		return "Running"
 	case modeNetwork:
 		return "Network"
+	case modeRPCServer:
+		return "RPC Server"
 	default:
 		return "Models"
 	}
@@ -1011,6 +1264,8 @@ func tabInstructions(mode leftMode) string {
 		return "Select a running instance to preview its output. Enter to stop it or view the full output."
 	case modeNetwork:
 		return "Switch between the RPC and internet network profiles, and view link status."
+	case modeRPCServer:
+		return "Enter to start or stop the RPC server. Press e to view its output log."
 	default:
 		return "Select from saved model profiles, or add new model profiles."
 	}
