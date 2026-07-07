@@ -857,10 +857,10 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 }
 
 func (m Model) renderRPCServerOutputPane(rightW, innerH int) string {
-	if m.cfg.RPCMode == "client" {
-		return m.renderRPCConnectionOutputPane(innerH)
+	if m.cfg.RPCMode == "server" {
+		return m.renderRPCServerModeOutputPane(rightW, innerH)
 	}
-	return m.renderRPCServerModeOutputPane(rightW, innerH)
+	return m.renderRPCConnectionOutputPane(innerH)
 }
 
 func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
@@ -904,8 +904,16 @@ func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
 func (m Model) renderRPCConnectionOutputPane(innerH int) string {
 	var b strings.Builder
 
-	b.WriteString(modelStyle.Render("RPC Connection"))
-	b.WriteString("\n\n")
+	header := modelStyle.Render("RPC Connection")
+	if m.discoveredRPCEndpoint != "" {
+		fmt.Fprintf(&b, "%s  %s\n\n", header, runningStyle.Render("● active"))
+	} else if m.remoteStatus != nil {
+		fmt.Fprintf(&b, "%s  %s\n\n", header, runningStyle.Render("● reachable"))
+	} else if m.cfg.RemoteStatusAddr != "" {
+		fmt.Fprintf(&b, "%s  %s\n\n", header, loadingStyle.Render("● polling…"))
+	} else {
+		fmt.Fprintf(&b, "%s\n\n", header)
+	}
 
 	// Status server connection
 	if m.cfg.RemoteStatusAddr == "" {
