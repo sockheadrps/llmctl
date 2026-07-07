@@ -20,6 +20,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if m.screen == screenLogs {
+			m.refreshLogs()
+			return m, tickCmd()
+		}
 		if m.screen != screenMain {
 			return m, tickCmd()
 		}
@@ -793,7 +797,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	case focusRunning:
 		if m.runningCursor >= 0 && m.runningCursor < len(m.running) {
 			run := m.running[m.runningCursor]
-			return m.openStopConfirm(run.ModelKey, run.ProfileKey, run.Label())
+			return m.openRunningAction(run.ModelKey, run.ProfileKey, run.Label())
 		}
 		return m, nil
 	case focusSettingsContent:
@@ -829,7 +833,7 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 	case rowSettingsCategory:
 		return m.enterSettingsCategory(r.modelKey)
 	case rowRunning:
-		return m.openStopConfirm(r.modelKey, r.profileKey, r.label)
+		return m.openRunningAction(r.modelKey, r.profileKey, r.label)
 	default:
 		return m, nil
 	}

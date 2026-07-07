@@ -165,16 +165,6 @@ When editing a profile:
 - Press `esc` to exit. If you changed anything, `llmctl` asks whether to save or
   exit without saving.
 
-## Edit A Profile
-
-<p align="center">
-  <img src="readmeassets/modeledit.jpg" alt="model profile editor" width="800">
-</p>
-
-Selecting an existing profile opens a Run/Edit choice. Choose **Edit** to update
-the saved profile. Long descriptions and parameter help stay inside fixed panes
-so the TUI does not grow beyond the terminal viewport.
-
 ## Export A Profile
 
 A profile's full `llama-server` command can be exported as a shell script or

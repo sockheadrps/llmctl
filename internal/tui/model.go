@@ -441,6 +441,23 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 
 	m.running = running
 
+	// Mark any instance that just appeared as pending so health checks keep
+	// it in the "loading" state until it passes its first health check.
+	for _, r := range m.running {
+		key := r.ModelKey + "/" + r.ProfileKey
+		if !runningContains(prev, r) {
+			m.pendingInstances[key] = true
+		}
+	}
+	// Clean up pending/health state for instances that are no longer running.
+	for _, r := range prev {
+		if !runningContains(m.running, r) {
+			key := r.ModelKey + "/" + r.ProfileKey
+			delete(m.pendingInstances, key)
+			delete(m.health, key)
+		}
+	}
+
 	if m.runningCursor >= len(m.running) {
 		m.runningCursor = len(m.running) - 1
 	}
