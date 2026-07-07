@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +27,13 @@ type netStatusMsg struct {
 type netSwitchResultMsg struct {
 	toRPC bool
 	err   error
+}
+
+// netSwitchVerifyMsg carries the result of the post-switch verification poll.
+type netSwitchVerifyMsg struct {
+	toRPC          bool
+	actualIsRPC    bool
+	actualIsInternet bool
 }
 
 // netSwitchState backs the pending switch confirmation modal.
@@ -203,6 +211,31 @@ func switchNetworkCmd(toRPC bool, internetConn, rpcConn string) tea.Cmd {
 			return netSwitchResultMsg{toRPC: toRPC, err: fmt.Errorf("nmcli: %s", msg)}
 		}
 		return netSwitchResultMsg{toRPC: toRPC}
+	}
+}
+
+// verifyNetworkSwitchCmd waits briefly then polls nmcli to confirm the
+// expected connection came up after a switch. If nmcli cannot be reached,
+// the msg leaves both flags false so the caller can decide whether to surface
+// an error (it should not — regular polling will reflect reality on its own).
+func verifyNetworkSwitchCmd(toRPC bool, internetConn, rpcConn string) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(1500 * time.Millisecond)
+		out, err := exec.Command("nmcli", "-t", "-f", "NAME", "connection", "show", "--active").Output()
+		if err != nil {
+			return netSwitchVerifyMsg{toRPC: toRPC}
+		}
+		var isRPC, isInternet bool
+		for _, line := range strings.Split(string(out), "\n") {
+			name := strings.TrimSpace(line)
+			if rpcConn != "" && name == rpcConn {
+				isRPC = true
+			}
+			if internetConn != "" && name == internetConn {
+				isInternet = true
+			}
+		}
+		return netSwitchVerifyMsg{toRPC: toRPC, actualIsRPC: isRPC, actualIsInternet: isInternet}
 	}
 }
 

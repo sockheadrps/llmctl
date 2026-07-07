@@ -67,12 +67,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case netSwitchResultMsg:
-		m.netSwitching = false
 		if msg.err != nil {
+			m.netSwitching = false
 			m.setError(msg.err, "")
 			return m, nil
 		}
 		m.clearError()
+		// Keep netSwitching=true while we verify the link came up.
+		return m, verifyNetworkSwitchCmd(msg.toRPC, m.netInternetConn, m.netRPCConn)
+
+	case netSwitchVerifyMsg:
+		m.netSwitching = false
+		// If nmcli couldn't be reached both flags are false — don't surface a
+		// spurious error; the status panel will self-correct on the next poll.
+		if msg.actualIsRPC || msg.actualIsInternet {
+			if msg.toRPC && !msg.actualIsRPC {
+				m.setError(fmt.Errorf("switch to RPC (%s) may have failed — connection not detected as active", m.netRPCConn), "")
+			} else if !msg.toRPC && !msg.actualIsInternet {
+				m.setError(fmt.Errorf("switch to internet (%s) may have failed — connection not detected as active", m.netInternetConn), "")
+			}
+		}
 		return m, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)
 
 	case netConnectionsMsg:
@@ -477,10 +491,16 @@ func (m Model) updateNetworkPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openNetworkSwitch() (tea.Model, tea.Cmd) {
-	m.netSwitch = netSwitchState{
-		toRPC:  m.netCursor == netRowSwitchRPC,
-		cursor: 0,
+	toRPC := m.netCursor == netRowSwitchRPC
+	if toRPC && m.netStatus.isRPC {
+		m.setError(fmt.Errorf("already connected via RPC (%s)", m.netRPCConn), "")
+		return m, nil
 	}
+	if !toRPC && m.netStatus.isInternet {
+		m.setError(fmt.Errorf("already connected via internet (%s)", m.netInternetConn), "")
+		return m, nil
+	}
+	m.netSwitch = netSwitchState{toRPC: toRPC, cursor: 0}
 	m.screen = screenNetworkSwitch
 	return m, nil
 }
