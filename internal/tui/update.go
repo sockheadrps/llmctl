@@ -12,7 +12,6 @@ import (
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/runtime"
-	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -69,10 +68,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuByPID = msg.byPID
-		return m, nil
-
-	case clientStatusesMsg:
-		m.clientStatuses = map[string]*statusserver.Status(msg)
 		return m, nil
 
 	case remoteStatusMsg:
