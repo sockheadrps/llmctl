@@ -8,13 +8,13 @@ layout: home
     <h1 class="hero-tagline">Local LLMs. Managed.</h1>
     <p class="hero-sub">Run, configure, and distribute llama.cpp models from your terminal — no config files, no flags, no babysitting.</p>
     <div class="hero-actions">
-      <a class="hero-btn-alt" href="/installation">Installation</a>
+      <a class="hero-btn-alt" href="./installation">Installation</a>
       <a class="hero-btn-alt" href="https://github.com/sockheadrps/llmctl" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
   </div>
   <div class="hero-media">
     <img
-      src="/assets/screenshots/landingshowcase.png"
+      src="./assets/screenshots/landingshowcase.png"
       alt="llmctl TUI — active services, live GPU telemetry, and RPC backend status"
       class="hero-img"
       loading="eager"
@@ -25,19 +25,19 @@ layout: home
 
 <div class="features-wrap">
   <div class="features-grid">
-    <a class="feature-card" href="/quickstart">
+    <a class="feature-card" href="./quickstart">
       <span class="feature-card-title">Quickstart</span>
       <span class="feature-card-sub">Get a model serving in minutes</span>
     </a>
-    <a class="feature-card" href="/guides/local-models">
+    <a class="feature-card" href="./guides/local-models">
       <span class="feature-card-title">Local Inference</span>
       <span class="feature-card-sub">GPU, CPU, or mixed — switch instantly</span>
     </a>
-    <a class="feature-card" href="/guides/rpc">
+    <a class="feature-card" href="./guides/rpc">
       <span class="feature-card-title">Distributed RPC</span>
       <span class="feature-card-sub">Pool GPU layers across machines</span>
     </a>
-    <a class="feature-card" href="/guides/benchmarking">
+    <a class="feature-card" href="./guides/benchmarking">
       <span class="feature-card-title">Benchmarking</span>
       <span class="feature-card-sub">Compare tok/s across models and quants</span>
     </a>
