@@ -126,9 +126,9 @@ confirm and leave it there.
 
 ### Tasks
 
-- [ ] **3a** Move `updateMouse` → `update_mouse.go`, commit
-- [ ] **3b** Move navigation helpers → `update_nav.go`, commit
-- [ ] **3c** Move `updateMain` → `update_main.go`, commit
+- [x] **3a** Move `updateMouse` → `update_mouse.go`, commit
+- [x] **3b** Move navigation helpers → `update_nav.go`, commit
+- [x] **3c** Move `updateMain` → `update_main.go`, commit
 
 ### Milestone Verification — Phase 3
 
@@ -274,7 +274,7 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 |-------|--------|
 | Phase 1 — Split view.go | ✅ Done (view.go: 1825 → 279 lines) |
 | Phase 2 — Split model.go | ✅ Done (model.go: 922 → 370 lines) |
-| Phase 3 — Split update.go | ⬜ Not started |
+| Phase 3 — Split update.go | ✅ Done (update.go: 1115 → 334 lines) |
 | Phase 4 — Split form.go | ⬜ Not started |
 | Phase 5 — Split settings.go | ⬜ Not started |
 | Phase 6 — Client/Server separation | ⬜ Not started |
