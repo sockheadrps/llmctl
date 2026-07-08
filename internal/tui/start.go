@@ -23,7 +23,13 @@ type startResultMsg struct {
 func (m Model) startProfileCmd(r row) tea.Cmd {
 	mgr, cfg := m.mgr, m.cfg
 	modelKey, profileKey, label := r.modelKey, r.profileKey, r.label
-	rpcOverride := m.discoveredRPCEndpoint
+	// discoveredRPCEndpoint is derived from the remote server's status poll and
+	// is informational only on the client. Only the server mode machine passes
+	// --rpc to llama-server (via cfg.RPCEndpoint in manager.Start).
+	rpcOverride := ""
+	if cfg.RPCMode == "server" {
+		rpcOverride = m.discoveredRPCEndpoint
+	}
 	return func() tea.Msg {
 		logPath, _ := runtime.LogPath(modelKey, profileKey)
 		_, err := mgr.Start(cfg, modelKey, profileKey, rpcOverride)
