@@ -3,10 +3,12 @@
 package health
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -88,6 +90,17 @@ func ProbeRPCPort(host string, port int) bool {
 	}
 	conn.Close()
 	return true
+}
+
+// LogReady reports whether logPath contains the line llama-server emits when
+// it has finished loading and is accepting requests. Use this to confirm a
+// StatusUp health result before surfacing "up" to the user.
+func LogReady(logPath string) bool {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(data, []byte("llama_server: listening on"))
 }
 
 // CheckRPCServer checks whether the ggml-rpc-server process with the given

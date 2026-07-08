@@ -194,6 +194,7 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 	switch m.settings.rpc.cursor {
 	case 0:
 		wasEnabled := m.cfg.RPCEnabled
+		wasServer := m.cfg.RPCMode == "server"
 		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
 		if !m.cfg.RPCEnabled {
 			// clear mode when disabling so next enable starts fresh
@@ -204,6 +205,10 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		if m.cfg.RPCEnabled && !wasEnabled {
 			m.cfg.NetworkTabEnabled = true
 		}
+		var stopCmd tea.Cmd
+		if wasEnabled && !m.cfg.RPCEnabled && wasServer && m.rpcServerAlive {
+			stopCmd = m.stopRPCServerCmd()
+		}
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {
@@ -211,7 +216,7 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		} else {
 			m.reconcileStatusPublisher()
 		}
-		return m, nil
+		return m, stopCmd
 	case 1:
 		// Select Client mode
 		m.cfg.RPCMode = "client"

@@ -821,7 +821,11 @@ func checkHealthCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(healthMsg, len(running))
 		for _, r := range running {
-			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Host, r.Port)
+			s := health.Check(r.Host, r.Port)
+			if s == health.StatusUp && r.LogFile != "" && !health.LogReady(r.LogFile) {
+				s = health.StatusLoading
+			}
+			result[r.ModelKey+"/"+r.ProfileKey] = s
 		}
 		return result
 	}
