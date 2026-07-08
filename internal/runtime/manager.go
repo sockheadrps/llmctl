@@ -118,11 +118,7 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEn
 		}
 	}
 
-	bin := cfg.LlamaServerBin
-	if useRPC && strings.TrimSpace(cfg.RPCServerBin) != "" {
-		bin = strings.TrimSpace(cfg.RPCServerBin)
-	}
-	pid, err := process.Start(bin, m, p, logPath, rpcEndpoint)
+	pid, err := process.Start(cfg.LlamaServerBin, m, p, logPath, rpcEndpoint)
 	if err != nil {
 		return models.Running{}, err
 	}
