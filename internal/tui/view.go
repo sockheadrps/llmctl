@@ -466,8 +466,12 @@ func (m Model) renderModelsTree(width int) string {
 			case active:
 				style = selectedProfileStyle
 			}
-			label = truncateText(label, max(1, textWidth-lipgloss.Width(cursor)-2))
-			b.WriteString(fmt.Sprintf("%s  %s\n", cursor, style.Render(label)))
+			avgSuffix := ""
+			if avg, ok := m.loadHistory.average(r.modelKey+"/"+r.profileKey, m.cfg.RPCEnabled); ok {
+				avgSuffix = detailMutedStyle.Render("  (avg " + fmtLoadDur(time.Duration(avg*float64(time.Second))) + ")")
+			}
+			label = truncateText(label, max(1, textWidth-lipgloss.Width(cursor)-2-lipgloss.Width(avgSuffix)))
+			fmt.Fprintf(&b, "%s  %s%s\n", cursor, style.Render(label), avgSuffix)
 
 		case rowAddProfile:
 			style := addStyle
