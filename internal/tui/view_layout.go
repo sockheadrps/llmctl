@@ -149,9 +149,13 @@ func (m *Model) resetDetailsScroll() {
 	m.detailsScroll = 0
 	m.detailsDir = 1
 	m.detailsPause = scrollPauseTicks
+	m.detailsManualScroll = false
 }
 
 func (m *Model) advanceDetailsScroll(lines, visible int) {
+	if m.detailsHovered || m.detailsManualScroll {
+		return
+	}
 	m.detailsScroll, m.detailsDir, m.detailsPause = advanceAutoScroll(m.detailsScroll, m.detailsDir, m.detailsPause, lines, visible)
 }
 

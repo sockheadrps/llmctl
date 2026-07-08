@@ -360,6 +360,7 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	narrow := contentW < 50
 
 	// Brief "✓ copied" flash — pad to the same height as a normal entry.
+	hasSpark := len(m.tokHistory[hkey]) >= 2
 	if m.overviewCopied == hkey {
 		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
 		b.WriteString(runningStyle.Render("  └─ ✓ copied to clipboard") + "\n")
@@ -367,6 +368,9 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		if narrow {
 			b.WriteString("\n") // narrow has 5 lines total
 			b.WriteString("\n")
+		}
+		if hasSpark {
+			b.WriteString("\n") // match sparkline row
 		}
 		return b.String()
 	}
@@ -399,6 +403,8 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		cur = ""
 	}
 
+	spark := m.renderTokSparkline(hkey)
+
 	if narrow {
 		// Narrow: each stat on its own line.
 		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
@@ -407,6 +413,9 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	} else {
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+	}
+	if spark != "" {
+		b.WriteString("   " + spark + "\n")
 	}
 	return b.String()
 }

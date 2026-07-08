@@ -75,6 +75,7 @@ func (m Model) viewForm() string {
 		{name: "Server", fields: []int{fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM}},
 		{name: "Reasoning", fields: []int{fieldReasoning, fieldReasoningBudget, fieldReasoningFormat}},
 		{name: "Advanced", fields: []int{fieldCacheK, fieldCacheV, fieldExtraArgs, fieldNotes}},
+		{name: "RPC", fields: []int{fieldRPCEnabled}},
 	}
 
 	visibleRows := m.formVisibleRows()
@@ -146,12 +147,12 @@ func (m Model) viewForm() string {
 	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(truncateText("MLock:", labelWidth)), mlockValue), rowWidth))
 	rowIndex++
 
-	splitLabel := formLabelStyle
+	layerDistLabel := formLabelStyle
 	if m.form.focus == len(m.form.fields)+3 {
-		splitLabel = formFocusedLabelStyle
+		layerDistLabel = formFocusedLabelStyle
 		focusedRow = rowIndex
 	}
-	splitLabel = splitLabel.Width(labelWidth)
+	layerDistLabel = layerDistLabel.Width(labelWidth)
 	total := m.formSliderTotal()
 	client := m.form.rpcClientLayers
 	if total > 0 && client > total {
@@ -163,7 +164,7 @@ func (m Model) viewForm() string {
 	}
 	active := m.formRPCActive() && total > 0 && !m.form.cpuOnly
 	const sliderBarWidth = 20
-	var splitRowStr string
+	var layerDistRowStr string
 	if active {
 		filled := 0
 		if total > 0 {
@@ -171,12 +172,14 @@ func (m Model) viewForm() string {
 		}
 		bar := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(strings.Repeat("█", filled)) +
 			detailMutedStyle.Render(strings.Repeat("░", sliderBarWidth-filled))
-		counts := profileStyle.Render(fmt.Sprintf("[%d / %d]", client, server))
-		splitRowStr = fmt.Sprintf("%s %s %s", splitLabel.Render(truncateText("Tensor Split:", labelWidth)), bar, counts)
+		counts := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(fmt.Sprintf("%d local", client)) +
+			detailMutedStyle.Render(" · ") +
+			lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(fmt.Sprintf("%d remote", server))
+		layerDistRowStr = fmt.Sprintf("%s %s  %s", layerDistLabel.Render(truncateText("Layer Distribution:", labelWidth)), bar, counts)
 	} else {
-		splitRowStr = fmt.Sprintf("%s %s", splitLabel.Render(truncateText("Tensor Split:", labelWidth)), detailMutedStyle.Render("n/a (enable RPC + GPU layers)"))
+		layerDistRowStr = fmt.Sprintf("%s %s", layerDistLabel.Render(truncateText("Layer Distribution:", labelWidth)), detailMutedStyle.Render("n/a — enable RPC and set GPU Layers"))
 	}
-	selectedRows = append(selectedRows, fitStyledLine(splitRowStr, rowWidth))
+	selectedRows = append(selectedRows, fitStyledLine(layerDistRowStr, rowWidth))
 	rowIndex++
 
 	selectedRows = append(selectedRows, "")
@@ -213,6 +216,9 @@ func (m Model) viewForm() string {
 
 	paneHeight := m.formPaneHeight()
 	leftPane := paneStyle.Width(leftWidth).Height(paneHeight).Render(body.String())
+	// lipgloss.Height includes the 2 border rows; subtract them so that the
+	// right pane's .Height() sets content height, making total heights match.
+	actualHeight := lipgloss.Height(leftPane) - 2
 	rightPane := strings.Builder{}
 	rightPane.WriteString(sectionTitleStyle.Render("Details"))
 	rightPane.WriteString("\n\n")
@@ -246,8 +252,8 @@ func (m Model) viewForm() string {
 			descReserved += len(valLines) + 2
 		}
 	}
-	rightPane.WriteString(m.renderFormDescription(detailsWidth, paneHeight-descReserved))
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPane, paneStyle.Width(detailsWidth).Height(paneHeight).Render(rightPane.String())))
+	rightPane.WriteString(m.renderFormDescription(detailsWidth, actualHeight-descReserved))
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPane, paneStyle.Width(detailsWidth).Height(actualHeight).Render(rightPane.String())))
 	b.WriteString("\n")
 
 	if m.form.err != "" {
@@ -257,6 +263,10 @@ func (m Model) viewForm() string {
 	b.WriteString(helpStyle.Render("↑↓/wasd navigate  enter edit/save  esc cancel"))
 	b.WriteString("  ")
 	b.WriteString(helpStyle.Render("x import args"))
+	if m.form.focusedFlag() != "" && !m.form.flagFocus {
+		b.WriteString("  ")
+		b.WriteString(helpStyle.Render("→/d override flag"))
+	}
 	return b.String()
 }
 
@@ -292,7 +302,7 @@ func (m Model) formDescriptionTitle() string {
 	case 2:
 		return "MLock"
 	case 3:
-		return "Tensor Split"
+		return "Layer Distribution"
 	}
 	return "Save Profile"
 }

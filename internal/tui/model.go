@@ -95,6 +95,8 @@ type Model struct {
 	detailsScroll        int
 	detailsDir           int
 	detailsPause         int
+	detailsHovered       bool // mouse is over the details pane; suppresses auto-scroll
+	detailsManualScroll  bool // user scrolled with wheel; stays suppressed until row changes
 
 	picker               pickerState
 	form                 formState
@@ -298,7 +300,7 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 
 	for key, decoded := range msg {
 		if prev, ok := m.tokSamples[key]; ok && decoded >= prev.decoded {
-			if dt := now.Sub(prev.at).Seconds(); dt > 0 {
+			if dt := now.Sub(prev.at).Seconds(); dt >= 0.25 {
 				rate := float64(decoded-prev.decoded) / dt
 				m.tokRates[key] = rate
 				if rate > m.tokPeak[key] {

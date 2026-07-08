@@ -17,8 +17,30 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	hDividerY := actualRunningH + 2
 	inRightColumn := msg.X > dividerRight
 
+	inDetailsPane := inRightColumn && msg.Y > hDividerY && m.leftMode != modeRunning
+
 	switch msg.Action {
 	case tea.MouseActionPress:
+		// Scroll wheel over the details pane: pause auto-scroll and let the user
+		// navigate manually. detailsManualScroll stays set until the row changes.
+		if inDetailsPane {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.detailsManualScroll = true
+				if m.detailsScroll > 0 {
+					m.detailsScroll--
+				}
+				return m, nil
+			case tea.MouseButtonWheelDown:
+				m.detailsManualScroll = true
+				lines := m.mainDetailsLineCount()
+				visible := m.mainDetailsVisibleLines()
+				if m.detailsScroll < max(0, lines-visible) {
+					m.detailsScroll++
+				}
+				return m, nil
+			}
+		}
 		if msg.Button != tea.MouseButtonLeft {
 			break
 		}
@@ -38,6 +60,8 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseActionMotion:
+		// Track hover so auto-scroll pauses while the cursor is over the pane.
+		m.detailsHovered = inDetailsPane
 		if m.dividerDragging {
 			newLeft := msg.X - 1
 			avail := m.width - 4

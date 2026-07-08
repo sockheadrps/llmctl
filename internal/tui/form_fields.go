@@ -147,7 +147,7 @@ func formFieldDescription(idx int) string {
 	case len(formLabels) + 2:
 		return "Pin model in RAM — prevents OS from paging weights to disk under memory pressure. Requires free RAM equal to model size."
 	case len(formLabels) + 3:
-		return "Split GPU layers between the local GPU and the RPC server. ← → moves one layer; shift+←→ jumps five. The saved value is passed as --tensor-split at launch when RPC is active."
+		return "Distribute GPU layers between the local GPU and the RPC server. ← → moves one layer at a time; shift+←→ jumps five. Total layers come from the GPU Layers field above."
 	case len(formLabels) + 4:
 		return "Save this profile to your model configuration and return to the main view."
 	default:
