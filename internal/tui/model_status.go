@@ -9,6 +9,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
+// server-mode only
 func (m Model) shouldRunStatusServer() bool {
 	if m.cfg == nil {
 		return false
@@ -16,6 +17,7 @@ func (m Model) shouldRunStatusServer() bool {
 	return m.cfg.RPCEnabled && m.cfg.RPCMode == "server"
 }
 
+// server-mode only
 func (m Model) statusServerBindAddr() (string, int) {
 	if m.cfg == nil {
 		return "0.0.0.0", 11435
@@ -31,6 +33,7 @@ func (m Model) statusServerBindAddr() (string, int) {
 	return host, port
 }
 
+// server-mode only
 func (m *Model) reconcileStatusServer() error {
 	if !m.shouldRunStatusServer() {
 		if m.statusServer != nil {
@@ -64,6 +67,7 @@ func (m *Model) reconcileStatusServer() error {
 	return nil
 }
 
+// client-mode only
 func (m *Model) reconcileStatusPublisher() {
 	if m.statusPublisher == nil {
 		return
@@ -82,6 +86,7 @@ func (m *Model) reconcileStatusPublisher() {
 	m.statusPublisher.Update(m.buildStatusSnapshot())
 }
 
+// client-mode only
 func clientID() string {
 	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
 		return strings.TrimSpace(host)
@@ -89,10 +94,12 @@ func clientID() string {
 	return "llmctl-client"
 }
 
+// client-mode only
 func clientName() string {
 	return clientID()
 }
 
+// shared
 // pushStatusServer updates the local status server snapshot with current state.
 // In RPC client mode it also publishes the snapshot to the remote status server.
 func (m *Model) pushStatusServer() {
@@ -105,6 +112,7 @@ func (m *Model) pushStatusServer() {
 	}
 }
 
+// shared
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
 func (m Model) buildStatusSnapshot() statusserver.Status {
 	running := make([]statusserver.RunningInfo, 0, len(m.running))

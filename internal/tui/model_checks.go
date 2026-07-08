@@ -10,6 +10,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
+// client-mode only
 // pollRemoteStatusCmd polls the remote llmctl's status server at remoteStatusAddr
 // ("host:port"). On success the caller derives the RPC endpoint from the
 // response's rpc_server fields using the same host.
@@ -23,7 +24,7 @@ func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
 	}
 }
 
-// return nil.
+// shared
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
@@ -47,6 +48,7 @@ func (m Model) backgroundChecks() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// shared
 func checkHealthCmd(running []models.Running) tea.Cmd {
 	return func() tea.Msg {
 		result := make(healthMsg, len(running))
@@ -61,6 +63,7 @@ func checkHealthCmd(running []models.Running) tea.Cmd {
 	}
 }
 
+// shared
 // checkSlotsCmd polls /slots for each running instance and reports the
 // cumulative decoded-token count for any slot currently generating. The
 // rate itself is computed in Update, which has the previous sample to
@@ -89,6 +92,7 @@ func checkSlotsCmd(running []models.Running) tea.Cmd {
 	}
 }
 
+// shared
 // checkVRAMCmd polls nvidia-smi for aggregate and per-PID VRAM usage. Only
 // call this when gpuAvailable — it shells out, so there's no point retrying
 // every tick on a machine without nvidia-smi.
@@ -106,6 +110,7 @@ func checkVRAMCmd() tea.Cmd {
 	}
 }
 
+// server-mode only
 // checkRPCServerHealthCmd checks the ggml-rpc-server health.
 // PID is the primary signal: if the process is alive, it's up — a TCP probe
 // would fail while the server is busy handling an existing RPC connection
