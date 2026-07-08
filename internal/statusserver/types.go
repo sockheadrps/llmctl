@@ -17,6 +17,7 @@ type RunningInfo struct {
 	Model          string  `json:"model"`
 	Profile        string  `json:"profile"`
 	Port           int     `json:"port"`
+	Health         string  `json:"health,omitempty"` // "loading", "up", or "down"
 	TokS           float64 `json:"tok_s,omitempty"`
 	VRAMMiB        int64   `json:"vram_mib,omitempty"`
 	ModelSizeBytes int64   `json:"model_size_bytes,omitempty"`

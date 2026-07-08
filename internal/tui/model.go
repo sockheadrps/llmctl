@@ -689,10 +689,15 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 	running := make([]statusserver.RunningInfo, 0, len(m.running))
 	for _, r := range m.running {
 		key := r.ModelKey + "/" + r.ProfileKey
+		h := m.health[key]
+		if h == "" || m.pendingInstances[key] {
+			h = health.StatusLoading
+		}
 		info := statusserver.RunningInfo{
 			Model:   r.ModelName,
 			Profile: r.ProfileName,
 			Port:    r.Port,
+			Health:  string(h),
 			TokS:    m.tokRates[key],
 		}
 		if mdl, ok := m.cfg.Models[r.ModelKey]; ok && mdl.Path != "" {

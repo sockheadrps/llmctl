@@ -598,11 +598,18 @@ func (m Model) renderClientStatusLines(client statusserver.ClientInfo) string {
 	}
 	var b strings.Builder
 	for _, ri := range client.Running {
+		dot := loadingStyle.Render("●")
+		switch ri.Health {
+		case "up":
+			dot = runningStyle.Render("●")
+		case "down":
+			dot = downStyle.Render("●")
+		}
 		meta := m.clientModelSizeMeta(ri)
 		if ri.TokS > 0 {
 			meta += fmt.Sprintf("  %.0f tok/s", ri.TokS)
 		}
-		fmt.Fprintf(&b, "  %s%s\n", profileStyle.Render(ri.Model+" / "+ri.Profile), detailMutedStyle.Render(meta))
+		fmt.Fprintf(&b, "  %s %s%s\n", dot, profileStyle.Render(ri.Model+" / "+ri.Profile), detailMutedStyle.Render(meta))
 	}
 	return b.String()
 }
