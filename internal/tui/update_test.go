@@ -248,12 +248,16 @@ func TestNavigateUpFromFirstModelCollapsesExpanded(t *testing.T) {
 	m.rebuildRows()
 	m.cursor = indexOfModelRow(m.rows, "alpha")
 
-	// Up from the first model row should move focus to tabs and collapse.
+	// Up from the first model row lands on the sub-tab header (focusLeft +
+	// modelSubTabFocused) and collapses the expanded model.
 	next, _ := m.moveModelsCursor(-1)
 	got := next.(Model)
 
-	if got.focus != focusTabs {
-		t.Fatalf("expected focusTabs after up from first model, got %v", got.focus)
+	if got.focus != focusLeft {
+		t.Fatalf("expected focusLeft after up from first model, got %v", got.focus)
+	}
+	if !got.modelSubTabFocused {
+		t.Fatal("expected modelSubTabFocused=true after up from first model")
 	}
 	if got.expandedModelKey != "" {
 		t.Fatalf("expected expandedModelKey cleared, got %q", got.expandedModelKey)
@@ -275,11 +279,16 @@ func TestFocusLeftFromModelsCollapsesExpanded(t *testing.T) {
 	m.rebuildRows()
 	m.cursor = indexOfModelRow(m.rows, "alpha")
 
+	// Left from models pane lands on the sub-tab header (focusLeft +
+	// modelSubTabFocused) and collapses the expanded model.
 	next, _ := m.moveFocusLeft()
 	got := next.(Model)
 
-	if got.focus != focusTabs {
-		t.Fatalf("expected focusTabs after left from models pane, got %v", got.focus)
+	if got.focus != focusLeft {
+		t.Fatalf("expected focusLeft after left from models pane, got %v", got.focus)
+	}
+	if !got.modelSubTabFocused {
+		t.Fatal("expected modelSubTabFocused=true after left from models pane")
 	}
 	if got.expandedModelKey != "" {
 		t.Fatalf("expected expandedModelKey cleared, got %q", got.expandedModelKey)
