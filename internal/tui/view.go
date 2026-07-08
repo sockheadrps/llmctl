@@ -565,6 +565,14 @@ func (m Model) renderRunning() string {
 				b.WriteString(detailMutedStyle.Render("no clients connected"))
 			}
 			b.WriteString("\n")
+			for _, st := range m.clientStatuses {
+				if st == nil || len(st.Running) == 0 {
+					continue
+				}
+				for _, ri := range st.Running {
+					fmt.Fprintf(&b, "  %s %s\n", runningStyle.Render("●"), profileStyle.Render(ri.Model+" / "+ri.Profile))
+				}
+			}
 		}
 		b.WriteString("\n")
 	}

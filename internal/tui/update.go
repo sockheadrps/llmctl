@@ -70,6 +70,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gpuByPID = msg.byPID
 		return m, nil
 
+	case clientStatusesMsg:
+		m.clientStatuses = msg
+		return m, nil
+
 	case remoteStatusMsg:
 		if msg.err == nil {
 			m.remoteStatus = msg.status
