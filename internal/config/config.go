@@ -14,7 +14,6 @@ import (
 // Config is the root of config.yaml.
 type Config struct {
 	LlamaServerBin string `yaml:"llama_server_bin,omitempty"`
-	LlamaRPCBin    string `yaml:"llama_rpc_bin,omitempty"`
 	// ModelsDir is the deprecated single-directory predecessor of
 	// ModelsDirs. Load migrates it in and Save never writes it back out.
 	ModelsDir   string                  `yaml:"models_dir,omitempty"`
@@ -164,7 +163,6 @@ func dedupeStrings(in []string) []string {
 // otherwise be silently dropped the first time the TUI persists a change.
 const saveHeader = `# llmctl configuration.
 # llama_server_bin is the llama-server binary to launch.
-# llama_rpc_bin is the llama-server binary used in RPC client mode (built with GGML_RPC=ON).
 # models_dirs are scanned for .gguf files when adding a new model from the
 # TUI — manage the list from the "Model Directories" screen, or edit here.
 # rpc_server_host and rpc_server_port control the ggml-rpc-server address

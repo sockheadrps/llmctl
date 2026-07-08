@@ -42,7 +42,7 @@ type rpcContentState struct {
 	// 0 = toggle enabled
 	// 1 = select Client mode
 	// 2 = select Server mode
-	// when client: 3 = remote status addr, 4 = manual endpoint, 5 = RPC client binary
+	// when client: 3 = remote status addr, 4 = manual endpoint
 	// when server: 3 = status host, 4 = status port, 5 = firewall/network,
 	// 6 = RPC binary (Windows), 7 = RPC port (Windows)
 	cursor            int
@@ -54,8 +54,6 @@ type rpcContentState struct {
 	rpcBinInput       textinput.Model
 	portEditing       bool
 	portInput         textinput.Model
-	clientBinEditing  bool
-	clientBinInput    textinput.Model
 	err               string
 }
 
@@ -148,7 +146,7 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 			maxRPCCursor = 2 // mode selector rows always visible when enabled
 			switch m.cfg.RPCMode {
 			case "client":
-				maxRPCCursor = 5
+				maxRPCCursor = 4
 			case "server":
 				if runtime.GOOS == "windows" {
 					maxRPCCursor = 7
@@ -261,10 +259,7 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case 5:
-		switch m.cfg.RPCMode {
-		case "client":
-			return m.openLlamaRPCBinForm()
-		case "server":
+		if m.cfg.RPCMode == "server" {
 			if runtime.GOOS == "windows" {
 				return m.copyFirewallRule()
 			}
@@ -346,32 +341,6 @@ func (m Model) submitRPCEndpointForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.settings.rpc.editing = false
-	m.settings.rpc.err = ""
-	return m, nil
-}
-
-func (m Model) openLlamaRPCBinForm() (tea.Model, tea.Cmd) {
-	ti := textinput.New()
-	ti.Placeholder = "llama-server"
-	ti.CharLimit = 512
-	ti.Width = 50
-	ti.SetValue(m.cfg.LlamaRPCBin)
-	ti.Focus()
-	ti.CursorEnd()
-	m.settings.rpc.clientBinInput = ti
-	m.settings.rpc.clientBinEditing = true
-	m.settings.rpc.err = ""
-	return m, nil
-}
-
-func (m Model) submitLlamaRPCBinForm() (tea.Model, tea.Cmd) {
-	val := strings.TrimSpace(m.settings.rpc.clientBinInput.Value())
-	m.cfg.LlamaRPCBin = val
-	if err := m.saveConfig(); err != nil {
-		m.settings.rpc.err = err.Error()
-		return m, nil
-	}
-	m.settings.rpc.clientBinEditing = false
 	m.settings.rpc.err = ""
 	return m, nil
 }

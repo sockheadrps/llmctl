@@ -509,10 +509,7 @@ func (m Model) buildSettingsRows() []row {
 		if c.id == "status_server" && (m.cfg == nil || !m.cfg.RPCEnabled || m.cfg.RPCMode != "server") {
 			continue
 		}
-		if c.id == "llama_bin" && m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" {
-			continue
-		}
-		rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})
+rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})
 	}
 	return rows
 }
