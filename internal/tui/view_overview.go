@@ -303,12 +303,21 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	detail += profileStyle.Render(fmt.Sprintf("  :%d", ri.Port))
 	b.WriteString(detail + "\n")
 
-	// Line 3: Current: X t/s (no persisted avg/peak for remote).
+	// Line 3: Current: X - Avg: Y - Peak: Z T/S
 	cur := "—"
 	if ri.TokS > 0 {
-		cur = fmt.Sprintf("%.0f t/s", ri.TokS)
+		cur = fmt.Sprintf("%.0ft/s", ri.TokS)
 	}
-	b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
+	avg := "—"
+	if ri.TokAvg > 0 {
+		avg = fmt.Sprintf("%.0f", ri.TokAvg)
+	}
+	peak := "—"
+	if ri.TokPeak > 0 {
+		peak = fmt.Sprintf("%.0f", ri.TokPeak)
+	}
+	spd := "Current: " + cur + " - Avg: " + avg + " - Peak: " + peak + " T/S"
+	b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
 	return b.String()
 }
 

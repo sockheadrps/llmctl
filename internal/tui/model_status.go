@@ -122,12 +122,22 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 		if h == "" || m.pendingInstances[key] {
 			h = health.StatusLoading
 		}
+		peakVal := m.tokPeak[key]
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+			if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.MaxTokPerSec > peakVal {
+				peakVal = p.MaxTokPerSec
+			}
+		}
 		info := statusserver.RunningInfo{
 			Model:   r.ModelName,
 			Profile: r.ProfileName,
 			Port:    r.Port,
 			Health:  string(h),
 			TokS:    m.tokRates[key],
+			TokPeak: peakVal,
+		}
+		if histAvg, ok := m.tokRateHistory.average(key); ok && histAvg > 0 {
+			info.TokAvg = histAvg
 		}
 		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
 			if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.Alias != "" {
