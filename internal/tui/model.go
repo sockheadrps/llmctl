@@ -116,7 +116,8 @@ type Model struct {
 
 	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
 
-	overviewCopied string // modelKey/profileKey briefly set after copying from the Overview tab
+	overviewCopied   string // modelKey/profileKey briefly set after copying from the Overview tab
+	gpuNameScroll    int    // ever-incrementing tick counter for horizontal GPU name scroll
 
 	netSupported bool // false on non-Linux; tab is hidden entirely
 

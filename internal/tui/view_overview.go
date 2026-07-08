@@ -457,9 +457,10 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
 
 	// GPU 0: local GPU.
+	const gpuPrefixW = 7 // len("GPU 0: ")
 	b.WriteString(sectionTitleStyle.Render("GPU 0: "))
 	if m.gpuAvailable && m.gpuName != "" {
-		b.WriteString(profileStyle.Render(truncateText(m.gpuName, contentW-7)))
+		b.WriteString(profileStyle.Render(hScroll(m.gpuName, contentW-gpuPrefixW, m.gpuNameScroll)))
 	} else if m.gpuAvailable {
 		b.WriteString(detailMutedStyle.Render("(no data yet)"))
 	} else {
@@ -506,9 +507,11 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 		}
 
 		if remoteName != "" {
-			b.WriteString(sectionTitleStyle.Render("GPU 1: ") + profileStyle.Render(truncateText(remoteName, contentW-7)))
+			const gpu1PrefixW = 7 // len("GPU 1: ")
+			b.WriteString(sectionTitleStyle.Render("GPU 1: ") + profileStyle.Render(hScroll(remoteName, contentW-gpu1PrefixW, m.gpuNameScroll)))
 			b.WriteString("\n")
-			b.WriteString(detailMutedStyle.Render("  "+remoteLabel))
+			const clientPrefixW = 2 // leading "  "
+			b.WriteString(detailMutedStyle.Render("  " + hScroll(remoteLabel, contentW-clientPrefixW, m.gpuNameScroll)))
 			b.WriteString("\n")
 			if remoteTotal > 0 {
 				b.WriteString(m.overviewVRAMBar(remoteUsed, remoteTotal, contentW, false))
@@ -589,8 +592,8 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 }
 
 // overviewVRAMBar renders "VRAM: [████░░░░░░] 3.3/12.0G".
-// When localColor is true the fill uses the same traffic-light coloring as
-// the existing VRAM bar; for remote GPUs a neutral color is used.
+// When the label doesn't fit on the same line it wraps below the bar.
+// When localColor is true the fill uses traffic-light coloring.
 func (m Model) overviewVRAMBar(usedMiB, totalMiB int64, contentW int, localColor bool) string {
 	const barWidth = 10
 	frac := float64(usedMiB) / float64(totalMiB)
@@ -616,8 +619,32 @@ func (m Model) overviewVRAMBar(usedMiB, totalMiB int64, contentW int, localColor
 		detailMutedStyle.Render(strings.Repeat("░", barWidth-filled)) +
 		detailMutedStyle.Render("]")
 
-	label := fmt.Sprintf(" %.1f/%.1fG", float64(usedMiB)/1024, float64(totalMiB)/1024)
-	return "VRAM: " + bar + profileStyle.Render(label)
+	label := fmt.Sprintf("%.1f/%.1fG", float64(usedMiB)/1024, float64(totalMiB)/1024)
+	// "VRAM: " (6) + "[" + 10 blocks + "]" (12) = 18 fixed chars; label adds len+1 for the space.
+	const barFixedW = 18
+	if barFixedW+1+len(label) <= contentW {
+		return "VRAM: " + bar + profileStyle.Render(" "+label)
+	}
+	// Too narrow — put the label on the next line, indented under the bar.
+	return "VRAM: " + bar + "\n" + strings.Repeat(" ", 6) + profileStyle.Render(label)
+}
+
+// hScroll returns a fixed-width window of name that ping-pongs left→right→left
+// as tick increments. When name fits within availW it is returned unchanged.
+func hScroll(name string, availW, tick int) string {
+	runes := []rune(name)
+	nameLen := len(runes)
+	if nameLen <= availW || availW <= 0 {
+		return name
+	}
+	overflow := nameLen - availW
+	// Double the overflow to get a full round-trip cycle, then mirror the second half.
+	cycle := overflow * 2
+	pos := tick % cycle
+	if pos > overflow {
+		pos = cycle - pos
+	}
+	return string(runes[pos : pos+availW])
 }
 
 // fmtUptime formats a duration as "2h 14m", "45m", or "12s".

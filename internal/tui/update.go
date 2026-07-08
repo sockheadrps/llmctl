@@ -42,6 +42,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus != focusSettingsContent {
 				m.advanceDetailsScroll(m.mainDetailsLineCount(), m.mainDetailsVisibleLines())
 			}
+			if m.leftMode == modeOverview {
+				m.gpuNameScroll++
+			}
 		}
 		return m, scrollTickCmd()
 
