@@ -450,10 +450,11 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
 
 	// GPU 0: local GPU.
+	// -1 for the margin space prepended to every line at the end of this function.
 	const gpuPrefixW = 7 // len("GPU 0: ")
 	b.WriteString(sectionTitleStyle.Render("GPU 0: "))
 	if m.gpuAvailable && m.gpuName != "" {
-		b.WriteString(profileStyle.Render(hScroll(m.gpuName, contentW-gpuPrefixW, m.gpuNameScroll)))
+		b.WriteString(profileStyle.Render(hScroll(m.gpuName, contentW-1-gpuPrefixW, m.gpuNameScroll)))
 	} else if m.gpuAvailable {
 		b.WriteString(detailMutedStyle.Render("(no data yet)"))
 	} else {
@@ -501,10 +502,10 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 
 		if remoteName != "" {
 			const gpu1PrefixW = 7 // len("GPU 1: ")
-			b.WriteString(sectionTitleStyle.Render("GPU 1: ") + profileStyle.Render(hScroll(remoteName, contentW-gpu1PrefixW, m.gpuNameScroll)))
+			b.WriteString(sectionTitleStyle.Render("GPU 1: ") + profileStyle.Render(hScroll(remoteName, contentW-1-gpu1PrefixW, m.gpuNameScroll)))
 			b.WriteString("\n")
 			const clientPrefixW = 2 // leading "  "
-			b.WriteString(detailMutedStyle.Render("  " + hScroll(remoteLabel, contentW-clientPrefixW, m.gpuNameScroll)))
+			b.WriteString(detailMutedStyle.Render("  " + hScroll(remoteLabel, contentW-1-clientPrefixW, m.gpuNameScroll)))
 			b.WriteString("\n")
 			if remoteTotal > 0 {
 				b.WriteString(m.overviewVRAMBar(remoteUsed, remoteTotal, contentW, false))
