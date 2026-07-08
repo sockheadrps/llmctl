@@ -60,6 +60,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.health[key] = status
 			}
 		}
+		m.pushStatusServer()
 		return m, nil
 
 	case slotsMsg:
