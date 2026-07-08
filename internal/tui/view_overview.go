@@ -294,7 +294,9 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	}
 	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4))))
 
-	// Line 2: └─ (size) [GPU|CPU] (—)  :port
+	narrow := contentW < 50
+
+	// Line 2: └─ (size) [GPU|CPU] (—)  :port  (port omitted when narrow)
 	modeBadge := detailMutedStyle.Render("[GPU]")
 	if ri.RAMMiB > 0 {
 		modeBadge = detailMutedStyle.Render("[CPU]")
@@ -304,10 +306,11 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 		detail += fmt.Sprintf("(%.1fG) ", float64(ri.ModelSizeBytes)/(1024*1024*1024))
 	}
 	detail += modeBadge + detailMutedStyle.Render(" (—)")
-	detail += profileStyle.Render(fmt.Sprintf("  :%d", ri.Port))
+	if !narrow {
+		detail += profileStyle.Render(fmt.Sprintf("  :%d", ri.Port))
+	}
 	b.WriteString(detail + "\n")
 
-	// Line 3: Current: X | Avg: Y | Peak Z T/S
 	var cur, avg, peak string
 	if ri.TokS > 0 {
 		cur = fmt.Sprintf("%.0ft/s", ri.TokS)
@@ -318,8 +321,15 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	if ri.TokPeak > 0 {
 		peak = fmt.Sprintf("%.0f", ri.TokPeak)
 	}
-	spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
-	b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+
+	if narrow {
+		// Narrow: stack Current / (Avg | Peak) on separate lines.
+		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
+		b.WriteString(detailMutedStyle.Render("     Avg: "+avg+"  Peak: "+peak+" T/S") + "\n")
+	} else {
+		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
+		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+	}
 	return b.String()
 }
 
@@ -346,18 +356,23 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		dot = downStyle.Render("●")
 	}
 
+	narrow := contentW < 50
+
 	// Brief "✓ copied" flash.
 	if m.overviewCopied == hkey {
 		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
 		b.WriteString(runningStyle.Render("  └─ ✓ copied to clipboard") + "\n")
-		b.WriteString("\n") // keep 3-line height
+		b.WriteString("\n") // keep entry height consistent
+		if narrow {
+			b.WriteString("\n") // narrow adds an extra line
+		}
 		return b.String()
 	}
 
 	// Line 1: ● Alias
 	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
 
-	// Line 2: └─ (size) [GPU/CPU] (uptime)  :port
+	// Line 2: └─ (size) [GPU/CPU] (uptime)  :port  (port omitted when narrow)
 	modeBadge := detailMutedStyle.Render("[GPU]")
 	if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
 		if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.CPUOnly {
@@ -372,16 +387,24 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	if r.StartedAt > 0 {
 		detail += detailMutedStyle.Render(" (" + fmtUptime(time.Since(time.Unix(r.StartedAt, 0))) + ")")
 	}
-	detail += profileStyle.Render(fmt.Sprintf("  :%d", r.Port))
+	if !narrow {
+		detail += profileStyle.Render(fmt.Sprintf("  :%d", r.Port))
+	}
 	b.WriteString(detail + "\n")
 
-	// Line 3: Current: X | Avg: Y | Peak Z T/S
 	cur, avg, peak := m.overviewSpeeds(hkey, r.ModelKey, r.ProfileKey)
 	if cur == "—" {
 		cur = ""
 	}
-	spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
-	b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+
+	if narrow {
+		// Narrow: stack Current / (Avg | Peak) on separate lines.
+		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
+		b.WriteString(detailMutedStyle.Render("     Avg: "+avg+"  Peak: "+peak+" T/S") + "\n")
+	} else {
+		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
+		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+	}
 	return b.String()
 }
 

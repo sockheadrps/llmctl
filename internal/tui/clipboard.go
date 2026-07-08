@@ -124,12 +124,18 @@ func (m Model) overviewClickedEntry(x, y int) (models.Running, bool) {
 	_ = rightBoxW
 
 	// Left inner box X range: margin(1) .. margin+leftBoxW (exclusive)
-	// Y layout: 0=topBorder 1=blank 2=innerTopBorder 3=header 4=Local label 5+=entries (3 lines each)
+	// Y layout: 0=topBorder 1=blank 2=innerTopBorder 3=header 4=Local label 5+=entries
+	// Entry stride: 3 lines (wide) or 4 lines (narrow, contentW < 50).
+	leftContentW := leftBoxW - 2
+	entryStride := 3
+	if leftContentW < 50 {
+		entryStride = 4
+	}
 	const entryStartY = 5
 	if x < 1 || x >= 1+leftBoxW || y < entryStartY {
 		return models.Running{}, false
 	}
-	idx := (y - entryStartY) / 3
+	idx := (y - entryStartY) / entryStride
 	if idx < 0 || idx >= len(m.running) {
 		return models.Running{}, false
 	}
