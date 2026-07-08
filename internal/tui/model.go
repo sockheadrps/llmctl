@@ -22,6 +22,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 // screen selects which full-screen view is active.
@@ -160,6 +161,12 @@ type Model struct {
 	health           healthMsg
 	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
 
+	loadStartedAt map[string]time.Time     // when loading began, keyed by "modelKey/profileKey"
+	loadWithRPC   map[string]bool          // whether RPC was enabled when load started
+	loadDuration  map[string]time.Duration // set when load completes, persists while model is up
+	loadHistory   loadTimeStore
+	loadTimesPath string
+
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
 	tokPeak    map[string]float64   // session-high tok/s per instance, for scaling the rate meter
@@ -259,6 +266,12 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		m.setError(fmt.Errorf("status server: %w", err), "")
 	}
 	m.reconcileStatusPublisher()
+	m.loadStartedAt = map[string]time.Time{}
+	m.loadWithRPC = map[string]bool{}
+	m.loadDuration = map[string]time.Duration{}
+	ltPath, _ := util.LoadTimesFile()
+	m.loadTimesPath = ltPath
+	m.loadHistory = loadLoadTimes(ltPath)
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
@@ -577,6 +590,9 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 			key := r.ModelKey + "/" + r.ProfileKey
 			delete(m.pendingInstances, key)
 			delete(m.health, key)
+			delete(m.loadDuration, key)
+			delete(m.loadStartedAt, key)
+			delete(m.loadWithRPC, key)
 		}
 	}
 

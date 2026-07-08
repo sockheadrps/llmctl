@@ -69,3 +69,12 @@ func DefaultConfigPath() (string, error) {
 	}
 	return filepath.Join(home, "config.yaml"), nil
 }
+
+// LoadTimesFile returns the path to the JSON file tracking historical load times.
+func LoadTimesFile() (string, error) {
+	home, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "load_times.json"), nil
+}

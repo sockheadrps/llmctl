@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,6 +55,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if status == health.StatusUp {
 					delete(m.pendingInstances, key)
 					m.health[key] = status
+					if startedAt, ok := m.loadStartedAt[key]; ok {
+						dur := time.Since(startedAt)
+						m.loadDuration[key] = dur
+						m.loadHistory.record(key, dur.Seconds(), m.loadWithRPC[key])
+						_ = saveLoadTimes(m.loadTimesPath, m.loadHistory)
+						delete(m.loadStartedAt, key)
+						delete(m.loadWithRPC, key)
+					}
 				}
 				// While pending and not yet up (loading or down), leave health as StatusLoading (zero/default).
 			} else {
@@ -139,6 +148,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		key := msg.modelKey + "/" + msg.profileKey
 		m.pendingInstances[key] = true
+		m.loadStartedAt[key] = time.Now()
+		m.loadWithRPC[key] = m.cfg.RPCEnabled
 		return m, m.backgroundChecks()
 
 	case stopResultMsg:

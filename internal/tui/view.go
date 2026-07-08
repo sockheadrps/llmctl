@@ -635,16 +635,37 @@ func (m Model) renderRunningRow(r models.Running, selected, focused bool) string
 	return m.renderRunningRowWithWidth(r, selected, focused, 0)
 }
 
+func fmtLoadDur(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%dm%ds", s/60, s%60)
+}
+
 func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused bool, width int) string {
+	hkey := r.ModelKey + "/" + r.ProfileKey
 	dot := loadingStyle.Render("●")
 	badge := loadingStyle.Render("loading")
-	switch m.health[r.ModelKey+"/"+r.ProfileKey] {
+	switch m.health[hkey] {
 	case health.StatusUp:
 		dot = runningStyle.Render("●")
 		badge = runningStyle.Render("up")
+		if dur, ok := m.loadDuration[hkey]; ok {
+			badge += detailMutedStyle.Render("  (" + fmtLoadDur(dur) + ")")
+		}
 	case health.StatusDown:
 		dot = downStyle.Render("●")
 		badge = downStyle.Render("down")
+	default:
+		if startedAt, ok := m.loadStartedAt[hkey]; ok {
+			elapsed := fmtLoadDur(time.Since(startedAt))
+			timing := elapsed
+			if avg, ok := m.loadHistory.average(hkey, m.loadWithRPC[hkey]); ok {
+				timing += detailMutedStyle.Render(" / avg " + fmtLoadDur(time.Duration(avg*float64(time.Second))))
+			}
+			badge = loadingStyle.Render("loading") + "  " + loadingStyle.Render(timing)
+		}
 	}
 
 	cursor := "  "
@@ -658,9 +679,8 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 		}
 	}
 
-	key := r.ModelKey + "/" + r.ProfileKey
 	text := fmt.Sprintf("%-24s :%d", r.Label(), r.Port)
-	if rate, ok := m.tokRates[key]; ok {
+	if rate, ok := m.tokRates[hkey]; ok {
 		text += fmt.Sprintf("  %.1f tok/s", rate)
 	}
 	if mb, ok := m.gpuByPID[r.PID]; ok {
@@ -671,11 +691,11 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 	}
 	row := fmt.Sprintf("%s%s %s %s\n", cursor, dot, badge, labelStyle.Render(text))
 
-	if rate, ok := m.tokRates[key]; ok {
-		row += "   " + m.renderRateMeter(key, rate) + "\n"
-	} else if peak := m.tokPeak[key]; peak > 0 {
+	if rate, ok := m.tokRates[hkey]; ok {
+		row += "   " + m.renderRateMeter(hkey, rate) + "\n"
+	} else if peak := m.tokPeak[hkey]; peak > 0 {
 		// model is idle but has a session history — show the meter at zero
-		row += "   " + m.renderRateMeter(key, 0) + "\n"
+		row += "   " + m.renderRateMeter(hkey, 0) + "\n"
 	}
 	return row
 }
