@@ -386,13 +386,11 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	return b.String()
 }
 
-// overviewSpeeds returns (current/avg spd string, peak string) for display.
-// spd is the current tok/s when generating, or rolling-window average when
-// idle; peak is the all-time persisted high if it's meaningfully higher.
 // overviewSpeeds returns (current, avg, peak) display strings.
-// current: live rate if generating, else in-session rolling avg, else "—"
-// avg:     persisted cross-session average from tokRateHistory (empty if none)
-// peak:    all-time peak from MaxTokPerSec / session tokPeak (empty if none)
+// current: live tok/s rate while generating, else "—"
+// avg:     in-session rolling window average (tokHistory), falling back to
+//          the persisted cross-session average (tokRateHistory) when idle
+// peak:    all-time high from MaxTokPerSec / session tokPeak
 func (m Model) overviewSpeeds(hkey, modelKey, profileKey string) (current, avg, peak string) {
 	// All-time peak.
 	var allTimePeak float64
@@ -409,30 +407,25 @@ func (m Model) overviewSpeeds(hkey, modelKey, profileKey string) (current, avg, 
 		peak = fmt.Sprintf("%.0f", peakVal)
 	}
 
-	// Persisted cross-session average.
-	if histAvg, ok := m.tokRateHistory.average(hkey); ok && histAvg > 0 {
-		avg = fmt.Sprintf("%.0f", histAvg)
-	}
-
-	// Current live rate.
-	if rate, ok := m.tokRates[hkey]; ok && rate > 0 {
-		current = fmt.Sprintf("%.0ft/s", rate)
-		return
-	}
-
-	// In-session rolling-window average when idle.
+	// Rolling average: in-session history first, then persisted cross-session.
 	if hist := m.tokHistory[hkey]; len(hist) > 0 {
 		var sum float64
 		for _, v := range hist {
 			sum += v
 		}
 		if inSess := sum / float64(len(hist)); inSess > 0 {
-			current = fmt.Sprintf("%.0ft/s", inSess)
-			return
+			avg = fmt.Sprintf("%.0f", inSess)
 		}
+	} else if histAvg, ok := m.tokRateHistory.average(hkey); ok && histAvg > 0 {
+		avg = fmt.Sprintf("%.0f", histAvg)
 	}
 
-	current = "—"
+	// Current: live rate only while actively generating.
+	if rate, ok := m.tokRates[hkey]; ok && rate > 0 {
+		current = fmt.Sprintf("%.0ft/s", rate)
+	} else {
+		current = "—"
+	}
 	return
 }
 

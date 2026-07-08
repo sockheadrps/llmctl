@@ -136,7 +136,13 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			TokS:    m.tokRates[key],
 			TokPeak: peakVal,
 		}
-		if histAvg, ok := m.tokRateHistory.average(key); ok && histAvg > 0 {
+		if hist := m.tokHistory[key]; len(hist) > 0 {
+			var sum float64
+			for _, v := range hist {
+				sum += v
+			}
+			info.TokAvg = sum / float64(len(hist))
+		} else if histAvg, ok := m.tokRateHistory.average(key); ok && histAvg > 0 {
 			info.TokAvg = histAvg
 		}
 		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
