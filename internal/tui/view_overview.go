@@ -154,33 +154,35 @@ func renderTitledInnerBox(title, content, bottomText string, centerBottom bool, 
 		bs.Render(strings.Repeat("─", rightDash)) +
 		bs.Render("╮")
 
-	// Bottom border with embedded text.
+	// Bottom border with embedded text — hide text independently if the box
+	// is too narrow to fit it with at least a couple of dashes on each side.
+	plainBottom := func() string {
+		return bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯")
+	}
 	var bottomBorder string
 	if bottomText == "" {
-		bottomBorder = bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯")
+		bottomBorder = plainBottom()
 	} else {
 		textW := lipgloss.Width(bottomText)
-		// 2 chars for "─ " before and " ─" (or just dashes) after the text
-		dashTotal := innerW - textW - 2
-		if dashTotal < 0 {
-			dashTotal = 0
-		}
-		var leftD, rightD int
-		if centerBottom {
-			leftD = dashTotal / 2
-			rightD = dashTotal - leftD
+		dashTotal := innerW - textW - 2 // 1 space on each side of the text
+		if dashTotal < 2 {
+			// Not enough room for this box's label — fall back to plain dashes.
+			bottomBorder = plainBottom()
 		} else {
-			leftD = 1
-			rightD = dashTotal - 1
-			if rightD < 0 {
-				rightD = 0
+			var leftD, rightD int
+			if centerBottom {
+				leftD = dashTotal / 2
+				rightD = dashTotal - leftD
+			} else {
+				leftD = 1
+				rightD = dashTotal - 1
 			}
+			bottomBorder = bs.Render("╰") +
+				bs.Render(strings.Repeat("─", leftD)) +
+				" " + bottomText + " " +
+				bs.Render(strings.Repeat("─", rightD)) +
+				bs.Render("╯")
 		}
-		bottomBorder = bs.Render("╰") +
-			bs.Render(strings.Repeat("─", leftD)) +
-			" " + bottomText + " " +
-			bs.Render(strings.Repeat("─", rightD)) +
-			bs.Render("╯")
 	}
 
 	rawLines := strings.Split(strings.TrimRight(content, "\n"), "\n")
