@@ -471,32 +471,6 @@ func (m Model) overviewModelSize(modelKey string) string {
 func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
 
-	// CPU-only models: show RAM usage before GPU section.
-	for _, r := range m.running {
-		mdl, hasMdl := m.cfg.Models[r.ModelKey]
-		if !hasMdl {
-			continue
-		}
-		p, hasP := mdl.Profiles[r.ProfileKey]
-		if !hasP || !p.CPUOnly {
-			continue
-		}
-		mb, ok := m.ramByPID[r.PID]
-		if !ok || mb <= 0 {
-			continue
-		}
-		alias := r.ProfileName
-		if alias == "" {
-			alias = r.ModelName
-		}
-		if p.Alias != "" {
-			alias = p.Alias
-		}
-		b.WriteString(sectionTitleStyle.Render("RAM: ") +
-			profileStyle.Render(fmt.Sprintf("%.1fG", float64(mb)/1024)) +
-			detailMutedStyle.Render(" ("+alias+")") + "\n")
-	}
-
 	// GPU 0: local GPU.
 	// -1 for the margin space prepended to every line at the end of this function.
 	const gpuPrefixW = 7 // len("GPU 0: ")
@@ -513,6 +487,20 @@ func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 		b.WriteString(m.overviewVRAMBar(m.gpuUsage.UsedMiB, m.gpuUsage.TotalMiB, contentW, true))
 		b.WriteString("\n")
 	}
+
+	// RAM: total used by all CPU-only model processes on this instance.
+	var totalRAMMiB int64
+	for _, r := range m.running {
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+			if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.CPUOnly {
+				totalRAMMiB += m.ramByPID[r.PID]
+			}
+		}
+	}
+	if totalRAMMiB > 0 {
+		b.WriteString("RAM:  " + profileStyle.Render(fmt.Sprintf("%.1fG", float64(totalRAMMiB)/1024)) + "\n")
+	}
+
 	b.WriteString("\n")
 
 	// GPU 1: remote GPU (client GPU in server mode; server GPU in client mode).
