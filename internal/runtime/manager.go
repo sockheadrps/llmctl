@@ -76,9 +76,11 @@ func (mgr *Manager) List() ([]models.Running, error) {
 // Start launches modelKey/profileKey from cfg, records it in the state
 // file, and returns the resulting Running entry. It refuses to start a
 // model+profile pair that is already running.
-// Start launches a model profile. rpcEndpointOverride, when non-empty, is used
-// as the --rpc endpoint instead of cfg.RPCEndpoint (e.g. an auto-discovered addr).
-func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEndpointOverride string) (models.Running, error) {
+// rpcEndpointOverride, when non-empty, is used as the --rpc endpoint instead
+// of cfg.RPCEndpoint (e.g. an auto-discovered addr).
+// tensorSplit, when non-empty, is forwarded as --tensor-split to split GPU
+// layers across the local GPU and the RPC server (e.g. "20,15").
+func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEndpointOverride string, tensorSplit string) (models.Running, error) {
 	m, p, err := cfg.FindProfile(modelKey, profileKey)
 	if err != nil {
 		return models.Running{}, err
@@ -118,7 +120,7 @@ func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEn
 		}
 	}
 
-	pid, err := process.Start(cfg.LlamaServerBin, m, p, logPath, rpcEndpoint)
+	pid, err := process.Start(cfg.LlamaServerBin, m, p, logPath, rpcEndpoint, tensorSplit)
 	if err != nil {
 		return models.Running{}, err
 	}
