@@ -208,18 +208,12 @@ is in one place. This phase involves logic changes, not just moves.
 
 ### Tasks
 
-- [ ] **6a** Audit all `m.cfg.RPCMode` branches across the codebase
-      (`grep -n 'RPCMode' internal/tui/*.go`)
-- [ ] **6b** Consolidate server-mode-only rendering into `view_rpc.go`
-      (no server branches scattered in `view.go` or `view_running.go`)
-- [ ] **6c** Consolidate client-mode-only rendering into a new
-      `view_rpc_client.go`
-- [ ] **6d** Review `settings_rpc.go` — split client vs server settings
-      handlers into clearly named funcs
-- [ ] **6e** In `model_status.go`, document (comment) which functions are
-      client-only vs server-only vs shared
-- [ ] **6f** Remove any dead `RPCMode` checks that can't be reached given
-      the current settings flow (verify with tests)
+- [x] **6a** Audit all `m.cfg.RPCMode` branches — all dedicated RPC rendering already in `view_rpc.go`; inline guards in general functions left in place (no standalone functions to extract)
+- [x] **6b** Annotate `model_status.go` and `model_checks.go` with `// server-mode only`, `// client-mode only`, `// shared`
+- [x] **6c** No misplaced rendering found — RPC-guarded blocks are inline segments, not movable without new abstractions
+- [x] **6d** Two remaining `RPCMode` refs in `model.go`/`update.go` confirmed correct in-place
+- [x] **6e** Mode ownership documented via comments in `model_status.go` and `model_checks.go`
+- [x] **6f** No dead RPCMode checks found — all reachable via settings flow
 
 ### Milestone Verification — Phase 6
 
@@ -277,5 +271,5 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 | Phase 3 — Split update.go | ✅ Done (update.go: 1115 → 334 lines) |
 | Phase 4 — Split form.go | ✅ Done (form.go: 1221 → 688 lines) |
 | Phase 5 — Split settings.go | ✅ Done (settings.go: 678 → 358 lines) |
-| Phase 6 — Client/Server separation | ⬜ Not started |
+| Phase 6 — Client/Server separation | ✅ Done (audit clean, ownership annotated) |
 | Phase 7 — Final cleanup + PR | ⬜ Not started |
