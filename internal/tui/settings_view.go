@@ -49,6 +49,10 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.rpc.err))
 	}
+	if categoryID == "rpc" && m.settings.statusSrv.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.statusSrv.err))
+	}
 	if categoryID == "status_server" && m.settings.statusSrv.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.statusSrv.err))
@@ -80,7 +84,9 @@ func (m Model) renderBinContent() string {
 
 	if m.settings.bin.editing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:"));b.WriteString(" ");b.WriteString(m.settings.bin.input.View())
+		b.WriteString(formLabelStyle.Render("Binary:"))
+		b.WriteString(" ")
+		b.WriteString(m.settings.bin.input.View())
 		b.WriteString("\n")
 	}
 
@@ -148,7 +154,7 @@ func (m Model) renderRPCContent() string {
 		b.WriteString(sectionTitleStyle.Render("Client"))
 		b.WriteString("\n")
 
-		remoteAddrLabel := "Remote Status Address"
+		remoteAddrLabel := "Remote Status Server"
 		if m.cfg.RemoteStatusAddr != "" {
 			remoteAddrLabel += " (" + m.cfg.RemoteStatusAddr + ")"
 		}
@@ -157,7 +163,7 @@ func (m Model) renderRPCContent() string {
 			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Address:"), m.settings.rpc.remoteAddrInput.View())
 		}
 		if focused && m.settings.rpc.cursor == 3 && !m.settings.rpc.remoteAddrEditing {
-			b.WriteString(detailMutedStyle.Render("  The status server address of the remote llmctl (host:port).\n  RPC endpoint is auto-discovered from the status poll."))
+			b.WriteString(detailMutedStyle.Render("  The RPC server llmctl's status address (host:port).\n  This client publishes model/tok/s updates there over WebSocket."))
 			b.WriteString("\n")
 			if m.cfg.RemoteStatusAddr != "" {
 				if m.discoveredRPCEndpoint != "" {
@@ -185,16 +191,33 @@ func (m Model) renderRPCContent() string {
 	case "server":
 		b.WriteString(sectionTitleStyle.Render("Server"))
 		b.WriteString("\n")
+		statusHost := m.cfg.StatusServerHost
+		if statusHost == "" {
+			statusHost = "0.0.0.0"
+		}
+		row(3, "Status Host ("+statusHost+")")
+		if m.settings.statusSrv.hostEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Host:"), m.settings.statusSrv.hostInput.View())
+		}
+		row(4, "Status Port ("+strconv.Itoa(m.cfg.StatusServerPort)+")")
+		if m.settings.statusSrv.portEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.statusSrv.portInput.View())
+		}
 		if runtime.GOOS == "windows" {
+			firewallLabel := "Copy Status Firewall Rule"
+			if m.settings.statusSrv.copied {
+				firewallLabel = "Firewall Rule Copied"
+			}
+			row(5, firewallLabel)
 			binLabel := "Binary"
 			if m.cfg.RPCServerBin != "" {
 				binLabel += " (" + m.cfg.RPCServerBin + ")"
 			}
-			row(3, binLabel)
+			row(6, binLabel)
 			if m.settings.rpc.rpcBinEditing {
 				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Binary:"), m.settings.rpc.rpcBinInput.View())
 			}
-			row(4, "Port ("+strconv.Itoa(m.cfg.RPCServerPort)+")")
+			row(7, "RPC Port ("+strconv.Itoa(m.cfg.RPCServerPort)+")")
 			if m.settings.rpc.portEditing {
 				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.rpc.portInput.View())
 			}
@@ -203,8 +226,8 @@ func (m Model) renderRPCContent() string {
 			if m.cfg.NetworkTabEnabled {
 				netTabLabel = "Network Tab (Enabled)"
 			}
-			row(3, netTabLabel)
-			if focused && m.settings.rpc.cursor == 3 {
+			row(5, netTabLabel)
+			if focused && m.settings.rpc.cursor == 5 {
 				b.WriteString(profileStyle.Render(
 					"  Adds a Network tab for switching nmcli connections\n" +
 						"  between internet and RPC ethernet without leaving llmctl.\n\n" +
@@ -275,7 +298,9 @@ func (m Model) renderDirsContent() string {
 		if m.settings.dirs.editingIdx >= 0 {
 			label = "Edit Directory:"
 		}
-		b.WriteString(formLabelStyle.Render(label));b.WriteString(" ");b.WriteString(m.settings.dirs.input.View())
+		b.WriteString(formLabelStyle.Render(label))
+		b.WriteString(" ")
+		b.WriteString(m.settings.dirs.input.View())
 		b.WriteString("\n")
 	}
 

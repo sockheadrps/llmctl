@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -42,8 +43,8 @@ type rpcContentState struct {
 	// 1 = select Client mode
 	// 2 = select Server mode
 	// when client: 3 = remote status addr, 4 = manual endpoint
-	// when server (windows): 3 = binary, 4 = port
-	// when server (linux+net): 3 = network tab
+	// when server: 3 = status host, 4 = status port, 5 = firewall/network,
+	// 6 = RPC binary (Windows), 7 = RPC port (Windows)
 	cursor            int
 	remoteAddrEditing bool
 	remoteAddrInput   textinput.Model
@@ -148,9 +149,11 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 				maxRPCCursor = 4
 			case "server":
 				if runtime.GOOS == "windows" {
-					maxRPCCursor = 4
+					maxRPCCursor = 7
 				} else if m.netSupported {
-					maxRPCCursor = 3
+					maxRPCCursor = 5
+				} else {
+					maxRPCCursor = 4
 				}
 			}
 		}
@@ -204,6 +207,8 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {
 			m.settings.rpc.err = "status server: " + err.Error()
+		} else {
+			m.reconcileStatusPublisher()
 		}
 		return m, nil
 	case 1:
@@ -213,6 +218,8 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {
 			m.settings.rpc.err = "status server: " + err.Error()
+		} else {
+			m.reconcileStatusPublisher()
 		}
 		return m, nil
 	case 2:
@@ -222,6 +229,14 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {
 			m.settings.rpc.err = "status server: " + err.Error()
+		} else {
+			m.reconcileStatusPublisher()
+			if m.rpcServerHealthStatus() == health.StatusNotStarted {
+				m.starting = true
+				m.startingLabel = "RPC server"
+				m.clearError()
+				return m, m.startRPCServerCmd()
+			}
 		}
 		return m, nil
 	case 3:
@@ -229,13 +244,26 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		case "client":
 			return m.openRemoteStatusAddrForm()
 		case "server":
+			return m.openStatusServerHostForm()
+		}
+		return m, nil
+	case 4:
+		switch m.cfg.RPCMode {
+		case "client":
+			return m.openRPCEndpointForm()
+		case "server":
+			return m.openStatusServerPortForm()
+		}
+		return m, nil
+	case 5:
+		if m.cfg.RPCMode == "server" {
 			if runtime.GOOS == "windows" {
-				return m.openRPCServerBinForm()
+				return m.copyFirewallRule()
 			}
 			if m.netSupported && m.cfg.RPCEnabled {
 				if !m.cfg.NetworkTabEnabled {
 					if _, err := exec.LookPath("nmcli"); err != nil {
-						m.settings.rpc.err = "nmcli not found — install NetworkManager to use the Network tab"
+						m.settings.rpc.err = "nmcli not found - install NetworkManager to use the Network tab"
 						return m, nil
 					}
 				}
@@ -247,14 +275,14 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case 4:
-		switch m.cfg.RPCMode {
-		case "client":
-			return m.openRPCEndpointForm()
-		case "server":
-			if runtime.GOOS == "windows" {
-				return m.openRPCServerPortForm()
-			}
+	case 6:
+		if m.cfg.RPCMode == "server" && runtime.GOOS == "windows" {
+			return m.openRPCServerBinForm()
+		}
+		return m, nil
+	case 7:
+		if m.cfg.RPCMode == "server" && runtime.GOOS == "windows" {
+			return m.openRPCServerPortForm()
 		}
 		return m, nil
 	}
@@ -282,6 +310,7 @@ func (m Model) submitRemoteStatusAddrForm() (tea.Model, tea.Cmd) {
 		m.settings.rpc.err = err.Error()
 		return m, nil
 	}
+	m.reconcileStatusPublisher()
 	m.settings.rpc.remoteAddrEditing = false
 	m.settings.rpc.err = ""
 	return m, nil
@@ -445,6 +474,7 @@ func (m Model) submitStatusServerHostForm() (tea.Model, tea.Cmd) {
 		m.settings.statusSrv.err = err.Error()
 		return m, nil
 	}
+	m.pushStatusServer()
 	m.settings.statusSrv.hostEditing = false
 	m.settings.statusSrv.err = ""
 	return m, nil
@@ -480,6 +510,7 @@ func (m Model) submitStatusServerPortForm() (tea.Model, tea.Cmd) {
 		m.settings.statusSrv.err = err.Error()
 		return m, nil
 	}
+	m.pushStatusServer()
 	m.settings.statusSrv.portEditing = false
 	m.settings.statusSrv.err = ""
 	return m, nil

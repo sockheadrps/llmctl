@@ -5,78 +5,78 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-// Server is a small HTTP server that serves GET /status as JSON.
-// The caller updates the snapshot via SetStatus; the server always
-// serves the latest snapshot it has been given.
+// Server serves the local llmctl status snapshot and accepts pushed status
+// snapshots from llmctl instances running as RPC clients.
 type Server struct {
-	mu      sync.RWMutex
-	status  Status
-	srv     *http.Server
-	clients map[string]time.Time // remote IP → last seen
+	mu            sync.RWMutex
+	status        Status
+	srv           *http.Server
+	clientUpdates map[string]ClientInfo
+	upgrader      websocket.Upgrader
 }
 
 // NewServer creates a Server. Call Start to bind and begin serving.
 func NewServer() *Server {
-	return &Server{clients: make(map[string]time.Time)}
-}
-
-// RecentClientCount returns the number of distinct remote IPs that have
-// polled /status within the given window.
-func (s *Server) RecentClientCount(window time.Duration) int {
-	cutoff := time.Now().Add(-window)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	n := 0
-	for _, t := range s.clients {
-		if t.After(cutoff) {
-			n++
-		}
+	return &Server{
+		clientUpdates: make(map[string]ClientInfo),
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return true },
+		},
 	}
-	return n
 }
 
-// RecentClientIPs returns the distinct remote IPs that have polled /status
-// within the given window.
-func (s *Server) RecentClientIPs(window time.Duration) []string {
-	cutoff := time.Now().Add(-window)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var ips []string
-	for ip, t := range s.clients {
-		if t.After(cutoff) {
-			ips = append(ips, ip)
-		}
-	}
-	return ips
-}
-
-// SetStatus replaces the current snapshot atomically.
+// SetStatus replaces the current local snapshot atomically.
 func (s *Server) SetStatus(st Status) {
 	s.mu.Lock()
+	st.Clients = s.clientSnapshotsLocked(45 * time.Second)
 	s.status = st
 	s.mu.Unlock()
 }
 
+// ClientStatuses returns recently pushed RPC client snapshots.
+func (s *Server) ClientStatuses(window time.Duration) []ClientInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.clientSnapshotsLocked(window)
+}
+
+func (s *Server) clientSnapshotsLocked(window time.Duration) []ClientInfo {
+	cutoff := time.Now().Add(-window).Unix()
+	out := make([]ClientInfo, 0, len(s.clientUpdates))
+	for _, client := range s.clientUpdates {
+		if client.LastSeen >= cutoff {
+			out = append(out, client)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
 // Start binds to host:port and serves in the background.
-// Returns an error if the listener cannot be created.
 func (s *Server) Start(host string, port int) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
 		s.mu.Lock()
+		s.status.Clients = s.clientSnapshotsLocked(45 * time.Second)
 		st := s.status
-		if host != "" && host != "127.0.0.1" && host != "::1" {
-			s.clients[host] = time.Now()
-		}
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(st)
 	})
+	mux.HandleFunc("/ws/client-status", s.handleClientStatusWS)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -86,6 +86,42 @@ func (s *Server) Start(host string, port int) error {
 	s.srv = &http.Server{Handler: mux}
 	go s.srv.Serve(ln) //nolint:errcheck
 	return nil
+}
+
+type clientUpdate struct {
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	Status Status `json:"status"`
+}
+
+func (s *Server) handleClientStatusWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	for {
+		var update clientUpdate
+		if err := conn.ReadJSON(&update); err != nil {
+			return
+		}
+		if update.ID == "" {
+			update.ID = host
+		}
+		info := ClientInfo{
+			ID:       update.ID,
+			Name:     update.Name,
+			Addr:     host,
+			LastSeen: time.Now().Unix(),
+			Running:  update.Status.Running,
+			GPU:      update.Status.GPU,
+		}
+		s.mu.Lock()
+		s.clientUpdates[update.ID] = info
+		s.mu.Unlock()
+	}
 }
 
 // Stop shuts the server down gracefully.

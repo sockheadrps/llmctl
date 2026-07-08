@@ -6,6 +6,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	runtimeos "runtime"
 	"sort"
 	"strings"
@@ -171,11 +172,12 @@ type Model struct {
 	statusServer          *statusserver.Server
 	statusServerHost      string
 	statusServerPort      int
+	statusPublisher       *statusserver.Publisher
+	statusPublisherAddr   string
 	remoteStatus          *statusserver.Status
-	clientStatuses        map[string]*statusserver.Status // client IP → their status (nil if unreachable)
-	discoveredRPCEndpoint string                          // derived from remote status poll: host:rpc_port
-	rpcAddrCopied         bool                            // true briefly after copying the status server address
-	rpcIPCursor           int                             // which LAN IP is selected on the RPC Server tab
+	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
+	rpcAddrCopied         bool   // true briefly after copying the status server address
+	rpcIPCursor           int    // which LAN IP is selected on the RPC Server tab
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view
@@ -252,9 +254,11 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 			m.gpuName = name
 		}
 	}
+	m.statusPublisher = statusserver.NewPublisher(clientID(), clientName())
 	if err := m.reconcileStatusServer(); err != nil {
 		m.setError(fmt.Errorf("status server: %w", err), "")
 	}
+	m.reconcileStatusPublisher()
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
@@ -266,7 +270,10 @@ func (m Model) shouldRunStatusServer() bool {
 	if m.cfg == nil {
 		return false
 	}
-	return m.cfg.StatusServerEnabled || (m.cfg.RPCEnabled && m.cfg.RPCMode == "client")
+	if m.cfg.RPCEnabled {
+		return m.cfg.RPCMode == "server"
+	}
+	return m.cfg.StatusServerEnabled
 }
 
 func (m Model) statusServerBindAddr() (string, int) {
@@ -315,6 +322,35 @@ func (m *Model) reconcileStatusServer() error {
 	m.statusServerPort = port
 	m.pushStatusServer()
 	return nil
+}
+
+func (m *Model) reconcileStatusPublisher() {
+	if m.statusPublisher == nil {
+		return
+	}
+	if m.cfg == nil || !m.cfg.RPCEnabled || m.cfg.RPCMode != "client" || strings.TrimSpace(m.cfg.RemoteStatusAddr) == "" {
+		m.statusPublisher.Stop()
+		m.statusPublisherAddr = ""
+		return
+	}
+	addr := strings.TrimSpace(m.cfg.RemoteStatusAddr)
+	if m.statusPublisherAddr == addr {
+		return
+	}
+	m.statusPublisher.Start(addr)
+	m.statusPublisherAddr = addr
+	m.statusPublisher.Update(m.buildStatusSnapshot())
+}
+
+func clientID() string {
+	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
+		return strings.TrimSpace(host)
+	}
+	return "llmctl-client"
+}
+
+func clientName() string {
+	return clientID()
 }
 
 func (m *Model) rebuildRows() {
@@ -468,12 +504,12 @@ func visibleModelKeys(cfg *config.Config) []string {
 	return keys
 }
 
-// buildSettingsRows lists the Settings tab's menu. Status Server is hidden
-// in RPC client mode because client status is managed automatically.
+// buildSettingsRows lists the Settings tab's menu. Status Server is a
+// standalone/non-RPC setting; RPC mode owns status through the selected role.
 func (m Model) buildSettingsRows() []row {
 	var rows []row
 	for _, c := range settingsCategories {
-		if c.id == "status_server" && m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" {
+		if c.id == "status_server" && m.cfg != nil && m.cfg.RPCEnabled {
 			continue
 		}
 		rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})
@@ -640,12 +676,15 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 }
 
 // pushStatusServer updates the local status server snapshot with current state.
-// No-op when the status server is not running.
+// In RPC client mode it also publishes the snapshot to the remote status server.
 func (m *Model) pushStatusServer() {
-	if m.statusServer == nil {
-		return
+	st := m.buildStatusSnapshot()
+	if m.statusServer != nil {
+		m.statusServer.SetStatus(st)
 	}
-	m.statusServer.SetStatus(m.buildStatusSnapshot())
+	if m.statusPublisher != nil {
+		m.statusPublisher.Update(st)
+	}
 }
 
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
@@ -706,29 +745,7 @@ func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
 	}
 }
 
-// clientStatusesMsg carries statuses polled from each known client's status
-// server. Keyed by client IP. nil value means the poll failed (no status server).
-type clientStatusesMsg map[string]*statusserver.Status
-
-// pollClientStatusesCmd polls each recently-seen client IP at the given status
-// server port. Results are best-effort — clients without a status server simply
 // return nil.
-func pollClientStatusesCmd(ips []string, port int) tea.Cmd {
-	return func() tea.Msg {
-		result := make(clientStatusesMsg, len(ips))
-		for _, ip := range ips {
-			addr := fmt.Sprintf("%s:%d", ip, port)
-			if st, err := statusserver.PollAddr(addr); err == nil {
-				st := st
-				result[ip] = &st
-			} else {
-				result[ip] = nil
-			}
-		}
-		return result
-	}
-}
-
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
@@ -743,15 +760,6 @@ func (m Model) backgroundChecks() tea.Cmd {
 		switch m.cfg.RPCMode {
 		case "server":
 			cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
-			if m.statusServer != nil {
-				port := m.cfg.StatusServerPort
-				if port == 0 {
-					port = 11435
-				}
-				if ips := m.statusServer.RecentClientIPs(45 * time.Second); len(ips) > 0 {
-					cmds = append(cmds, pollClientStatusesCmd(ips, port))
-				}
-			}
 		case "client":
 			if m.cfg.RemoteStatusAddr != "" {
 				cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))

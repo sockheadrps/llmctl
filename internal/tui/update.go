@@ -12,7 +12,6 @@ import (
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/runtime"
-	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -70,10 +69,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gpuUsage = msg.usage
 		m.gpuByPID = msg.byPID
 		m.pushStatusServer()
-		return m, nil
-
-	case clientStatusesMsg:
-		m.clientStatuses = msg
 		return m, nil
 
 	case remoteStatusMsg:
@@ -786,17 +781,13 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case modeRPCServer:
-			if m.cfg.RPCMode == "server" && m.cfg.StatusServerEnabled {
-				port := m.cfg.StatusServerPort
-				if port == 0 {
-					port = 11435
-				}
-				addrs := util.StatusServerAddrs(port)
+			if m.cfg.RPCMode == "server" && m.statusServer != nil {
+				addrs := m.statusServerAddrs()
 				next := m.rpcIPCursor + delta
 				switch {
 				case next < 0:
 					m.focus = focusTabs
-				case next < len(addrs):
+				case next <= len(addrs):
 					m.rpcIPCursor = next
 					m.rpcAddrCopied = false
 				}
@@ -988,6 +979,9 @@ func (m Model) selectRow() (tea.Model, tea.Cmd) {
 
 	if m.leftMode == modeRPCServer && m.focus == focusLeft {
 		if m.cfg.RPCMode == "server" {
+			if m.rpcIPCursor > 0 {
+				return m.copyStatusServerAddr()
+			}
 			return m.openRPCServerAction()
 		}
 		return m, nil // client mode: Enter does nothing

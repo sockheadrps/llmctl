@@ -16,6 +16,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/runtime"
+	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -405,7 +406,8 @@ func (m Model) renderModelsTree(width int) string {
 		if m.searchEditing {
 			prefix = cursorStyle.Render("/ ")
 		}
-		b.WriteString(prefix);b.WriteString(detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
+		b.WriteString(prefix)
+		b.WriteString(detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
 		b.WriteString("\n\n")
 	}
 
@@ -556,7 +558,8 @@ func (m Model) renderRunning() string {
 		}
 		b.WriteString("\n")
 		if m.statusServer != nil && rpcSt == health.StatusUp {
-			n := m.statusServer.RecentClientCount(45 * time.Second)
+			clients := m.statusServer.ClientStatuses(45 * time.Second)
+			n := len(clients)
 			if n == 1 {
 				b.WriteString(profileStyle.Render("1 client connected"))
 			} else if n > 1 {
@@ -565,13 +568,8 @@ func (m Model) renderRunning() string {
 				b.WriteString(detailMutedStyle.Render("no clients connected"))
 			}
 			b.WriteString("\n")
-			for _, st := range m.clientStatuses {
-				if st == nil || len(st.Running) == 0 {
-					continue
-				}
-				for _, ri := range st.Running {
-					fmt.Fprintf(&b, "  %s %s\n", runningStyle.Render("●"), profileStyle.Render(ri.Model+" / "+ri.Profile))
-				}
+			for _, client := range clients {
+				b.WriteString(m.renderClientStatusLines(client))
 			}
 		}
 		b.WriteString("\n")
@@ -594,6 +592,28 @@ func (m Model) renderRunning() string {
 // known. Shared between the persistent glance box (renderRunning) and the
 // Running tab's left-pane list (renderRunningTabList), which differ only
 // in which focus state highlights the selected row.
+func (m Model) renderClientStatusLines(client statusserver.ClientInfo) string {
+	if len(client.Running) == 0 {
+		return ""
+	}
+	name := client.Name
+	if name == "" {
+		name = client.Addr
+	}
+	var b strings.Builder
+	for _, ri := range client.Running {
+		meta := ""
+		if ri.TokS > 0 {
+			meta += fmt.Sprintf("  %.0f tok/s", ri.TokS)
+		}
+		if ri.VRAMMiB > 0 {
+			meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
+		}
+		fmt.Fprintf(&b, "  %s %s%s\n", runningStyle.Render("â—"), profileStyle.Render(name+": "+ri.Model+" / "+ri.Profile), detailMutedStyle.Render(meta))
+	}
+	return b.String()
+}
+
 func (m Model) renderRunningRow(r models.Running, selected, focused bool) string {
 	return m.renderRunningRowWithWidth(r, selected, focused, 0)
 }
@@ -675,57 +695,57 @@ func (m Model) renderRPCServerModeTab() string {
 	var b strings.Builder
 
 	focused := m.focus == focusLeft
-	cursor := "  "
-	style := profileStyle
-	if focused {
-		cursor = cursorStyle.Render("> ")
-		style = selectedProfileStyle
-	}
-
 	rpcStatus := m.rpcServerHealthStatus()
 	endpoint := m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort)
+	rpcCursor := "  "
+	rpcStyle := profileStyle
+	if focused && m.rpcIPCursor == 0 {
+		rpcCursor = cursorStyle.Render("> ")
+		rpcStyle = selectedProfileStyle
+	}
 
-	var statusStr string
 	switch rpcStatus {
 	case health.StatusUp:
-		statusStr = runningStyle.Render("● up")
-		b.WriteString(cursor + style.Render("RPC Server") + "  " + statusStr)
+		b.WriteString(rpcCursor + rpcStyle.Render("RPC Server") + "  " + runningStyle.Render("up"))
 		b.WriteString("\n")
 		b.WriteString("  " + profileStyle.Render(endpoint))
 	case health.StatusDown:
-		statusStr = downStyle.Render("● down")
-		b.WriteString(cursor + style.Render("RPC Server") + "  " + statusStr)
+		b.WriteString(rpcCursor + rpcStyle.Render("RPC Server") + "  " + downStyle.Render("down"))
 		b.WriteString("\n")
-		b.WriteString("  " + detailMutedStyle.Render("process exited — enter to view logs or clear"))
-	default: // StatusNotStarted
-		b.WriteString(cursor + style.Render("RPC Server") + "  " + detailMutedStyle.Render("not started"))
+		b.WriteString("  " + detailMutedStyle.Render("process exited - enter to view logs or clear"))
+	default:
+		b.WriteString(rpcCursor + rpcStyle.Render("RPC Server") + "  " + detailMutedStyle.Render("not started"))
 		b.WriteString("\n")
 		b.WriteString("  " + profileStyle.Render(endpoint))
 	}
-	b.WriteString("\n\n")
-
+	b.WriteString("\n")
 	if m.cfg.RPCServerBin != "" {
-		b.WriteString(profileStyle.Render("Binary: " + m.cfg.RPCServerBin))
+		b.WriteString("  " + detailMutedStyle.Render("Binary: "+m.cfg.RPCServerBin))
 		b.WriteString("\n")
 	}
 
-	if m.cfg.StatusServerEnabled {
+	if m.statusServer != nil {
 		b.WriteString("\n")
-		port := m.cfg.StatusServerPort
-		if port == 0 {
-			port = 11435
-		}
-		addrs := util.StatusServerAddrs(port)
+		addrs := m.statusServerAddrs()
 		if len(addrs) > 0 {
 			b.WriteString(sectionTitleStyle.Render("Status Server"))
 			b.WriteString("\n")
-			for _, a := range addrs {
-				fmt.Fprintf(&b, "  %s\n", runningStyle.Render(a))
+			selected := m.selectedStatusServerAddr()
+			for i, a := range addrs {
+				cursor := "  "
+				style := profileStyle
+				if focused && m.rpcIPCursor == i+1 {
+					cursor = cursorStyle.Render("> ")
+					style = selectedProfileStyle
+				} else if a == selected {
+					style = runningStyle
+				}
+				fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(a))
 			}
 			if m.rpcAddrCopied {
-				b.WriteString(runningStyle.Render("  ✓ copied"))
+				b.WriteString(runningStyle.Render("  copied"))
 			} else {
-				b.WriteString(detailMutedStyle.Render("  c to copy"))
+				b.WriteString(detailMutedStyle.Render("  enter/c to copy and select"))
 			}
 			b.WriteString("\n")
 		}
@@ -865,7 +885,8 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	fmt.Fprintf(&b, "%s\n", header)
 	if hasMeter {
 		rate := m.tokRates[key]
-		b.WriteString(m.renderRateMeter(key, rate));b.WriteString("\n")
+		b.WriteString(m.renderRateMeter(key, rate))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 	if tail := tailFittingHeight(run.LogFile, rightW, budget); tail != "" {
@@ -902,14 +923,20 @@ func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
 		fmt.Fprintf(&b, "%s  %s  %s\n", header, loadingStyle.Render("loading"), endpoint)
 	}
 
-	if m.cfg.StatusServerEnabled && m.statusServer != nil {
-		n := m.statusServer.RecentClientCount(45 * time.Second)
+	if m.statusServer != nil {
+		clients := m.statusServer.ClientStatuses(45 * time.Second)
+		n := len(clients)
 		if n == 1 {
 			fmt.Fprintf(&b, "%s\n", profileStyle.Render("1 client connected"))
 		} else if n > 1 {
 			fmt.Fprintf(&b, "%s\n", profileStyle.Render(strconv.Itoa(n)+" clients connected"))
 		} else {
 			fmt.Fprintf(&b, "%s\n", detailMutedStyle.Render("no clients connected"))
+		}
+		for _, client := range clients {
+			if lines := m.renderClientStatusLines(client); lines != "" {
+				b.WriteString(lines)
+			}
 		}
 	}
 	b.WriteString("\n")
@@ -1389,7 +1416,8 @@ func (m Model) renderModelPreview(modelKey string) string {
 		if p.Temp != nil {
 			text += fmt.Sprintf("  temp %.2g", *p.Temp)
 		}
-		b.WriteString(detailMutedStyle.Render("• " + text));b.WriteString("\n")
+		b.WriteString(detailMutedStyle.Render("• " + text))
+		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
@@ -1496,7 +1524,6 @@ func (m Model) modelRunningStatus(modelKey string) (running bool, status health.
 	}
 	return
 }
-
 
 type detailPair struct {
 	label string
