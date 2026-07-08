@@ -187,8 +187,8 @@ activation logic from the general settings routing.
 
 ### Tasks
 
-- [ ] **5a** Move settings type/const defs → `settings_types.go`, commit
-- [ ] **5b** Move RPC-specific activation → `settings_rpc.go`, commit
+- [x] **5a** Move settings type/const defs → `settings_types.go`, commit
+- [x] **5b** Move RPC-specific activation → `settings_rpc.go`, commit
 
 ### Milestone Verification — Phase 5
 
@@ -276,6 +276,6 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 | Phase 2 — Split model.go | ✅ Done (model.go: 922 → 370 lines) |
 | Phase 3 — Split update.go | ✅ Done (update.go: 1115 → 334 lines) |
 | Phase 4 — Split form.go | ✅ Done (form.go: 1221 → 688 lines) |
-| Phase 5 — Split settings.go | ⬜ Not started |
+| Phase 5 — Split settings.go | ✅ Done (settings.go: 678 → 358 lines) |
 | Phase 6 — Client/Server separation | ⬜ Not started |
 | Phase 7 — Final cleanup + PR | ⬜ Not started |
