@@ -21,16 +21,12 @@ type startResultMsg struct {
 }
 
 func (m Model) startProfileCmd(r row) tea.Cmd {
-	return m.startProfileCmdWithSplit(r, "")
-}
-
-func (m Model) startProfileCmdWithSplit(r row, tensorSplit string) tea.Cmd {
 	mgr, cfg := m.mgr, m.cfg
 	modelKey, profileKey, label := r.modelKey, r.profileKey, r.label
 	rpcOverride := m.discoveredRPCEndpoint
 	return func() tea.Msg {
 		logPath, _ := runtime.LogPath(modelKey, profileKey)
-		_, err := mgr.Start(cfg, modelKey, profileKey, rpcOverride, tensorSplit)
+		_, err := mgr.Start(cfg, modelKey, profileKey, rpcOverride)
 		if err != nil && !logFileHasContent(logPath) {
 			logPath = ""
 		}

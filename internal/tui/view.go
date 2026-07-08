@@ -49,8 +49,6 @@ func (m Model) View() string {
 		return overlayCenter(m.viewMain(), m.viewNetworkPickerModal())
 	case screenRPCServerAction:
 		return overlayCenter(m.viewMain(), m.viewRPCServerActionModal())
-	case screenRPCLayerSplit:
-		return overlayCenter(m.viewMain(), m.viewRPCLayerSplitModal())
 	default:
 		return m.viewMain()
 	}

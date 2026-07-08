@@ -53,17 +53,13 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter", " ":
 		m.screen = screenMain
-		r := row{kind: rowProfile, modelKey: m.confirm.modelKey, profileKey: m.confirm.profileKey, label: m.confirm.label}
 		switch m.confirm.selected {
 		case confirmEdit:
 			return m.openEditForm(m.confirm.modelKey, m.confirm.profileKey)
 		case confirmExportArgs:
-			return m.openExportArgs(r)
+			return m.openExportArgs(row{kind: rowProfile, modelKey: m.confirm.modelKey, profileKey: m.confirm.profileKey, label: m.confirm.label})
 		default:
-			if m.rpcSplitApplies(r) {
-				return m.openRPCLayerSplit(r)
-			}
-			return m.runProfile(r)
+			return m.runProfile(row{kind: rowProfile, modelKey: m.confirm.modelKey, profileKey: m.confirm.profileKey, label: m.confirm.label})
 		}
 	}
 	return m, nil

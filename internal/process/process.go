@@ -87,6 +87,9 @@ func BuildProfileArgs(p models.Profile) []string {
 	if ngl > 0 {
 		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(ngl))
 	}
+	if p.TensorSplit != "" {
+		args = append(args, "--tensor-split", p.TensorSplit)
+	}
 	if p.MLock {
 		args = append(args, "--mlock")
 	}
@@ -162,9 +165,7 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 // profile, detached from the parent process group so it survives the CLI
 // invocation exiting, with stdout/stderr redirected to logPath.
 // rpcEndpoint, when non-empty, appends --rpc <endpoint> to the args.
-// tensorSplit, when non-empty, appends --tensor-split <value> to the args
-// (e.g. "20,15" to allocate 20 layers to the local GPU and 15 to the RPC server).
-func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndpoint string, tensorSplit string) (pid int, err error) {
+func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndpoint string) (pid int, err error) {
 	resolvedBin, err := resolveExecutable(bin)
 	if err != nil {
 		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
@@ -178,9 +179,6 @@ func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndp
 	args := BuildArgs(m, p)
 	if rpcEndpoint != "" {
 		args = append(args, "--rpc", rpcEndpoint)
-	}
-	if tensorSplit != "" {
-		args = append(args, "--tensor-split", tensorSplit)
 	}
 	cmd := exec.Command(resolvedBin, args...)
 	cmd.Stdout = logFile

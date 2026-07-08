@@ -107,7 +107,6 @@ type Model struct {
 	stopConfirm          stopConfirmState
 	exportArgs           exportArgsState
 	templatePicker       templatePickerState
-	rpcLayerSplit        rpcLayerSplitState
 
 	tokHistory map[string][]float64
 

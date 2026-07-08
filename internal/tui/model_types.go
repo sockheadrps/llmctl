@@ -25,7 +25,6 @@ const (
 	screenNetworkSwitch
 	screenNetworkPicker
 	screenRPCServerAction
-	screenRPCLayerSplit
 )
 
 // paneFocus selects which pane arrow keys/s apply to on the main screen.

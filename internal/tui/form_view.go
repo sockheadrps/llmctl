@@ -2,10 +2,39 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+// formSliderTotal returns the current GPU layers value from the form field,
+// used as the upper bound of the tensor split slider.
+func (m Model) formSliderTotal() int {
+	val := strings.TrimSpace(m.form.fields[fieldGPULayers].input.Value())
+	if val == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+// formRPCActive reports whether RPC is effectively enabled for the profile
+// being edited, so the tensor split slider knows when to be interactive.
+func (m Model) formRPCActive() bool {
+	val := strings.TrimSpace(m.form.fields[fieldRPCEnabled].input.Value())
+	switch val {
+	case "false":
+		return false
+	case "true":
+		return true
+	default:
+		return m.cfg.RPCEnabled
+	}
+}
 
 const (
 	formDefaultLeftWidth    = 70
@@ -117,10 +146,43 @@ func (m Model) viewForm() string {
 	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(truncateText("MLock:", labelWidth)), mlockValue), rowWidth))
 	rowIndex++
 
+	splitLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields)+3 {
+		splitLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
+	}
+	splitLabel = splitLabel.Width(labelWidth)
+	total := m.formSliderTotal()
+	client := m.form.rpcClientLayers
+	if total > 0 && client > total {
+		client = total
+	}
+	server := 0
+	if total > 0 {
+		server = total - client
+	}
+	active := m.formRPCActive() && total > 0 && !m.form.cpuOnly
+	const sliderBarWidth = 20
+	var splitRowStr string
+	if active {
+		filled := 0
+		if total > 0 {
+			filled = sliderBarWidth * client / total
+		}
+		bar := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(strings.Repeat("█", filled)) +
+			detailMutedStyle.Render(strings.Repeat("░", sliderBarWidth-filled))
+		counts := profileStyle.Render(fmt.Sprintf("[%d / %d]", client, server))
+		splitRowStr = fmt.Sprintf("%s %s %s", splitLabel.Render(truncateText("Tensor Split:", labelWidth)), bar, counts)
+	} else {
+		splitRowStr = fmt.Sprintf("%s %s", splitLabel.Render(truncateText("Tensor Split:", labelWidth)), detailMutedStyle.Render("n/a (enable RPC + GPU layers)"))
+	}
+	selectedRows = append(selectedRows, fitStyledLine(splitRowStr, rowWidth))
+	rowIndex++
+
 	selectedRows = append(selectedRows, "")
 	rowIndex++
 	saveStyle := profileStyle
-	if m.form.focus == len(m.form.fields)+3 {
+	if m.form.focus == len(m.form.fields)+4 {
 		saveStyle = selectedProfileStyle
 		focusedRow = rowIndex
 	}
@@ -229,6 +291,8 @@ func (m Model) formDescriptionTitle() string {
 		return "CPU Only"
 	case 2:
 		return "MLock"
+	case 3:
+		return "Tensor Split"
 	}
 	return "Save Profile"
 }
@@ -244,8 +308,10 @@ func (m Model) formDescriptionText() string {
 		return formFieldDescription(len(formLabels) + 1)
 	case 2:
 		return formFieldDescription(len(formLabels) + 2)
+	case 3:
+		return formFieldDescription(len(formLabels) + 3)
 	}
-	return formFieldDescription(len(formLabels) + 3)
+	return formFieldDescription(len(formLabels) + 4)
 }
 
 func (m Model) formDescriptionLines(width int) []string {

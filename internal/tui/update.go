@@ -242,8 +242,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateNetworkPicker(msg)
 		case screenRPCServerAction:
 			return m.updateRPCServerAction(msg)
-		case screenRPCLayerSplit:
-			return m.updateRPCLayerSplit(msg)
 		default:
 			return m.updateMain(msg)
 		}

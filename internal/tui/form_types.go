@@ -11,7 +11,7 @@ type formField struct {
 // formState backs the "New Profile"/"Edit Profile" screen. Focus indices
 // 0..len(fields)-1 are the text fields, len(fields) is the Flash Attention
 // toggle, len(fields)+1 is the CPU Only toggle, len(fields)+2 is the MLock
-// toggle, and len(fields)+3 is the Save action.
+// toggle, len(fields)+3 is the Tensor Split slider, and len(fields)+4 is Save.
 //
 // navigating=true is navigate mode (arrow/WASD moves between fields; Enter
 // activates a field for editing). navigating=false is edit mode (keystrokes
@@ -28,6 +28,8 @@ type formState struct {
 	cpuOnly              bool
 	initialMLock         bool
 	mlock                bool
+	rpcClientLayers        int
+	initialRPCClientLayers int
 	focus                int
 	scroll               int
 	descScroll           int
