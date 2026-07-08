@@ -157,9 +157,9 @@ submission from the main form update/navigation logic.
 
 ### Tasks
 
-- [ ] **4a** Move type/const definitions → `form_types.go`, commit
-- [ ] **4b** Move field metadata functions → `form_fields.go`, commit
-- [ ] **4c** Move parsing helpers → `form_parse.go`, commit
+- [x] **4a** Move type/const definitions → `form_types.go`, commit
+- [x] **4b** Move field metadata functions → `form_fields.go`, commit
+- [x] **4c** Move parsing helpers → `form_parse.go`, commit
 
 ### Milestone Verification — Phase 4
 
@@ -275,7 +275,7 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 | Phase 1 — Split view.go | ✅ Done (view.go: 1825 → 279 lines) |
 | Phase 2 — Split model.go | ✅ Done (model.go: 922 → 370 lines) |
 | Phase 3 — Split update.go | ✅ Done (update.go: 1115 → 334 lines) |
-| Phase 4 — Split form.go | ⬜ Not started |
+| Phase 4 — Split form.go | ✅ Done (form.go: 1221 → 688 lines) |
 | Phase 5 — Split settings.go | ⬜ Not started |
 | Phase 6 — Client/Server separation | ⬜ Not started |
 | Phase 7 — Final cleanup + PR | ⬜ Not started |
