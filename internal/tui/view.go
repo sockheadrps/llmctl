@@ -55,6 +55,10 @@ func (m Model) View() string {
 }
 
 func (m Model) viewMain() string {
+	if m.leftMode == modeOverview {
+		return m.viewOverviewPage()
+	}
+
 	leftStyle := paneStyle
 	if m.focus != focusRunning {
 		leftStyle = focusedPaneStyle
@@ -173,6 +177,12 @@ func (m Model) helpText() string {
 	if m.focus == focusSettingsContent && (m.settings.dirs.editing || m.settings.bin.editing) {
 		return "enter save · esc cancel"
 	}
+	if m.leftMode == modeOverview {
+		return "← (a) / → (d)  ·  q quit"
+	}
+	if m.focus == focusLeft && m.modelSubTabFocused {
+		return "←→/ad switch view · ↓ enter list · q quit"
+	}
 	switch m.focus {
 	case focusTabs:
 		return "←→/ad tabs · ↑↓/ws select · q quit"
@@ -207,8 +217,17 @@ func (m Model) helpText() string {
 // renderHeaderLine.
 func (m Model) renderLeftPaneContent(leftW int) string {
 	switch m.leftMode {
-	case modeRecents:
-		return m.renderRecentsList(leftW)
+	case modeOverview:
+		return "" // overview takes the full width; left pane is not used
+	case modeModels, modeRecents:
+		subHeader := m.renderModelsSubTab()
+		var list string
+		if m.leftMode == modeRecents {
+			list = m.renderRecentsList(leftW)
+		} else {
+			list = m.renderModelsTree(leftW)
+		}
+		return subHeader + "\n" + list
 	case modeSettings:
 		return m.renderSettingsList(leftW)
 	case modeRunning:

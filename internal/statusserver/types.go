@@ -16,6 +16,7 @@ type Status struct {
 type RunningInfo struct {
 	Model          string  `json:"model"`
 	Profile        string  `json:"profile"`
+	Alias          string  `json:"alias,omitempty"`
 	Port           int     `json:"port"`
 	Health         string  `json:"health,omitempty"` // "loading", "up", or "down"
 	TokS           float64 `json:"tok_s,omitempty"`

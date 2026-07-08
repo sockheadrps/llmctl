@@ -55,6 +55,7 @@ const (
 	modeRunning
 	modeNetwork
 	modeRPCServer
+	modeOverview // displayed first in the tab bar; numeric value is last to avoid shifting existing constants
 )
 
 // rowKind identifies what a flattened tree row represents.

@@ -22,6 +22,13 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseButtonLeft {
 			break
 		}
+		// Overview tab: clicks on service entries copy host:port.
+		if m.leftMode == modeOverview {
+			if run, ok := m.overviewClickedEntry(msg.X, msg.Y); ok {
+				return m.copyOverviewEntry(run)
+			}
+			break
+		}
 		if msg.X == dividerLeft || msg.X == dividerRight {
 			m.dividerDragging = true
 		} else if inRightColumn && m.leftMode != modeRunning {

@@ -58,6 +58,9 @@ type Model struct {
 	loadHistory   loadTimeStore
 	loadTimesPath string
 
+	tokRateHistory tokRateStore // persisted per-session tok/s averages by "modelKey/profileKey"
+	tokRatesPath   string
+
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
 	tokPeak    map[string]float64   // session-high tok/s per instance, for scaling the rate meter
@@ -111,6 +114,10 @@ type Model struct {
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
 
+	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
+
+	overviewCopied string // modelKey/profileKey briefly set after copying from the Overview tab
+
 	netSupported bool // false on non-Linux; tab is hidden entirely
 
 	netStatus    netStatusMsg
@@ -137,6 +144,7 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		health:           healthMsg{},
 		pendingInstances: map[string]bool{},
 		focus:            focusTabs,
+		leftMode:         modeOverview,
 		tokSamples:       map[string]tokSample{},
 		tokRates:         map[string]float64{},
 		tokPeak:          map[string]float64{},
@@ -163,6 +171,9 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 	ltPath, _ := util.LoadTimesFile()
 	m.loadTimesPath = ltPath
 	m.loadHistory = loadLoadTimes(ltPath)
+	trPath, _ := util.TokRatesFile()
+	m.tokRatesPath = trPath
+	m.tokRateHistory = loadTokRates(trPath)
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
@@ -260,6 +271,15 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 	}
 	for key := range m.tokSamples {
 		if !live[key] {
+			// Persist this session's rolling-window average before discarding it.
+			if hist := m.tokHistory[key]; len(hist) >= 3 {
+				var sum float64
+				for _, v := range hist {
+					sum += v
+				}
+				m.tokRateHistory.record(key, sum/float64(len(hist)))
+				_ = saveTokRates(m.tokRatesPath, m.tokRateHistory)
+			}
 			delete(m.tokSamples, key)
 			delete(m.tokRates, key)
 			delete(m.tokPeak, key)

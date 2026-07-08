@@ -23,30 +23,31 @@ func (m Model) renderHeaderLine(totalWidth int) string {
 // horizontal rule. The rule brightens when focused, matching how the
 // boxes below signal focus via border color.
 func dashWrap(totalWidth int, content string, focused bool) string {
-	remaining := totalWidth - lipgloss.Width(content)
-	if remaining < 2 {
-		return content
+	contentW := lipgloss.Width(content)
+	// Mirror the Overview top border: 1 dash + space before content, space after,
+	// remaining dashes fill to the right edge.
+	right := totalWidth - 1 - 1 - contentW - 1
+	if right < 0 {
+		right = 0
 	}
-	left := remaining / 2
-	right := remaining - left
 
 	dashColor := lipgloss.Color("30")
 	if focused {
 		dashColor = lipgloss.Color("240")
 	}
 	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
-	return dashStyle.Render(strings.Repeat("─", left)) + content + dashStyle.Render(strings.Repeat("─", right))
+	return dashStyle.Render("─") + " " + content + " " + dashStyle.Render(strings.Repeat("─", right))
 }
 
-// renderTabBarLabels shows the Models/Recents/Settings/Running tabs, with
-// the active tab styled as a filled chip.
+// renderTabBarLabels shows the Overview/Models/Settings/Running tabs (Recents
+// is a sub-tab within the Models pane), with the active tab styled as a chip.
 func (m Model) renderTabBarLabels() string {
 	tabs := []struct {
 		mode  leftMode
 		label string
 	}{
+		{modeOverview, "Overview"},
 		{modeModels, "Models"},
-		{modeRecents, "Recents"},
 		{modeSettings, "Settings"},
 		{modeRunning, "Running"},
 	}
@@ -70,7 +71,9 @@ func (m Model) renderTabBarLabels() string {
 	tabFocused := m.focus == focusTabs
 	rendered := make([]string, len(tabs))
 	for i, t := range tabs {
-		if m.leftMode == t.mode {
+		// modeRecents is a sub-tab of Models; show Models tab as active for both.
+		isActive := m.leftMode == t.mode || (t.mode == modeModels && m.leftMode == modeRecents)
+		if isActive {
 			color := lipgloss.Color("39")
 			if !tabFocused {
 				color = lipgloss.Color("24")
@@ -86,6 +89,31 @@ func (m Model) renderTabBarLabels() string {
 	}
 
 	return strings.Join(rendered, "  ")
+}
+
+// renderModelsSubTab renders the "Models  Recents" sub-tab header inside the
+// left pane when the Models top-level tab is active.
+func (m Model) renderModelsSubTab() string {
+	subFocused := m.focus == focusLeft && m.modelSubTabFocused
+
+	renderLabel := func(label string, isActive bool) string {
+		if isActive && subFocused {
+			return lipgloss.NewStyle().
+				Foreground(lipgloss.Color("39")).
+				Bold(true).
+				Underline(true).
+				Render(label)
+		}
+		if isActive {
+			return lipgloss.NewStyle().
+				Foreground(lipgloss.Color("24")).
+				Bold(true).
+				Render(label)
+		}
+		return profileStyle.Render(label)
+	}
+
+	return renderLabel("Models", m.leftMode == modeModels) + "  " + renderLabel("Recents", m.leftMode == modeRecents)
 }
 
 // renderSettingsList shows the Settings tab's menu of configuration
@@ -268,6 +296,8 @@ func (m Model) renderRecentsList(width int) string {
 // in there instead of falling back to a generic empty-state message.
 func (m Model) tabTitle(mode leftMode) string {
 	switch mode {
+	case modeOverview:
+		return "Overview"
 	case modeRecents:
 		return "Recents"
 	case modeSettings:

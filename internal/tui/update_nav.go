@@ -18,6 +18,16 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 	case focusSettingsContent:
 		m.focus = focusLeft
 	case focusLeft:
+		// Sub-tab header: left switches Recents→Models, or Models→top tabs.
+		if m.modelSubTabFocused {
+			if m.leftMode == modeRecents {
+				m.leftMode = modeModels
+			} else {
+				m.focus = focusTabs
+				m.modelSubTabFocused = false
+			}
+			return m, nil
+		}
 		// Inside the Models tree, back out of a model's expanded profile
 		// rows to browsing (the model's own row) before stepping up a
 		// whole level, mirroring how Up already behaves there.
@@ -28,15 +38,31 @@ func (m Model) moveFocusLeft() (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		m.focus = focusTabs
-		if m.leftMode == modeModels {
-			m.expandedModelKey = ""
-			m.modelProfilesMode = false
-			m.rebuildRows()
+		// From inside the list, step back up to the sub-tab header.
+		if m.leftMode == modeModels || m.leftMode == modeRecents {
+			m.modelSubTabFocused = true
+			if m.leftMode == modeModels {
+				m.expandedModelKey = ""
+				m.modelProfilesMode = false
+				m.rebuildRows()
+			}
+			return m, nil
 		}
+		m.focus = focusTabs
 	case focusTabs:
-		if m.leftMode > modeModels {
+		// Overview is conceptually the first tab (leftmost). Going left from
+		// Models wraps back to it; going left from Overview does nothing.
+		switch m.leftMode {
+		case modeOverview:
+			// already at the leftmost tab
+		case modeModels:
+			m.leftMode = modeOverview
+		default:
 			m.leftMode--
+			// Recents is now a sub-tab of Models; skip it at the top-bar level.
+			if m.leftMode == modeRecents {
+				m.leftMode--
+			}
 			// Skip hidden optional tabs.
 			if m.leftMode == modeRPCServer && !m.cfg.RPCEnabled {
 				m.leftMode--
@@ -64,14 +90,31 @@ func (m Model) moveFocusRight() (tea.Model, tea.Cmd) {
 		if m.cfg.RPCEnabled {
 			maxMode = modeRPCServer
 		}
-		if m.leftMode < maxMode {
+		// Overview is conceptually first; Right from it jumps to Models.
+		if m.leftMode == modeOverview {
+			m.leftMode = modeModels
+		} else if m.leftMode < maxMode {
 			m.leftMode++
+			// Recents is now a sub-tab of Models; skip it at the top-bar level.
+			if m.leftMode == modeRecents {
+				m.leftMode++
+			}
 			// Skip hidden optional tabs.
 			if m.leftMode == modeNetwork && !m.networkTabVisible() {
 				m.leftMode++
 			}
 		}
 	case focusLeft:
+		// Sub-tab header: right switches Models→Recents.
+		if m.modelSubTabFocused {
+			if m.leftMode == modeModels {
+				m.leftMode = modeRecents
+			} else if len(m.running) > 0 {
+				m.focus = focusRunning
+				m.modelSubTabFocused = false
+			}
+			return m, nil
+		}
 		if m.leftMode == modeModels {
 			if r, ok := m.currentRow(); ok && r.kind == rowModel {
 				return m.enterModel(r.modelKey)
@@ -95,9 +138,14 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusTabs:
 		if delta > 0 {
+			// Overview is display-only; Down stays at the tab bar.
+			if m.leftMode == modeOverview {
+				return m, nil
+			}
 			m.focus = focusLeft
-			if m.leftMode == modeModels {
-				m.enterModelsPane()
+			if m.leftMode == modeModels || m.leftMode == modeRecents {
+				// Land on the sub-tab header row first.
+				m.modelSubTabFocused = true
 			}
 		}
 		return m, nil
@@ -113,12 +161,27 @@ func (m Model) moveCursor(delta int) (tea.Model, tea.Cmd) {
 		return m.settingsContentMoveCursor(delta)
 
 	default: // focusLeft
+		// Sub-tab header: Down enters the list; Up exits to tab bar.
+		if m.modelSubTabFocused {
+			if delta > 0 {
+				m.modelSubTabFocused = false
+				if m.leftMode == modeModels {
+					m.enterModelsPane()
+				}
+				// modeRecents: recentCursor already at 0, nothing else needed.
+			} else {
+				m.focus = focusTabs
+				m.modelSubTabFocused = false
+			}
+			return m, nil
+		}
+
 		switch m.leftMode {
 		case modeRecents:
 			next := m.recentCursor + delta
 			switch {
 			case next < 0:
-				m.focus = focusTabs
+				m.modelSubTabFocused = true
 			case next < len(m.recentRows):
 				m.recentCursor = next
 			}
@@ -220,7 +283,7 @@ func (m Model) moveModelsCursor(delta int) (tea.Model, tea.Cmd) {
 			m.modelProfilesMode = false
 			return m, nil
 		}
-		m.focus = focusTabs
+		m.modelSubTabFocused = true
 		m.expandedModelKey = ""
 		m.modelProfilesMode = false
 		m.rebuildRows()
@@ -327,6 +390,11 @@ func (m Model) currentRow() (row, bool) {
 
 // selectRow handles Enter on whichever kind of row is under the cursor.
 func (m Model) selectRow() (tea.Model, tea.Cmd) {
+	// Enter/Space on the sub-tab header behaves like Down: enter the list.
+	if m.focus == focusLeft && m.modelSubTabFocused {
+		return m.moveCursor(1)
+	}
+
 	switch m.focus {
 	case focusTabs:
 		m.focus = focusLeft

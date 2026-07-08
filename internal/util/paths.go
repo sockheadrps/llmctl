@@ -78,3 +78,12 @@ func LoadTimesFile() (string, error) {
 	}
 	return filepath.Join(home, "load_times.json"), nil
 }
+
+// TokRatesFile returns the path to the JSON file tracking persisted tok/s history.
+func TokRatesFile() (string, error) {
+	home, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "tok_rates.json"), nil
+}

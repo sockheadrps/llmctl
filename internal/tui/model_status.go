@@ -129,6 +129,11 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			Health:  string(h),
 			TokS:    m.tokRates[key],
 		}
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+			if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.Alias != "" {
+				info.Alias = p.Alias
+			}
+		}
 		if mdl, ok := m.cfg.Models[r.ModelKey]; ok && mdl.Path != "" {
 			if stat, err := os.Stat(mdl.Path); err == nil {
 				info.ModelSizeBytes = stat.Size()

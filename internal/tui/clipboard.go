@@ -4,12 +4,21 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
+
+type clearOverviewCopiedMsg struct{}
+
+func clearOverviewCopiedCmd() tea.Cmd {
+	return tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+		return clearOverviewCopiedMsg{}
+	})
+}
 
 // copyStatusServerAddr copies the selected LAN status address and records it
 // as the configured status server host/port shown in the RPC Server tab.
@@ -91,4 +100,55 @@ func (m Model) copyEndpoint(run models.Running) (tea.Model, tea.Cmd) {
 	}
 	m.clearError()
 	return m, nil
+}
+
+// overviewClickedEntry maps a mouse click (x, y) to the running entry it falls
+// on in the Overview ACTIVE SERVICES box, using the same layout math as
+// renderOverviewContent / renderActiveServices.
+func (m Model) overviewClickedEntry(x, y int) (models.Running, bool) {
+	totalW := m.width
+	if totalW <= 0 {
+		totalW = fallbackWidth
+	}
+	innerW := totalW - 2
+	available := innerW - 1*2 // equal left+right margin
+	leftBoxW := available * 3 / 5
+	if leftBoxW < 34 {
+		leftBoxW = 34
+	}
+	rightBoxW := available - leftBoxW
+	if rightBoxW < 26 {
+		rightBoxW = 26
+		leftBoxW = available - rightBoxW
+	}
+	_ = rightBoxW
+
+	// Left inner box X range: margin(1) .. margin+leftBoxW (exclusive)
+	// Y layout: 0=topBorder 1=blank 2=innerTopBorder 3=header 4=Local label 5+=entries (3 lines each)
+	const entryStartY = 5
+	if x < 1 || x >= 1+leftBoxW || y < entryStartY {
+		return models.Running{}, false
+	}
+	idx := (y - entryStartY) / 3
+	if idx < 0 || idx >= len(m.running) {
+		return models.Running{}, false
+	}
+	return m.running[idx], true
+}
+
+// copyOverviewEntry copies "host:port" for the given running instance and sets
+// overviewCopied for a brief visual acknowledgement.
+func (m Model) copyOverviewEntry(run models.Running) (tea.Model, tea.Cmd) {
+	host := run.Host
+	if host == "" {
+		host = "localhost"
+	}
+	addr := fmt.Sprintf("%s:%d", host, run.Port)
+	if err := writeClipboard(addr); err != nil {
+		m.setError(fmt.Errorf("copy: %w", err), "")
+		return m, nil
+	}
+	m.clearError()
+	m.overviewCopied = run.ModelKey + "/" + run.ProfileKey
+	return m, clearOverviewCopiedCmd()
 }

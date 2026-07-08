@@ -195,6 +195,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, m.backgroundChecks()
 
+	case clearOverviewCopiedMsg:
+		m.overviewCopied = ""
+		return m, nil
+
 	case tea.MouseMsg:
 		if m.screen == screenMain {
 			return m.updateMouse(msg)
