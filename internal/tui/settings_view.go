@@ -188,6 +188,19 @@ func (m Model) renderRPCContent() string {
 			b.WriteString("\n")
 		}
 
+		clientBinLabel := "RPC Client Binary"
+		if m.cfg.LlamaRPCBin != "" {
+			clientBinLabel += " (" + m.cfg.LlamaRPCBin + ")"
+		}
+		row(5, clientBinLabel)
+		if m.settings.rpc.clientBinEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Binary:"), m.settings.rpc.clientBinInput.View())
+		}
+		if focused && m.settings.rpc.cursor == 5 && !m.settings.rpc.clientBinEditing {
+			b.WriteString(detailMutedStyle.Render("  llama-server built with GGML_RPC=ON.\n  Leave blank to use the default llama-server binary."))
+			b.WriteString("\n")
+		}
+
 	case "server":
 		b.WriteString(sectionTitleStyle.Render("Server"))
 		b.WriteString("\n")

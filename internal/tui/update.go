@@ -372,6 +372,19 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.rpc.rpcBinInput, cmd = m.settings.rpc.rpcBinInput.Update(msg)
 		return m, cmd
 	}
+	if m.focus == focusSettingsContent && m.settings.rpc.clientBinEditing {
+		switch msg.String() {
+		case "esc":
+			m.settings.rpc.clientBinEditing = false
+			m.settings.rpc.err = ""
+			return m, nil
+		case "enter":
+			return m.submitLlamaRPCBinForm()
+		}
+		var cmd tea.Cmd
+		m.settings.rpc.clientBinInput, cmd = m.settings.rpc.clientBinInput.Update(msg)
+		return m, cmd
+	}
 	if m.focus == focusSettingsContent && m.settings.rpc.portEditing {
 		switch msg.String() {
 		case "esc":
