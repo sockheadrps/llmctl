@@ -6,6 +6,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
+	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
@@ -25,6 +26,20 @@ func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
 }
 
 // shared
+// checkRAMCmd reads RSS MiB for the given PIDs (CPU-only model processes).
+func checkRAMCmd(pids []int) tea.Cmd {
+	return func() tea.Msg {
+		byPID := make(map[int]int64, len(pids))
+		for _, pid := range pids {
+			if mb := process.RSSMiB(pid); mb > 0 {
+				byPID[pid] = mb
+			}
+		}
+		return ramMsg{byPID: byPID}
+	}
+}
+
+// shared
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
@@ -34,6 +49,18 @@ func (m Model) backgroundChecks() tea.Cmd {
 	}
 	if m.gpuAvailable {
 		cmds = append(cmds, checkVRAMCmd())
+	}
+	// Poll RSS for any CPU-only model processes.
+	var cpuPIDs []int
+	for _, r := range m.running {
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+			if p, ok := mdl.Profiles[r.ProfileKey]; ok && p.CPUOnly {
+				cpuPIDs = append(cpuPIDs, r.PID)
+			}
+		}
+	}
+	if len(cpuPIDs) > 0 {
+		cmds = append(cmds, checkRAMCmd(cpuPIDs))
 	}
 	if m.cfg.RPCEnabled {
 		switch m.cfg.RPCMode {

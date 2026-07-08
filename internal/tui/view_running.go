@@ -131,8 +131,20 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 	if rate, ok := m.tokRates[hkey]; ok {
 		text += fmt.Sprintf("  %.1f tok/s", rate)
 	}
-	if mb, ok := m.gpuByPID[r.PID]; ok {
-		text += fmt.Sprintf("  %.1fG", float64(mb)/1024)
+	cpuOnly := false
+	if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+		if p, ok := mdl.Profiles[r.ProfileKey]; ok {
+			cpuOnly = p.CPUOnly
+		}
+	}
+	if !cpuOnly {
+		if mb, ok := m.gpuByPID[r.PID]; ok {
+			text += fmt.Sprintf("  %.1fG", float64(mb)/1024)
+		}
+	} else {
+		if mb, ok := m.ramByPID[r.PID]; ok {
+			text += fmt.Sprintf("  %.1fG RAM", float64(mb)/1024)
+		}
 	}
 	if width > 0 {
 		text = truncateText(text, max(1, formRowTextWidth(width)-lipgloss.Width(cursor)-2))

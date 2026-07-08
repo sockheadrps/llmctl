@@ -100,6 +100,11 @@ type vramMsg struct {
 	byPID map[int]int64
 }
 
+// ramMsg carries RSS MiB per PID for CPU-only model processes.
+type ramMsg struct {
+	byPID map[int]int64
+}
+
 type tickMsg time.Time
 type scrollTickMsg time.Time
 

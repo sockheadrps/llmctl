@@ -294,12 +294,16 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	}
 	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4))))
 
-	// Line 2: └─ (size) [GPU] (—)  :port
+	// Line 2: └─ (size) [GPU|CPU] (—)  :port
+	modeBadge := detailMutedStyle.Render("[GPU]")
+	if ri.RAMMiB > 0 {
+		modeBadge = detailMutedStyle.Render("[CPU]")
+	}
 	detail := "  └─ "
 	if ri.ModelSizeBytes > 0 {
 		detail += fmt.Sprintf("(%.1fG) ", float64(ri.ModelSizeBytes)/(1024*1024*1024))
 	}
-	detail += detailMutedStyle.Render("[GPU]") + detailMutedStyle.Render(" (—)")
+	detail += modeBadge + detailMutedStyle.Render(" (—)")
 	detail += profileStyle.Render(fmt.Sprintf("  :%d", ri.Port))
 	b.WriteString(detail + "\n")
 
@@ -443,6 +447,32 @@ func (m Model) overviewModelSize(modelKey string) string {
 
 func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
+
+	// CPU-only models: show RAM usage before GPU section.
+	for _, r := range m.running {
+		mdl, hasMdl := m.cfg.Models[r.ModelKey]
+		if !hasMdl {
+			continue
+		}
+		p, hasP := mdl.Profiles[r.ProfileKey]
+		if !hasP || !p.CPUOnly {
+			continue
+		}
+		mb, ok := m.ramByPID[r.PID]
+		if !ok || mb <= 0 {
+			continue
+		}
+		alias := r.ProfileName
+		if alias == "" {
+			alias = r.ModelName
+		}
+		if p.Alias != "" {
+			alias = p.Alias
+		}
+		b.WriteString(sectionTitleStyle.Render("RAM: ") +
+			profileStyle.Render(fmt.Sprintf("%.1fG", float64(mb)/1024)) +
+			detailMutedStyle.Render(" ("+alias+")") + "\n")
+	}
 
 	// GPU 0: local GPU.
 	// -1 for the margin space prepended to every line at the end of this function.

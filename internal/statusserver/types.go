@@ -23,6 +23,7 @@ type RunningInfo struct {
 	TokPeak        float64 `json:"tok_peak,omitempty"`
 	TokAvg         float64 `json:"tok_avg,omitempty"`
 	VRAMMiB        int64   `json:"vram_mib,omitempty"`
+	RAMMiB         int64   `json:"ram_mib,omitempty"`
 	ModelSizeBytes int64   `json:"model_size_bytes,omitempty"`
 }
 

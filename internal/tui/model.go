@@ -69,6 +69,7 @@ type Model struct {
 	gpuName      string
 	gpuUsage     gpu.Usage
 	gpuByPID     map[int]int64
+	ramByPID     map[int]int64 // RSS MiB for CPU-only model processes
 
 	statusServer          *statusserver.Server
 	statusServerHost      string

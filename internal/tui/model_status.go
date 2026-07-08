@@ -155,8 +155,20 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 				info.ModelSizeBytes = stat.Size()
 			}
 		}
-		if mb, ok := m.gpuByPID[r.PID]; ok {
-			info.VRAMMiB = mb
+		cpuOnly := false
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok {
+			if p, ok := mdl.Profiles[r.ProfileKey]; ok {
+				cpuOnly = p.CPUOnly
+			}
+		}
+		if !cpuOnly {
+			if mb, ok := m.gpuByPID[r.PID]; ok {
+				info.VRAMMiB = mb
+			}
+		} else {
+			if mb, ok := m.ramByPID[r.PID]; ok {
+				info.RAMMiB = mb
+			}
 		}
 		running = append(running, info)
 	}

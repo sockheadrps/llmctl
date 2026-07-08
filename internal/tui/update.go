@@ -82,6 +82,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pushStatusServer()
 		return m, nil
 
+	case ramMsg:
+		m.ramByPID = msg.byPID
+		m.pushStatusServer()
+		return m, nil
+
 	case remoteStatusMsg:
 		if msg.err == nil {
 			m.remoteStatus = msg.status
