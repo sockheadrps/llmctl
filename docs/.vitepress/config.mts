@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/llmctl/',
   title: 'llmctl',
   description: 'A TUI-first tool for running, configuring, and distributing local llama.cpp models.',
   themeConfig: {
