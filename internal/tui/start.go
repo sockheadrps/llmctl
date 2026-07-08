@@ -23,9 +23,10 @@ type startResultMsg struct {
 func (m Model) startProfileCmd(r row) tea.Cmd {
 	mgr, cfg := m.mgr, m.cfg
 	modelKey, profileKey, label := r.modelKey, r.profileKey, r.label
+	rpcOverride := m.discoveredRPCEndpoint
 	return func() tea.Msg {
 		logPath, _ := runtime.LogPath(modelKey, profileKey)
-		_, err := mgr.Start(cfg, modelKey, profileKey)
+		_, err := mgr.Start(cfg, modelKey, profileKey, rpcOverride)
 		if err != nil && !logFileHasContent(logPath) {
 			logPath = ""
 		}

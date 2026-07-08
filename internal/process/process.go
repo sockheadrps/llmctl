@@ -80,8 +80,15 @@ func BuildProfileArgs(p models.Profile) []string {
 	if p.FlashAttn {
 		args = append(args, flag(p, "--flash-attn"), "on")
 	}
-	if p.GPULayers > 0 {
-		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(p.GPULayers))
+	ngl := p.GPULayers
+	if p.CPUOnly {
+		ngl = 0
+	}
+	if ngl > 0 {
+		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(ngl))
+	}
+	if p.MLock {
+		args = append(args, "--mlock")
 	}
 	if p.MMap != nil {
 		f := flag(p, "--mmap")
@@ -275,4 +282,60 @@ func TailLog(path string, n int) (string, error) {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+// StartRPC launches the ggml-rpc-server binary at the given host:port,
+// with output redirected to logPath.
+func StartRPC(bin, host string, port int, logPath string) (pid int, err error) {
+	resolvedBin, err := resolveRPCExecutable(bin)
+	if err != nil {
+		return 0, fmt.Errorf("start rpc-server: %w", err)
+	}
+
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		return 0, fmt.Errorf("create log file %s: %w", logPath, err)
+	}
+
+	args := []string{"-H", host, "-p", strconv.Itoa(port)}
+	cmd := exec.Command(resolvedBin, args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	configureProcess(cmd)
+
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return 0, fmt.Errorf("start rpc-server: %w", err)
+	}
+
+	go cmd.Wait()
+
+	return cmd.Process.Pid, nil
+}
+
+func resolveRPCExecutable(bin string) (string, error) {
+	bin = strings.TrimSpace(bin)
+	if bin == "" {
+		bin = "ggml-rpc-server"
+	}
+
+	if expanded, err := util.ExpandHome(bin); err == nil {
+		bin = expanded
+	}
+
+	if resolved, err := exec.LookPath(bin); err == nil {
+		return resolved, nil
+	}
+
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(bin), ".exe") {
+		if resolved, err := exec.LookPath(bin + ".exe"); err == nil {
+			return resolved, nil
+		}
+	}
+
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	return "", fmt.Errorf("ggml-rpc-server binary %q not found; set rpc_server_bin in config.yaml to the full path to ggml-rpc-server%s, or add it to PATH", bin, suffix)
 }

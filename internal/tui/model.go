@@ -7,7 +7,6 @@ package tui
 import (
 	"fmt"
 	runtimeos "runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,107 +14,11 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/gpu"
-	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/runtime"
-)
-
-// screen selects which full-screen view is active.
-type screen int
-
-const (
-	screenMain screen = iota
-	screenPickModel
-	screenNewProfile
-	screenFormExitConfirm
-	screenConfirmProfile
-	screenLogs
-	screenRunningAction
-	screenStopConfirm
-	screenProfileTemplate
-	screenExportArgs
-	screenNetworkSwitch
-	screenNetworkPicker
-)
-
-// paneFocus selects which pane arrow keys/s apply to on the main screen.
-// It's a hierarchy: the Models/Recents/Settings tab bar sits above the left
-// pane's content, which sits to the left of the Running pane. When the
-// Settings tab is active, focusSettingsContent is where Enter on a category
-// drops you — the Details pane becomes interactive (add/edit/delete rows)
-// rather than just a read-only preview.
-type paneFocus int
-
-const (
-	focusTabs paneFocus = iota
-	focusLeft
-	focusSettingsContent
-	focusRunning
-)
-
-// leftMode selects what the left pane shows: the Models/Profiles tree, the
-// rolling history of recently run profiles, the Settings menu, or the list
-// of currently running instances. Order matters — Left/Right at the tab bar
-// step through these in sequence.
-type leftMode int
-
-const (
-	modeModels leftMode = iota
-	modeRecents
-	modeSettings
-	modeRunning
-	modeNetwork
-)
-
-// rowKind identifies what a flattened tree row represents.
-type rowKind int
-
-const (
-	rowModel rowKind = iota
-	rowProfile
-	rowAddProfile
-	rowAddModel
-	rowSettingsCategory
-	rowRunning
-)
-
-// row is a single flattened line in the left-hand models/profiles tree.
-type row struct {
-	kind       rowKind
-	modelKey   string
-	profileKey string
-	label      string
-}
-
-// healthMsg carries the result of a periodic health sweep over running instances.
-type healthMsg map[string]health.Status
-
-// tokSample is a snapshot of a slot's cumulative decoded-token count at a
-// point in time, used to compute tokens/sec from the delta between ticks.
-type tokSample struct {
-	decoded int
-	at      time.Time
-}
-
-// slotsMsg carries each running instance's current cumulative decoded-token
-// count, keyed by "modelKey/profileKey", for instances actively generating
-// right now. Instances with nothing in flight are simply absent.
-type slotsMsg map[string]int
-
-// vramMsg carries a GPU VRAM snapshot: aggregate usage plus a per-PID
-// breakdown for matching against running instances.
-type vramMsg struct {
-	usage gpu.Usage
-	byPID map[int]int64
-}
-
-type tickMsg time.Time
-type scrollTickMsg time.Time
-
-const (
-	scrollTickInterval = 500 * time.Millisecond
-	scrollPauseTicks   = 2
+	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 // Model is the root bubbletea model for the main screen.
@@ -144,8 +47,19 @@ type Model struct {
 
 	running          []models.Running
 	runningCursor    int
+	rpcServerState   runtime.RPCServerState
+	rpcServerAlive   bool
 	health           healthMsg
 	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
+
+	loadStartedAt map[string]time.Time     // when loading began, keyed by "modelKey/profileKey"
+	loadWithRPC   map[string]bool          // whether RPC was enabled when load started
+	loadDuration  map[string]time.Duration // set when load completes, persists while model is up
+	loadHistory   loadTimeStore
+	loadTimesPath string
+
+	tokRateHistory tokRateStore // persisted per-session tok/s averages by "modelKey/profileKey"
+	tokRatesPath   string
 
 	tokSamples map[string]tokSample // last decoded-count snapshot, for computing tok/s deltas
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
@@ -155,6 +69,17 @@ type Model struct {
 	gpuName      string
 	gpuUsage     gpu.Usage
 	gpuByPID     map[int]int64
+	ramByPID     map[int]int64 // RSS MiB for CPU-only model processes
+
+	statusServer          *statusserver.Server
+	statusServerHost      string
+	statusServerPort      int
+	statusPublisher       *statusserver.Publisher
+	statusPublisherAddr   string
+	remoteStatus          *statusserver.Status
+	discoveredRPCEndpoint string // derived from remote status poll: host:rpc_port
+	rpcAddrCopied         bool   // true briefly after copying the status server address
+	rpcIPCursor           int    // which LAN IP is selected on the RPC Server tab
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view
@@ -171,16 +96,17 @@ type Model struct {
 	detailsDir           int
 	detailsPause         int
 
-	picker         pickerState
-	form           formState
-	formExit       formExitState
-	confirm        confirmState
-	logs           logsState
-	settings       settingsState
-	runningAction  runningActionState
-	stopConfirm    stopConfirmState
-	exportArgs     exportArgsState
-	templatePicker templatePickerState
+	picker               pickerState
+	form                 formState
+	formExit             formExitState
+	confirm              confirmState
+	logs                 logsState
+	settings             settingsState
+	runningAction        runningActionState
+	rpcServerActionState rpcServerActionState
+	stopConfirm          stopConfirmState
+	exportArgs           exportArgsState
+	templatePicker       templatePickerState
 
 	tokHistory map[string][]float64
 
@@ -188,6 +114,11 @@ type Model struct {
 	leftWidthOverride    int // 0 = auto (avail*2/5); positive = user-dragged override
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
+
+	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
+
+	overviewCopied   string // modelKey/profileKey briefly set after copying from the Overview tab
+	gpuNameScroll    int    // ever-incrementing tick counter for horizontal GPU name scroll
 
 	netSupported bool // false on non-Linux; tab is hidden entirely
 
@@ -215,187 +146,41 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		health:           healthMsg{},
 		pendingInstances: map[string]bool{},
 		focus:            focusTabs,
+		leftMode:         modeOverview,
 		tokSamples:       map[string]tokSample{},
 		tokRates:         map[string]float64{},
 		tokPeak:          map[string]float64{},
 		tokHistory:       map[string][]float64{},
-		gpuAvailable:    gpu.Available(),
-		netSupported:    runtimeos.GOOS == "linux",
-		netInternetConn: firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
-		netRPCConn:      firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
-		netIface:        firstNonEmpty(cfg.NetworkIface, netIface),
+		gpuAvailable:     gpu.Available(),
+		netSupported:     runtimeos.GOOS == "linux",
+		netInternetConn:  firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
+		netRPCConn:       firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
+		netIface:         firstNonEmpty(cfg.NetworkIface, netIface),
 	}
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
 			m.gpuName = name
 		}
 	}
+	m.statusPublisher = statusserver.NewPublisher(clientID(), clientName())
+	if err := m.reconcileStatusServer(); err != nil {
+		m.setError(fmt.Errorf("status server: %w", err), "")
+	}
+	m.reconcileStatusPublisher()
+	m.loadStartedAt = map[string]time.Time{}
+	m.loadWithRPC = map[string]bool{}
+	m.loadDuration = map[string]time.Duration{}
+	ltPath, _ := util.LoadTimesFile()
+	m.loadTimesPath = ltPath
+	m.loadHistory = loadLoadTimes(ltPath)
+	trPath, _ := util.TokRatesFile()
+	m.tokRatesPath = trPath
+	m.tokRateHistory = loadTokRates(trPath)
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
+	m.pushStatusServer()
 	return m
-}
-
-func (m *Model) rebuildRows() {
-	m.rows = buildRowsFiltered(m.cfg, m.expandedModelKey, m.modelSearch)
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-}
-
-// rebuildRecentRows reloads the recent-runs history and resolves each
-// entry against the current config, silently dropping any whose model or
-// profile no longer exists (e.g. deleted since it was last run).
-func (m *Model) rebuildRecentRows() {
-	recent, err := m.mgr.RecentRuns()
-	if err != nil {
-		m.setError(err, "")
-		return
-	}
-	m.recentRuns = recent
-	m.recentRows = buildRecentRows(m.cfg, recent)
-	if m.recentCursor >= len(m.recentRows) {
-		m.recentCursor = len(m.recentRows) - 1
-	}
-	if m.recentCursor < 0 {
-		m.recentCursor = 0
-	}
-}
-
-func buildRecentRows(cfg *config.Config, recent []models.RecentRun) []row {
-	var rows []row
-	for _, rr := range recent {
-		mdl, ok := cfg.Models[rr.ModelKey]
-		if !ok {
-			continue
-		}
-		p, ok := mdl.Profiles[rr.ProfileKey]
-		if !ok {
-			continue
-		}
-		rows = append(rows, row{
-			kind:       rowProfile,
-			modelKey:   rr.ModelKey,
-			profileKey: rr.ProfileKey,
-			label:      mdl.Name + " / " + p.Name,
-		})
-	}
-	return rows
-}
-
-// buildRows flattens the Models tree. Only expandedModelKey's profiles (and
-// its "+ New Profile" row) are shown — every other model collapses to just
-// its name, an accordion: entering a model expands it and collapses
-// whichever was open before. A "+ Add Model" row always trails the list.
-func buildRows(cfg *config.Config, expandedModelKey string) []row {
-	return buildRowsFiltered(cfg, expandedModelKey, "")
-}
-
-func buildRowsFiltered(cfg *config.Config, expandedModelKey, filter string) []row {
-	filter = strings.ToLower(strings.TrimSpace(filter))
-	modelKeys := make([]string, 0, len(cfg.Models))
-	for k := range cfg.Models {
-		modelKeys = append(modelKeys, k)
-	}
-	sort.Strings(modelKeys)
-
-	var rows []row
-	for _, mk := range modelKeys {
-		mdl := cfg.Models[mk]
-
-		// A model with no saved profiles has nothing to run, so it just
-		// clutters the tree — hide it. Re-adding it via "+ Add Model"
-		// creates a default profile, which is what brings it back.
-		if len(mdl.Profiles) == 0 {
-			continue
-		}
-
-		profileKeys := make([]string, 0, len(mdl.Profiles))
-		for pk := range mdl.Profiles {
-			profileKeys = append(profileKeys, pk)
-		}
-		sort.Strings(profileKeys)
-
-		matchingProfiles := make(map[string]bool, len(profileKeys))
-		modelMatches := filter == "" || modelMatchesFilter(mk, mdl, filter)
-		for _, pk := range profileKeys {
-			p := mdl.Profiles[pk]
-			if filter == "" || profileMatchesFilter(pk, p, filter) {
-				matchingProfiles[pk] = true
-			}
-		}
-		if filter != "" && !modelMatches && len(matchingProfiles) == 0 {
-			continue
-		}
-
-		rows = append(rows, row{kind: rowModel, modelKey: mk, label: mdl.Name})
-
-		if mk != expandedModelKey && filter == "" {
-			continue
-		}
-
-		for _, pk := range profileKeys {
-			if filter != "" && !modelMatches && !matchingProfiles[pk] {
-				continue
-			}
-			rows = append(rows, row{
-				kind:       rowProfile,
-				modelKey:   mk,
-				profileKey: pk,
-				label:      mdl.Profiles[pk].Name,
-			})
-		}
-
-		rows = append(rows, row{kind: rowAddProfile, modelKey: mk, label: "+ New Profile"})
-	}
-
-	rows = append(rows, row{kind: rowAddModel, label: "+ Add Model"})
-
-	return rows
-}
-
-func modelMatchesFilter(key string, mdl models.Model, filter string) bool {
-	return strings.Contains(strings.ToLower(key), filter) ||
-		strings.Contains(strings.ToLower(mdl.Name), filter) ||
-		strings.Contains(strings.ToLower(mdl.Path), filter) ||
-		strings.Contains(strings.ToLower(mdl.HFRepo), filter) ||
-		strings.Contains(strings.ToLower(mdl.Notes), filter)
-}
-
-func profileMatchesFilter(key string, p models.Profile, filter string) bool {
-	return strings.Contains(strings.ToLower(key), filter) ||
-		strings.Contains(strings.ToLower(p.Name), filter) ||
-		strings.Contains(strings.ToLower(p.Notes), filter)
-}
-
-// visibleModelKeys returns the sorted keys of every model that appears in
-// the tree (i.e. has at least one profile) — the same filter buildRows
-// applies, exposed separately so cursor movement can browse models without
-// needing the full row list expanded.
-func visibleModelKeys(cfg *config.Config) []string {
-	keys := make([]string, 0, len(cfg.Models))
-	for k, mdl := range cfg.Models {
-		if len(mdl.Profiles) == 0 {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-// buildSettingsRows lists the Settings tab's menu, derived from
-// settingsCategories (the same list backs the dedicated Settings screen's
-// left container) so the two stay in sync automatically.
-func buildSettingsRows() []row {
-	rows := make([]row, len(settingsCategories))
-	for i, c := range settingsCategories {
-		rows[i] = row{kind: rowSettingsCategory, modelKey: c.id, label: c.label}
-	}
-	return rows
 }
 
 // setError records an error and, when it's tied to a specific run, the log
@@ -441,6 +226,12 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 
 	m.running = running
 
+	if m.cfg.RPCEnabled && m.cfg.RPCMode == "server" {
+		state, alive := m.mgr.RPCServerStatus()
+		m.rpcServerState = state
+		m.rpcServerAlive = alive
+	}
+
 	// Mark any instance that just appeared as pending so health checks keep
 	// it in the "loading" state until it passes its first health check.
 	for _, r := range m.running {
@@ -455,6 +246,9 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 			key := r.ModelKey + "/" + r.ProfileKey
 			delete(m.pendingInstances, key)
 			delete(m.health, key)
+			delete(m.loadDuration, key)
+			delete(m.loadStartedAt, key)
+			delete(m.loadWithRPC, key)
 		}
 	}
 
@@ -479,6 +273,15 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 	}
 	for key := range m.tokSamples {
 		if !live[key] {
+			// Persist this session's rolling-window average before discarding it.
+			if hist := m.tokHistory[key]; len(hist) >= 3 {
+				var sum float64
+				for _, v := range hist {
+					sum += v
+				}
+				m.tokRateHistory.record(key, sum/float64(len(hist)))
+				_ = saveTokRates(m.tokRatesPath, m.tokRateHistory)
+			}
 			delete(m.tokSamples, key)
 			delete(m.tokRates, key)
 			delete(m.tokPeak, key)
@@ -550,28 +353,6 @@ func (m *Model) persistPeakIfRecord(key string, rate float64) {
 	_ = m.saveConfig()
 }
 
-// backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
-// after a tick or a successful start.
-func (m Model) backgroundChecks() tea.Cmd {
-	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
-	if m.networkTabVisible() {
-		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
-	}
-	if m.gpuAvailable {
-		cmds = append(cmds, checkVRAMCmd())
-	}
-	return tea.Batch(cmds...)
-}
-
-func runningContains(list []models.Running, target models.Running) bool {
-	for _, r := range list {
-		if r.ModelKey == target.ModelKey && r.ProfileKey == target.ProfileKey {
-			return true
-		}
-	}
-	return false
-}
-
 // findRunning looks up a running instance by model/profile key, e.g. to
 // resolve a rowRunning row (which only carries the keys) back to its full
 // Running record (port, PID, log file, ...).
@@ -609,57 +390,3 @@ func scrollTickCmd() tea.Cmd {
 	})
 }
 
-func checkHealthCmd(running []models.Running) tea.Cmd {
-	return func() tea.Msg {
-		result := make(healthMsg, len(running))
-		for _, r := range running {
-			result[r.ModelKey+"/"+r.ProfileKey] = health.Check(r.Host, r.Port)
-		}
-		return result
-	}
-}
-
-// checkSlotsCmd polls /slots for each running instance and reports the
-// cumulative decoded-token count for any slot currently generating. The
-// rate itself is computed in Update, which has the previous sample to
-// diff against.
-func checkSlotsCmd(running []models.Running) tea.Cmd {
-	return func() tea.Msg {
-		result := make(slotsMsg, len(running))
-		for _, r := range running {
-			slots, err := health.Slots(r.Host, r.Port)
-			if err != nil {
-				continue
-			}
-			decoded := 0
-			processing := false
-			for _, s := range slots {
-				if s.IsProcessing {
-					processing = true
-					decoded += s.Decoded()
-				}
-			}
-			if processing {
-				result[r.ModelKey+"/"+r.ProfileKey] = decoded
-			}
-		}
-		return result
-	}
-}
-
-// checkVRAMCmd polls nvidia-smi for aggregate and per-PID VRAM usage. Only
-// call this when gpuAvailable — it shells out, so there's no point retrying
-// every tick on a machine without nvidia-smi.
-func checkVRAMCmd() tea.Cmd {
-	return func() tea.Msg {
-		usage, err := gpu.Total()
-		if err != nil {
-			return vramMsg{}
-		}
-		byPID, err := gpu.ByPID()
-		if err != nil {
-			byPID = nil
-		}
-		return vramMsg{usage: usage, byPID: byPID}
-	}
-}

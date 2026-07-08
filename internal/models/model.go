@@ -30,6 +30,8 @@ type Profile struct {
 	UBatchSize        *int     `yaml:"ubatch_size,omitempty"`
 	RepeatLastN       *int     `yaml:"repeat_last_n,omitempty"`
 	FlashAttn         bool     `yaml:"flash_attention,omitempty"`
+	CPUOnly           bool     `yaml:"cpu_only,omitempty"`
+	MLock             bool     `yaml:"mlock,omitempty"`
 	GPULayers         int      `yaml:"gpu_layers,omitempty"`
 	MMap              *bool    `yaml:"mmap,omitempty"`
 	KVOffload         *bool    `yaml:"kv_offload,omitempty"`

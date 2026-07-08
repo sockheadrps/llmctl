@@ -2,7 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"runtime"
+	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderSettingsDetail shows the given settings category's content in the
@@ -29,6 +33,8 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 		b.WriteString(m.renderBinContent())
 	case "rpc":
 		b.WriteString(m.renderRPCContent())
+	case "status_server":
+		b.WriteString(m.renderStatusServerContent())
 	}
 
 	if categoryID == "model_dirs" && m.settings.dirs.err != "" {
@@ -42,6 +48,14 @@ func (m Model) renderSettingsDetail(categoryID string) string {
 	if categoryID == "rpc" && m.settings.rpc.err != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render("error: " + m.settings.rpc.err))
+	}
+	if categoryID == "rpc" && m.settings.statusSrv.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.statusSrv.err))
+	}
+	if categoryID == "status_server" && m.settings.statusSrv.err != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("error: " + m.settings.statusSrv.err))
 	}
 
 	return b.String()
@@ -70,7 +84,9 @@ func (m Model) renderBinContent() string {
 
 	if m.settings.bin.editing {
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.bin.input.View())
+		b.WriteString(formLabelStyle.Render("Binary:"))
+		b.WriteString(" ")
+		b.WriteString(m.settings.bin.input.View())
 		b.WriteString("\n")
 	}
 
@@ -81,70 +97,152 @@ func (m Model) renderRPCContent() string {
 	var b strings.Builder
 	focused := m.focus == focusSettingsContent
 
-	enabledLabel := "Disabled"
-	if m.cfg.RPCEnabled {
-		enabledLabel = "Enabled"
-	}
-
-	rows := []string{"Toggle RPC (" + enabledLabel + ")", "Endpoint", "RPC Binary"}
-	if m.netSupported && m.cfg.RPCEnabled {
-		netTabLabel := "Network Tab (Disabled)"
-		if m.cfg.NetworkTabEnabled {
-			netTabLabel = "Network Tab (Enabled)"
-		}
-		rows = append(rows, netTabLabel)
-	}
-
-	for i, label := range rows {
+	row := func(idx int, label string) {
 		cursor := "  "
 		style := profileStyle
-		if focused && m.settings.rpc.cursor == i {
+		if focused && m.settings.rpc.cursor == idx {
 			cursor = cursorStyle.Render("> ")
 			style = selectedProfileStyle
 		}
 		fmt.Fprintf(&b, "%s%s\n", cursor, style.Render(label))
 	}
 
-	endpoint := m.cfg.RPCEndpoint
-	if endpoint == "" {
-		endpoint = "(not set)"
+	enabledLabel := "Disabled"
+	if m.cfg.RPCEnabled {
+		enabledLabel = "Enabled"
 	}
-	rpcBin := m.cfg.RPCServerBin
-	if rpcBin == "" {
-		rpcBin = "(uses default binary)"
-	}
-	b.WriteString("\n")
-	b.WriteString(profileStyle.Render("Endpoint: " + endpoint))
-	b.WriteString("\n")
-	b.WriteString(profileStyle.Render("Binary:   " + rpcBin))
-	b.WriteString("\n")
+	row(0, "RPC ("+enabledLabel+")")
 
-	if focused && m.settings.rpc.cursor == 3 && m.netSupported && m.cfg.RPCEnabled {
+	if !m.cfg.RPCEnabled {
 		b.WriteString("\n")
-		b.WriteString(sectionTitleStyle.Render("Network Tab") + "\n")
-		b.WriteString(profileStyle.Render(
-			"Adds a Network tab to the TUI for managing nmcli connection\n"+
-				"profiles without leaving llmctl. Use it to switch between your\n"+
-				"internet and RPC ethernet connections when offloading model\n"+
-				"layers to a Windows GPU over direct ethernet.\n\n"+
-				"Requires: nmcli (NetworkManager) and polkit authorization.\n"+
-				"Optional: ethtool for link speed and carrier detection.\n\n"+
-				"Disable this if you manage network switching yourself and\n"+
-				"don't need llmctl to control NetworkManager.",
-		) + "\n")
-	} else {
-		b.WriteString(detailMutedStyle.Render("When RPC is enabled, the RPC binary is used instead of the default."))
+		b.WriteString(detailMutedStyle.Render("Enable RPC to choose client or server mode."))
 		b.WriteString("\n")
+		return b.String()
 	}
 
-	if m.settings.rpc.editing {
-		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Endpoint:") + " " + m.settings.rpc.input.View())
-		b.WriteString("\n")
+	// Mode selector rows
+	clientStyle, serverStyle := profileStyle, profileStyle
+	if m.cfg.RPCMode == "client" {
+		clientStyle = runningStyle
 	}
-	if m.settings.rpc.binEditing {
+	if m.cfg.RPCMode == "server" {
+		serverStyle = runningStyle
+	}
+
+	clientCursor, serverCursor := "  ", "  "
+	if focused && m.settings.rpc.cursor == 1 {
+		clientCursor = cursorStyle.Render("> ")
+	}
+	if focused && m.settings.rpc.cursor == 2 {
+		serverCursor = cursorStyle.Render("> ")
+	}
+	clientLabel := "[ Client ]"
+	serverLabel := "[ Server ]"
+	if m.cfg.RPCMode == "client" {
+		clientLabel = "[✓ Client ]"
+	}
+	if m.cfg.RPCMode == "server" {
+		serverLabel = "[✓ Server ]"
+	}
+	fmt.Fprintf(&b, "%s%s\n", clientCursor, clientStyle.Render(clientLabel))
+	fmt.Fprintf(&b, "%s%s\n", serverCursor, serverStyle.Render(serverLabel))
+
+	b.WriteString("\n")
+
+	switch m.cfg.RPCMode {
+	case "client":
+		b.WriteString(sectionTitleStyle.Render("Client"))
 		b.WriteString("\n")
-		b.WriteString(formLabelStyle.Render("Binary:") + " " + m.settings.rpc.binInput.View())
+
+		remoteAddrLabel := "Remote Status Server"
+		if m.cfg.RemoteStatusAddr != "" {
+			remoteAddrLabel += " (" + m.cfg.RemoteStatusAddr + ")"
+		}
+		row(3, remoteAddrLabel)
+		if m.settings.rpc.remoteAddrEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Address:"), m.settings.rpc.remoteAddrInput.View())
+		}
+		if focused && m.settings.rpc.cursor == 3 && !m.settings.rpc.remoteAddrEditing {
+			b.WriteString(detailMutedStyle.Render("  The RPC server llmctl's status address (host:port).\n  This client publishes model/tok/s updates there over WebSocket."))
+			b.WriteString("\n")
+			if m.cfg.RemoteStatusAddr != "" {
+				if m.discoveredRPCEndpoint != "" {
+					b.WriteString(runningStyle.Render("  Discovered: " + m.discoveredRPCEndpoint))
+				} else {
+					b.WriteString(detailMutedStyle.Render("  Discovered: (polling…)"))
+				}
+				b.WriteString("\n")
+			}
+		}
+
+		endpointLabel := "Manual RPC Endpoint"
+		if m.cfg.RPCEndpoint != "" {
+			endpointLabel += " (" + m.cfg.RPCEndpoint + ")"
+		}
+		row(4, endpointLabel)
+		if m.settings.rpc.editing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Endpoint:"), m.settings.rpc.input.View())
+		}
+		if focused && m.settings.rpc.cursor == 4 && !m.settings.rpc.editing {
+			b.WriteString(detailMutedStyle.Render("  Optional: used only if auto-discovery hasn't resolved yet."))
+			b.WriteString("\n")
+		}
+
+	case "server":
+		b.WriteString(sectionTitleStyle.Render("Server"))
+		b.WriteString("\n")
+		statusHost := m.cfg.StatusServerHost
+		if statusHost == "" {
+			statusHost = "0.0.0.0"
+		}
+		row(3, "Status Host ("+statusHost+")")
+		if m.settings.statusSrv.hostEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Host:"), m.settings.statusSrv.hostInput.View())
+		}
+		row(4, "Status Port ("+strconv.Itoa(m.cfg.StatusServerPort)+")")
+		if m.settings.statusSrv.portEditing {
+			fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.statusSrv.portInput.View())
+		}
+		if runtime.GOOS == "windows" {
+			firewallLabel := "Copy Status Firewall Rule"
+			if m.settings.statusSrv.copied {
+				firewallLabel = "Firewall Rule Copied"
+			}
+			row(5, firewallLabel)
+			binLabel := "Binary"
+			if m.cfg.RPCServerBin != "" {
+				binLabel += " (" + m.cfg.RPCServerBin + ")"
+			}
+			row(6, binLabel)
+			if m.settings.rpc.rpcBinEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Binary:"), m.settings.rpc.rpcBinInput.View())
+			}
+			row(7, "RPC Port ("+strconv.Itoa(m.cfg.RPCServerPort)+")")
+			if m.settings.rpc.portEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.rpc.portInput.View())
+			}
+		} else if m.netSupported {
+			netTabLabel := "Network Tab (Disabled)"
+			if m.cfg.NetworkTabEnabled {
+				netTabLabel = "Network Tab (Enabled)"
+			}
+			row(5, netTabLabel)
+			if focused && m.settings.rpc.cursor == 5 {
+				b.WriteString(profileStyle.Render(
+					"  Adds a Network tab for switching nmcli connections\n" +
+						"  between internet and RPC ethernet without leaving llmctl.\n\n" +
+						"  Requires: nmcli (NetworkManager) and polkit authorization.\n" +
+						"  Optional: ethtool for link speed and carrier detection."))
+				b.WriteString("\n")
+			}
+		} else {
+			b.WriteString(detailMutedStyle.Render("ggml-rpc-server will listen on " +
+				m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort)))
+			b.WriteString("\n")
+		}
+
+	default:
+		b.WriteString(detailMutedStyle.Render("Select Client or Server above."))
 		b.WriteString("\n")
 	}
 
@@ -200,7 +298,72 @@ func (m Model) renderDirsContent() string {
 		if m.settings.dirs.editingIdx >= 0 {
 			label = "Edit Directory:"
 		}
-		b.WriteString(formLabelStyle.Render(label) + " " + m.settings.dirs.input.View())
+		b.WriteString(formLabelStyle.Render(label))
+		b.WriteString(" ")
+		b.WriteString(m.settings.dirs.input.View())
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m Model) renderStatusServerContent() string {
+	var b strings.Builder
+	focused := m.focus == focusSettingsContent
+
+	row := func(idx int, label string, style lipgloss.Style) {
+		cursor := "  "
+		s := style
+		if focused && m.settings.statusSrv.cursor == idx {
+			cursor = cursorStyle.Render("> ")
+			s = selectedProfileStyle
+		}
+		fmt.Fprintf(&b, "%s%s\n", cursor, s.Render(label))
+	}
+
+	enabledLabel := "Disabled"
+	if m.cfg.StatusServerEnabled {
+		enabledLabel = "Enabled"
+	}
+
+	host := m.cfg.StatusServerHost
+	if host == "" {
+		host = "0.0.0.0"
+	}
+
+	row(0, "Toggle Status Server ("+enabledLabel+")", profileStyle)
+	row(1, "Host ("+host+")", profileStyle)
+	if m.settings.statusSrv.hostEditing {
+		fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Host:"), m.settings.statusSrv.hostInput.View())
+	}
+	row(2, "Port ("+strconv.Itoa(m.cfg.StatusServerPort)+")", profileStyle)
+	if m.settings.statusSrv.portEditing {
+		fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.statusSrv.portInput.View())
+	}
+
+	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
+		copyLabel := "Copy Windows Firewall Rule"
+		copyStyle := profileStyle
+		if m.settings.statusSrv.copied {
+			copyLabel = "✓ Copied to clipboard"
+			copyStyle = runningStyle
+		}
+		row(3, copyLabel, copyStyle)
+	}
+
+	b.WriteString("\n")
+	b.WriteString(detailMutedStyle.Render(
+		"Serves GET /status as JSON so other llmctl instances\n" +
+			"on the same LAN can poll model name, VRAM and tok/s.\n" +
+			"Default: 0.0.0.0:11435 (accessible from other machines)."))
+	b.WriteString("\n")
+
+	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
+		b.WriteString("\n")
+		b.WriteString(loadingStyle.Render("Windows Firewall may block inbound connections on Public networks."))
+		b.WriteString("\n")
+		b.WriteString(detailMutedStyle.Render(
+			"Copy the firewall rule above and run it as Administrator."))
 		b.WriteString("\n")
 	}
 

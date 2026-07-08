@@ -1,5 +1,23 @@
+# Binaries
 /llmctl
+llmctl.exe
+*.exe
 *.tar.gz
+
+# Logs
 *.log
+
+# Local tool dirs
 .claude/
 .agents/
+
+# Build output
+/dist/
+/bin/
+
+# Docs
+node_modules/
+.temp/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docsplan.md

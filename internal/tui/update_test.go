@@ -190,6 +190,35 @@ func TestRenderSettingsListDoesNotShowFocusedRowOnTabs(t *testing.T) {
 	}
 }
 
+func TestBuildSettingsRowsShowsStatusServerOnlyForRPCServerMode(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{name: "nil config", cfg: nil, want: false},
+		{name: "rpc disabled", cfg: &config.Config{}, want: false},
+		{name: "rpc client", cfg: &config.Config{RPCEnabled: true, RPCMode: "client"}, want: false},
+		{name: "rpc server", cfg: &config.Config{RPCEnabled: true, RPCMode: "server"}, want: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := (Model{cfg: tc.cfg}).buildSettingsRows()
+			got := false
+			for _, r := range rows {
+				if r.modelKey == "status_server" {
+					got = true
+					break
+				}
+			}
+			if got != tc.want {
+				t.Fatalf("status_server row visibility = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEnterModelsPaneExpandsFirstModel(t *testing.T) {
 	m := Model{
 		cfg: &config.Config{Models: map[string]models.Model{
@@ -219,12 +248,16 @@ func TestNavigateUpFromFirstModelCollapsesExpanded(t *testing.T) {
 	m.rebuildRows()
 	m.cursor = indexOfModelRow(m.rows, "alpha")
 
-	// Up from the first model row should move focus to tabs and collapse.
+	// Up from the first model row lands on the sub-tab header (focusLeft +
+	// modelSubTabFocused) and collapses the expanded model.
 	next, _ := m.moveModelsCursor(-1)
 	got := next.(Model)
 
-	if got.focus != focusTabs {
-		t.Fatalf("expected focusTabs after up from first model, got %v", got.focus)
+	if got.focus != focusLeft {
+		t.Fatalf("expected focusLeft after up from first model, got %v", got.focus)
+	}
+	if !got.modelSubTabFocused {
+		t.Fatal("expected modelSubTabFocused=true after up from first model")
 	}
 	if got.expandedModelKey != "" {
 		t.Fatalf("expected expandedModelKey cleared, got %q", got.expandedModelKey)
@@ -246,11 +279,16 @@ func TestFocusLeftFromModelsCollapsesExpanded(t *testing.T) {
 	m.rebuildRows()
 	m.cursor = indexOfModelRow(m.rows, "alpha")
 
+	// Left from models pane lands on the sub-tab header (focusLeft +
+	// modelSubTabFocused) and collapses the expanded model.
 	next, _ := m.moveFocusLeft()
 	got := next.(Model)
 
-	if got.focus != focusTabs {
-		t.Fatalf("expected focusTabs after left from models pane, got %v", got.focus)
+	if got.focus != focusLeft {
+		t.Fatalf("expected focusLeft after left from models pane, got %v", got.focus)
+	}
+	if !got.modelSubTabFocused {
+		t.Fatal("expected modelSubTabFocused=true after left from models pane")
 	}
 	if got.expandedModelKey != "" {
 		t.Fatalf("expected expandedModelKey cleared, got %q", got.expandedModelKey)

@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"net"
 	"os"
-	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -11,62 +13,6 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/util"
 )
-
-// settingsCategoryDef is one entry in the Settings tab's category list. id
-// is the stable key selectRow/enterSettingsCategory use to route to it;
-// label is what's displayed.
-type settingsCategoryDef struct {
-	id    string
-	label string
-}
-
-// settingsCategories is the single source of truth for the Settings tab's
-// left-pane category list (via buildSettingsRows). Add a new settings page
-// by appending here and giving renderSettingsDetail a case for its id.
-var settingsCategories = []settingsCategoryDef{
-	{id: "model_dirs", label: "Model Directories"},
-	{id: "llama_bin", label: "llama-server Binary"},
-	{id: "rpc", label: "RPC Server"},
-}
-
-// settingsState backs the Settings tab's content — currently just Model
-// Directories, but a struct (rather than dirsContentState directly) leaves
-// room to add another category's state alongside it later.
-type rpcContentState struct {
-	cursor     int // 0 = toggle RPC, 1 = endpoint, 2 = binary, 3 = network tab (Linux only)
-	editing    bool
-	input      textinput.Model
-	binEditing bool
-	binInput   textinput.Model
-	err        string
-}
-
-type settingsState struct {
-	activeCategory string
-	dirs           dirsContentState
-	bin            binContentState
-	rpc            rpcContentState
-}
-
-// dirsContentState is the Model Directories category's content: the
-// configured directory list (row 0 is always "+ Add Directory", rows
-// 1..N are list[0..N-1]) plus an inline add/edit form.
-type dirsContentState struct {
-	list       []string
-	cursor     int // 0 = "+ Add Directory"; i = list[i-1] for i>0
-	pendingDel string
-
-	editing    bool
-	editingIdx int // index into list being edited; -1 while adding new
-	input      textinput.Model
-	err        string
-}
-
-type binContentState struct {
-	editing bool
-	input   textinput.Model
-	err     string
-}
 
 // enterSettingsCategory moves focus into the selected category's content in
 // the Details pane — the caller (selectRow, on Enter) already picked the
@@ -84,6 +30,9 @@ func (m Model) enterSettingsCategory(categoryID string) (tea.Model, tea.Cmd) {
 	case "rpc":
 		m.settings.activeCategory = categoryID
 		m.settings.rpc = rpcContentState{}
+	case "status_server":
+		m.settings.activeCategory = categoryID
+		m.settings.statusSrv = statusServerContentState{}
 	}
 	m.focus = focusSettingsContent
 	m.clearError()
@@ -96,6 +45,8 @@ func (m Model) activateSettingsContentRow() (tea.Model, tea.Cmd) {
 		return m.openBinForm()
 	case "rpc":
 		return m.activateRPCRow()
+	case "status_server":
+		return m.activateStatusServerRow()
 	default:
 		return m.activateDirsRow()
 	}
@@ -109,9 +60,21 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "rpc":
-		maxRPCCursor := 2
-		if m.netSupported && m.cfg.RPCEnabled {
-			maxRPCCursor = 3
+		maxRPCCursor := 0
+		if m.cfg.RPCEnabled {
+			maxRPCCursor = 2 // mode selector rows always visible when enabled
+			switch m.cfg.RPCMode {
+			case "client":
+				maxRPCCursor = 4
+			case "server":
+				if runtime.GOOS == "windows" {
+					maxRPCCursor = 7
+				} else if m.netSupported {
+					maxRPCCursor = 5
+				} else {
+					maxRPCCursor = 4
+				}
+			}
 		}
 		next := m.settings.rpc.cursor + delta
 		switch {
@@ -119,6 +82,19 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 			m.focus = focusLeft
 		case next <= maxRPCCursor:
 			m.settings.rpc.cursor = next
+		}
+		return m, nil
+	case "status_server":
+		maxStatusSrvCursor := 2
+		if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
+			maxStatusSrvCursor = 3
+		}
+		next := m.settings.statusSrv.cursor + delta
+		switch {
+		case next < 0:
+			m.focus = focusLeft
+		case next <= maxStatusSrvCursor:
+			m.settings.statusSrv.cursor = next
 		}
 		return m, nil
 	default:
@@ -133,91 +109,112 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
-	switch m.settings.rpc.cursor {
+func (m Model) activateStatusServerRow() (tea.Model, tea.Cmd) {
+	switch m.settings.statusSrv.cursor {
 	case 0:
-		wasEnabled := m.cfg.RPCEnabled
-		m.cfg.RPCEnabled = !m.cfg.RPCEnabled
-		if m.cfg.RPCEnabled && !wasEnabled {
-			m.cfg.NetworkTabEnabled = true
-		}
+		m.cfg.StatusServerEnabled = !m.cfg.StatusServerEnabled
 		if err := m.saveConfig(); err != nil {
-			m.settings.rpc.err = err.Error()
+			m.settings.statusSrv.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.statusSrv.err = err.Error()
 		}
-		return m, nil
 	case 1:
-		return m.openRPCEndpointForm()
+		return m.openStatusServerHostForm()
 	case 2:
-		return m.openRPCBinForm()
+		return m.openStatusServerPortForm()
 	case 3:
-		if m.netSupported && m.cfg.RPCEnabled {
-			if !m.cfg.NetworkTabEnabled {
-				if _, err := exec.LookPath("nmcli"); err != nil {
-					m.settings.rpc.err = "nmcli not found — install NetworkManager to use the Network tab"
-					return m, nil
-				}
-			}
-			m.cfg.NetworkTabEnabled = !m.cfg.NetworkTabEnabled
-			m.settings.rpc.err = ""
-			if err := m.saveConfig(); err != nil {
-				m.settings.rpc.err = err.Error()
-			}
+		if runtime.GOOS == "windows" {
+			return m.copyFirewallRule()
 		}
-		return m, nil
 	}
 	return m, nil
 }
 
-func (m Model) openRPCEndpointForm() (tea.Model, tea.Cmd) {
+func (m Model) openStatusServerHostForm() (tea.Model, tea.Cmd) {
 	ti := textinput.New()
-	ti.Placeholder = "192.168.1.100:50052"
-	ti.CharLimit = 128
+	ti.Placeholder = "0.0.0.0"
+	ti.CharLimit = 64
 	ti.Width = 40
-	ti.SetValue(m.cfg.RPCEndpoint)
+	host := m.cfg.StatusServerHost
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	ti.SetValue(host)
 	ti.Focus()
 	ti.CursorEnd()
-	m.settings.rpc.input = ti
-	m.settings.rpc.editing = true
-	m.settings.rpc.err = ""
+	m.settings.statusSrv.hostInput = ti
+	m.settings.statusSrv.hostEditing = true
+	m.settings.statusSrv.err = ""
 	return m, nil
 }
 
-func (m Model) submitRPCEndpointForm() (tea.Model, tea.Cmd) {
-	val := strings.TrimSpace(m.settings.rpc.input.Value())
-	m.cfg.RPCEndpoint = val
+func (m Model) submitStatusServerHostForm() (tea.Model, tea.Cmd) {
+	val := strings.TrimSpace(m.settings.statusSrv.hostInput.Value())
+	if val == "" {
+		val = "0.0.0.0"
+	}
+	m.cfg.StatusServerHost = val
 	if err := m.saveConfig(); err != nil {
-		m.settings.rpc.err = err.Error()
+		m.settings.statusSrv.err = err.Error()
 		return m, nil
 	}
-	m.settings.rpc.editing = false
-	m.settings.rpc.err = ""
+	if err := m.reconcileStatusServer(); err != nil {
+		m.settings.statusSrv.err = err.Error()
+		return m, nil
+	}
+	m.pushStatusServer()
+	m.settings.statusSrv.hostEditing = false
+	m.settings.statusSrv.err = ""
 	return m, nil
 }
 
-func (m Model) openRPCBinForm() (tea.Model, tea.Cmd) {
+func (m Model) openStatusServerPortForm() (tea.Model, tea.Cmd) {
 	ti := textinput.New()
-	ti.Placeholder = "llama-server"
-	ti.CharLimit = 512
-	ti.Width = 50
-	ti.SetValue(m.cfg.RPCServerBin)
+	ti.Placeholder = "11435"
+	ti.CharLimit = 5
+	ti.Width = 40
+	ti.SetValue(strconv.Itoa(m.cfg.StatusServerPort))
 	ti.Focus()
 	ti.CursorEnd()
-	m.settings.rpc.binInput = ti
-	m.settings.rpc.binEditing = true
-	m.settings.rpc.err = ""
+	m.settings.statusSrv.portInput = ti
+	m.settings.statusSrv.portEditing = true
+	m.settings.statusSrv.err = ""
 	return m, nil
 }
 
-func (m Model) submitRPCBinForm() (tea.Model, tea.Cmd) {
-	val := strings.TrimSpace(m.settings.rpc.binInput.Value())
-	m.cfg.RPCServerBin = val
-	if err := m.saveConfig(); err != nil {
-		m.settings.rpc.err = err.Error()
+func (m Model) submitStatusServerPortForm() (tea.Model, tea.Cmd) {
+	raw := strings.TrimSpace(m.settings.statusSrv.portInput.Value())
+	port, err := strconv.Atoi(raw)
+	if err != nil || port <= 0 || port > 65535 {
+		m.settings.statusSrv.err = "port must be a number between 1 and 65535"
 		return m, nil
 	}
-	m.settings.rpc.binEditing = false
-	m.settings.rpc.err = ""
+	m.cfg.StatusServerPort = port
+	if err := m.saveConfig(); err != nil {
+		m.settings.statusSrv.err = err.Error()
+		return m, nil
+	}
+	if err := m.reconcileStatusServer(); err != nil {
+		m.settings.statusSrv.err = err.Error()
+		return m, nil
+	}
+	m.pushStatusServer()
+	m.settings.statusSrv.portEditing = false
+	m.settings.statusSrv.err = ""
 	return m, nil
+}
+
+func (m Model) isPortInUse(portStr string) bool {
+	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort("127.0.0.1", portStr))
+	if err != nil {
+		return false
+	}
+	ln, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return true
+	}
+	ln.Close()
+	return false
 }
 
 func (m Model) openBinForm() (tea.Model, tea.Cmd) {

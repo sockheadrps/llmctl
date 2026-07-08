@@ -26,7 +26,7 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
-		entry, err := mgr.Start(cfg, modelKey, profileKey)
+		entry, err := mgr.Start(cfg, modelKey, profileKey, "")
 		if err != nil {
 			return err
 		}

@@ -18,9 +18,17 @@ type Config struct {
 	// ModelsDirs. Load migrates it in and Save never writes it back out.
 	ModelsDir   string                  `yaml:"models_dir,omitempty"`
 	ModelsDirs  []string                `yaml:"models_dirs,omitempty"`
-	RPCEnabled   bool   `yaml:"rpc_enabled,omitempty"`
-	RPCEndpoint  string `yaml:"rpc_endpoint,omitempty"`
-	RPCServerBin string `yaml:"rpc_server_bin,omitempty"`
+	RPCEnabled       bool   `yaml:"rpc_enabled,omitempty"`
+	RPCMode          string `yaml:"rpc_mode,omitempty"` // "client" or "server"
+	RPCEndpoint      string `yaml:"rpc_endpoint,omitempty"`
+	RPCServerBin     string `yaml:"rpc_server_bin,omitempty"`
+	RPCServerHost    string `yaml:"rpc_server_host,omitempty"`
+	RPCServerPort    int    `yaml:"rpc_server_port,omitempty"`
+	RemoteStatusAddr string `yaml:"remote_status_addr,omitempty"`
+
+	StatusServerEnabled bool   `yaml:"status_server_enabled,omitempty"`
+	StatusServerHost    string `yaml:"status_server_host,omitempty"`
+	StatusServerPort    int    `yaml:"status_server_port,omitempty"`
 
 	NetworkTabEnabled   bool   `yaml:"network_tab_enabled,omitempty"`
 	NetworkInternetConn string `yaml:"network_internet_conn,omitempty"`
@@ -59,6 +67,18 @@ func Load(path string) (*Config, error) {
 
 	if cfg.LlamaServerBin == "" {
 		cfg.LlamaServerBin = "llama-server"
+	}
+	if cfg.RPCServerHost == "" {
+		cfg.RPCServerHost = "0.0.0.0"
+	}
+	if cfg.RPCServerPort == 0 {
+		cfg.RPCServerPort = 50052
+	}
+	if cfg.StatusServerHost == "" {
+		cfg.StatusServerHost = "0.0.0.0"
+	}
+	if cfg.StatusServerPort == 0 {
+		cfg.StatusServerPort = 11435
 	}
 
 	// Migrate the old single-directory field in, then drop it — the next
@@ -145,6 +165,8 @@ const saveHeader = `# llmctl configuration.
 # llama_server_bin is the llama-server binary to launch.
 # models_dirs are scanned for .gguf files when adding a new model from the
 # TUI — manage the list from the "Model Directories" screen, or edit here.
+# rpc_server_host and rpc_server_port control the ggml-rpc-server address
+# on Windows (default 0.0.0.0:50052).
 # This file is rewritten by the TUI when models/profiles are added — freeform
 # comments beyond this header will not survive a save from within llmctl.
 `

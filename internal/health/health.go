@@ -3,27 +3,37 @@
 package health
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
+
+	"github.com/sockheadrps/llmctl/internal/process"
 )
 
 // Status is the health state of a running instance.
 type Status string
 
 const (
-	StatusUp      Status = "up"
-	StatusDown    Status = "down"
-	StatusLoading Status = "loading"
+	StatusUp         Status = "up"
+	StatusDown       Status = "down"
+	StatusLoading    Status = "loading"
+	StatusNotStarted Status = "not_started"
 )
 
 // Check hits the llama-server /health endpoint on host:port and
-// classifies the result. A refused connection means the process hasn't
-// opened its listener yet (still loading, or dead).
+// classifies the result.
 //
-// llama-server returns 200 when idle and 503 when all slots are busy
-// processing requests - both mean the server is alive and healthy.
-// Connection refused or timeout means it's still loading or dead.
+// llama-server status field meanings:
+//   - 200 "ok"                → StatusUp (idle, fully loaded)
+//   - 503 "loading model"     → StatusLoading (still initialising)
+//   - 503 "no slot available" → StatusUp (busy but fully loaded)
+//
+// Connection refused or timeout means the HTTP listener isn't up yet.
 func Check(host string, port int) Status {
 	client := http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://%s:%d/health", probeHost(host), port))
@@ -33,7 +43,18 @@ func Check(host string, port int) Status {
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusServiceUnavailable:
+	case http.StatusOK:
+		return StatusUp
+	case http.StatusServiceUnavailable:
+		var body struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return StatusUp
+		}
+		if body.Status == "loading model" {
+			return StatusLoading
+		}
 		return StatusUp
 	default:
 		return StatusDown
@@ -53,8 +74,44 @@ func Await(host string, port int, timeout time.Duration) Status {
 }
 
 func probeHost(host string) string {
-	if host == "" {
+	if host == "" || host == "0.0.0.0" || host == "::" {
 		return "127.0.0.1"
 	}
 	return host
+}
+
+// ProbeRPCPort dials host:port via TCP and returns true if the connection
+// succeeds. Use this as the primary "is the RPC server up" signal —
+// independent of any PID bookkeeping.
+func ProbeRPCPort(host string, port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(probeHost(host), strconv.Itoa(port)), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// LogReady reports whether logPath contains the line llama-server emits when
+// it has finished loading and is accepting requests. Use this to confirm a
+// StatusUp health result before surfacing "up" to the user.
+func LogReady(logPath string) bool {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(data, []byte("llama_server: listening on"))
+}
+
+// CheckRPCServer checks whether the ggml-rpc-server process with the given
+// PID is alive and its host:port is reachable via TCP. Returns StatusUp
+// only when both checks pass; StatusDown otherwise.
+func CheckRPCServer(host string, port int, pid int) Status {
+	if !process.IsAlive(pid) {
+		return StatusDown
+	}
+	if !ProbeRPCPort(host, port) {
+		return StatusDown
+	}
+	return StatusUp
 }

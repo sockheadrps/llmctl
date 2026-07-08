@@ -70,7 +70,11 @@ func (m Model) viewForm() string {
 				}
 				focusedRow = rowIndex
 			}
-			selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", label.Render(labelText), f.input.View()), rowWidth))
+			rowStr := fmt.Sprintf("%s %s", label.Render(labelText), f.input.View())
+			if idx == fieldGPULayers && m.form.cpuOnly {
+				rowStr += " " + detailMutedStyle.Render("(overridden)")
+			}
+			selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
 			rowIndex++
 		}
 	}
@@ -86,10 +90,37 @@ func (m Model) viewForm() string {
 	}
 	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", flashLabel.Render(truncateText("Flash Attention:", labelWidth)), flashValue), rowWidth))
 	rowIndex++
+
+	cpuOnlyLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields)+1 {
+		cpuOnlyLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
+	}
+	cpuOnlyLabel = cpuOnlyLabel.Width(labelWidth)
+	cpuOnlyValue := "false"
+	if m.form.cpuOnly {
+		cpuOnlyValue = "true"
+	}
+	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", cpuOnlyLabel.Render(truncateText("CPU Only:", labelWidth)), cpuOnlyValue), rowWidth))
+	rowIndex++
+
+	mlockLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields)+2 {
+		mlockLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
+	}
+	mlockLabel = mlockLabel.Width(labelWidth)
+	mlockValue := "false"
+	if m.form.mlock {
+		mlockValue = "true"
+	}
+	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(truncateText("MLock:", labelWidth)), mlockValue), rowWidth))
+	rowIndex++
+
 	selectedRows = append(selectedRows, "")
 	rowIndex++
 	saveStyle := profileStyle
-	if m.form.focus == len(m.form.fields)+1 {
+	if m.form.focus == len(m.form.fields)+3 {
 		saveStyle = selectedProfileStyle
 		focusedRow = rowIndex
 	}
@@ -129,11 +160,11 @@ func (m Model) viewForm() string {
 	if currentFlag := m.form.focusedFlag(); currentFlag != "" {
 		m.form.flagInput.Width = formDescriptionTextWidth(detailsWidth) - 7
 		if m.form.flagFocus {
-			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:"));rightPane.WriteString(" ");rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
 			rightPane.WriteString(helpStyle.Render("← back  enter confirm"))
 		} else {
-			rightPane.WriteString(detailMutedStyle.Render("Flag:") + " " + m.form.flagInput.View())
+			rightPane.WriteString(detailMutedStyle.Render("Flag:"));rightPane.WriteString(" ");rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
 			rightPane.WriteString(helpStyle.Render("→/d to override"))
 		}
@@ -191,8 +222,13 @@ func (m Model) formDescriptionTitle() string {
 	if m.form.focus < len(m.form.fields) {
 		return m.form.fields[m.form.focus].label
 	}
-	if m.form.focus == len(m.form.fields) {
+	switch m.form.focus - len(m.form.fields) {
+	case 0:
 		return "Flash Attention"
+	case 1:
+		return "CPU Only"
+	case 2:
+		return "MLock"
 	}
 	return "Save Profile"
 }
@@ -201,10 +237,15 @@ func (m Model) formDescriptionText() string {
 	if m.form.focus < len(m.form.fields) {
 		return formFieldDescription(m.form.focus)
 	}
-	if m.form.focus == len(m.form.fields) {
+	switch m.form.focus - len(m.form.fields) {
+	case 0:
 		return formFieldDescription(len(formLabels))
+	case 1:
+		return formFieldDescription(len(formLabels) + 1)
+	case 2:
+		return formFieldDescription(len(formLabels) + 2)
 	}
-	return formFieldDescription(len(formLabels) + 1)
+	return formFieldDescription(len(formLabels) + 3)
 }
 
 func (m Model) formDescriptionLines(width int) []string {

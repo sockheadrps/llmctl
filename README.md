@@ -342,6 +342,48 @@ nmcli connection modify "Wired connection 1" \
 nmcli connection up "Wired connection 1"
 ```
 
+### Optional: jumbo frames (MTU 9000) for direct ethernet
+
+If you are using a direct ethernet cable between the two machines, raising the
+MTU from 1500 to 9000 bytes reduces per-packet overhead when transferring large
+tensors and can meaningfully improve throughput. Both ends must be set to the
+same value.
+
+**Windows** — first enable "Jumbo Packet" support in the NIC driver:
+
+1. Open **Device Manager**, expand **Network adapters**, right-click the direct
+   ethernet adapter → **Properties**.
+2. On the **Advanced** tab, find **Jumbo Packet** (or **Jumbo Frame**) and set
+   it to **9014 Bytes** (or the closest available value ≥ 9000).
+3. Then apply the MTU in PowerShell (as Administrator):
+
+```powershell
+netsh interface ipv4 set subinterface "Ethernet" mtu=9000 store=persistent
+```
+
+Replace `"Ethernet"` with the actual adapter name shown by `netsh interface show interface`.
+
+**Linux** — apply and persist via NetworkManager:
+
+```bash
+# Apply immediately
+sudo ip link set enp8s0 mtu 9000
+
+# Persist across reboots (replace "Wired connection 1" with your connection name)
+nmcli connection modify "Wired connection 1" 802-3-ethernet.mtu 9000
+nmcli connection up "Wired connection 1"
+```
+
+Verify both ends can pass large frames:
+
+```bash
+# From Linux — should receive replies with 0% loss
+ping -M do -s 8972 192.168.50.1
+```
+
+`8972` + 28 bytes of IP/ICMP headers = 9000. If the ping times out, one end
+does not support jumbo frames or the driver setting was not applied.
+
 ### Network tab (Linux only)
 
 The Network tab lets you switch between your internet and RPC ethernet

@@ -309,7 +309,7 @@ func (m Model) renderNetworkList(width int) string {
 		linkStyle = downStyle
 	}
 
-	b.WriteString(sectionTitleStyle.Render("Status") + "\n")
+	b.WriteString(sectionTitleStyle.Render("Status"));b.WriteString("\n")
 	rowFmt := "  %-8s %s\n"
 	b.WriteString(fmt.Sprintf(rowFmt,
 		profileStyle.Render("active"),
@@ -339,7 +339,7 @@ func (m Model) renderNetworkList(width int) string {
 		{"Set RPC conn…", netRowSetRPC, addStyle},
 	}
 
-	b.WriteString(sectionTitleStyle.Render("Switch") + "\n")
+	b.WriteString(sectionTitleStyle.Render("Switch"));b.WriteString("\n")
 	for _, r := range rows {
 		cursor := "  "
 		style := r.style
@@ -347,10 +347,10 @@ func (m Model) renderNetworkList(width int) string {
 			cursor = cursorStyle.Render("> ")
 			style = activeModelStyle
 		}
-		b.WriteString(cursor + style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))) + "\n")
+		b.WriteString(cursor);b.WriteString(style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))));b.WriteString("\n")
 	}
 
-	b.WriteString("\n" + sectionTitleStyle.Render("Configure") + "\n")
+	b.WriteString("\n");b.WriteString(sectionTitleStyle.Render("Configure"));b.WriteString("\n")
 	for _, r := range configRows {
 		cursor := "  "
 		style := r.style
@@ -358,7 +358,7 @@ func (m Model) renderNetworkList(width int) string {
 			cursor = cursorStyle.Render("> ")
 			style = selectedAddStyle
 		}
-		b.WriteString(cursor + style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))) + "\n")
+		b.WriteString(cursor);b.WriteString(style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))));b.WriteString("\n")
 	}
 
 	return b.String()
@@ -366,15 +366,15 @@ func (m Model) renderNetworkList(width int) string {
 
 // renderNetworkDetails renders the right-pane Details content for the
 // Network tab.
-func (m Model) renderNetworkDetails(width int) string {
+func (m Model) renderNetworkDetails() string {
 	var b strings.Builder
 	s := m.netStatus
 
-	b.WriteString(modelStyle.Render("Network") + "\n\n")
+	b.WriteString(modelStyle.Render("Network"));b.WriteString("\n\n")
 
 	if s.checkErr != "" {
-		b.WriteString(downStyle.Render("status check failed") + "\n")
-		b.WriteString(detailMutedStyle.Render(s.checkErr) + "\n")
+		b.WriteString(downStyle.Render("status check failed"));b.WriteString("\n")
+		b.WriteString(detailMutedStyle.Render(s.checkErr));b.WriteString("\n")
 		b.WriteString("\n")
 	} else {
 		connLabel := "none detected"
@@ -405,26 +405,26 @@ func (m Model) renderNetworkDetails(width int) string {
 
 	switch m.netCursor {
 	case netRowSwitchRPC:
-		b.WriteString(sectionTitleStyle.Render("→ Switch to RPC") + "\n")
-		b.WriteString(profileStyle.Render("Brings down the internet connection and brings\nup the RPC link ("+m.netRPCConn+") for local host networking.") + "\n")
+		b.WriteString(sectionTitleStyle.Render("→ Switch to RPC"));b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Brings down the internet connection and brings\nup the RPC link (" + m.netRPCConn + ") for local host networking."));b.WriteString("\n")
 	case netRowSwitchInternet:
-		b.WriteString(sectionTitleStyle.Render("→ Switch to Internet") + "\n")
-		b.WriteString(profileStyle.Render("Brings down the RPC link and brings up the\ninternet connection ("+m.netInternetConn+").") + "\n")
+		b.WriteString(sectionTitleStyle.Render("→ Switch to Internet"));b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Brings down the RPC link and brings up the\ninternet connection (" + m.netInternetConn + ")."));b.WriteString("\n")
 	case netRowSetInternet:
-		b.WriteString(sectionTitleStyle.Render("Set internet conn…") + "\n")
-		b.WriteString(profileStyle.Render("Pick which nmcli connection profile to use\nas the internet connection.\n\nCurrently: "+m.netInternetConn) + "\n")
+		b.WriteString(sectionTitleStyle.Render("Set internet conn…"));b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Pick which nmcli connection profile to use\nas the internet connection.\n\nCurrently: " + m.netInternetConn));b.WriteString("\n")
 	case netRowSetRPC:
-		b.WriteString(sectionTitleStyle.Render("Set RPC conn…") + "\n")
-		b.WriteString(profileStyle.Render("Pick which nmcli connection profile to use\nas the RPC link to the Windows machine.\n\nCurrently: "+m.netRPCConn) + "\n")
+		b.WriteString(sectionTitleStyle.Render("Set RPC conn…"));b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Pick which nmcli connection profile to use\nas the RPC link to the Windows machine.\n\nCurrently: " + m.netRPCConn));b.WriteString("\n")
 	}
 
 	if isNetworkAuthError(m.err) {
 		b.WriteString("\n")
-		b.WriteString(downStyle.Render("Not authorized to control networking") + "\n\n")
-		b.WriteString(sectionTitleStyle.Render("Fix") + "\n")
-		b.WriteString(profileStyle.Render("Add your user to the netdev group,\nthen log out and back in:") + "\n\n")
-		b.WriteString(selectedProfileStyle.Render(networkFixCommand()) + "\n\n")
-		b.WriteString(helpStyle.Render("c to copy command") + "\n")
+		b.WriteString(downStyle.Render("Not authorized to control networking"));b.WriteString("\n\n")
+		b.WriteString(sectionTitleStyle.Render("Fix"));b.WriteString("\n")
+		b.WriteString(profileStyle.Render("Add your user to the netdev group,\nthen log out and back in:"));b.WriteString("\n\n")
+		b.WriteString(selectedProfileStyle.Render(networkFixCommand()));b.WriteString("\n\n")
+		b.WriteString(helpStyle.Render("c to copy command"));b.WriteString("\n")
 	}
 
 	return b.String()
