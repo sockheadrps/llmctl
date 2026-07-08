@@ -80,8 +80,15 @@ func BuildProfileArgs(p models.Profile) []string {
 	if p.FlashAttn {
 		args = append(args, flag(p, "--flash-attn"), "on")
 	}
-	if p.GPULayers > 0 {
-		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(p.GPULayers))
+	ngl := p.GPULayers
+	if p.CPUOnly {
+		ngl = 0
+	}
+	if ngl > 0 {
+		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(ngl))
+	}
+	if p.MLock {
+		args = append(args, "--mlock")
 	}
 	if p.MMap != nil {
 		f := flag(p, "--mmap")

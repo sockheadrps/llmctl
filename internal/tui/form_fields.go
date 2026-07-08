@@ -143,6 +143,10 @@ func formFieldDescription(idx int) string {
 	case len(formLabels):
 		return "The Flash Attention toggle enables hardware-optimized attention when supported by your build."
 	case len(formLabels) + 1:
+		return "Run on CPU only — forces GPU layers to 0 regardless of the gpu_layers setting."
+	case len(formLabels) + 2:
+		return "Pin model in RAM — prevents OS from paging weights to disk under memory pressure. Requires free RAM equal to model size."
+	case len(formLabels) + 3:
 		return "Save this profile to your model configuration and return to the main view."
 	default:
 		return "Adjust this option to change how llama-server starts for this profile."

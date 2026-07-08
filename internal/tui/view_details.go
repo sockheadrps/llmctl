@@ -236,14 +236,22 @@ func (m Model) renderDetails(width int) string {
 		},
 		{
 			name: "Runtime",
-			pairs: []detailPair{
-				{label: "Flash Attn", value: fmt.Sprint(p.FlashAttn)},
-				{label: "GPU Layers", value: fmt.Sprint(p.GPULayers)},
-				{label: "MMap", value: boolDash(p.MMap)},
-				{label: "KV Offload", value: boolDash(p.KVOffload)},
-				{label: "Parallel", value: dash(intPtrOrEmpty(p.Parallel))},
-				{label: "Cont Batching", value: boolDash(p.ContBatching)},
-			},
+			pairs: func() []detailPair {
+				gpuLayersVal := fmt.Sprint(p.GPULayers)
+				if p.CPUOnly {
+					gpuLayersVal = fmt.Sprint(p.GPULayers) + " (overridden)"
+				}
+				return []detailPair{
+					{label: "Flash Attn", value: fmt.Sprint(p.FlashAttn)},
+					{label: "CPU Only", value: fmt.Sprint(p.CPUOnly)},
+					{label: "MLock", value: fmt.Sprint(p.MLock)},
+					{label: "GPU Layers", value: gpuLayersVal},
+					{label: "MMap", value: boolDash(p.MMap)},
+					{label: "KV Offload", value: boolDash(p.KVOffload)},
+					{label: "Parallel", value: dash(intPtrOrEmpty(p.Parallel))},
+					{label: "Cont Batching", value: boolDash(p.ContBatching)},
+				}
+			}(),
 		},
 		{
 			name: "Cache",

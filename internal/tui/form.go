@@ -19,6 +19,9 @@ func (f *formState) focusedFlag() string {
 	if f.focus == len(formLabels) {
 		return "--flash-attn"
 	}
+	if f.focus == len(formLabels)+2 {
+		return "--mlock"
+	}
 	return fieldDefaultFlag(f.focus)
 }
 
@@ -89,7 +92,7 @@ func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.commitFlagInput()
 	f.flagFocus = false
 	f.flagInput.Blur()
-	total := len(f.fields) + 2 // + flash toggle + save action
+	total := len(f.fields) + 4 // + flash toggle + cpu only toggle + mlock toggle + save action
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
 	f.resetDescriptionScroll()
@@ -110,6 +113,12 @@ func (f *formState) advanceDescriptionScroll(lines, visible int) {
 
 func (f formState) dirty() bool {
 	if f.flash != f.initialFlash {
+		return true
+	}
+	if f.cpuOnly != f.initialCPUOnly {
+		return true
+	}
+	if f.mlock != f.initialMLock {
 		return true
 	}
 	if len(f.initial) != len(f.fields) {
@@ -224,6 +233,10 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 		initial:              append([]string(nil), defaults...),
 		initialFlash:         true,
 		flash:                true,
+		initialCPUOnly:       false,
+		cpuOnly:              false,
+		initialMLock:         false,
+		mlock:                false,
 		focus:                0,
 		navigating:           true,
 		descDir:              1,
@@ -295,6 +308,10 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 		initial:              append([]string(nil), defaults...),
 		initialFlash:         p.FlashAttn,
 		flash:                p.FlashAttn,
+		initialCPUOnly:       p.CPUOnly,
+		cpuOnly:              p.CPUOnly,
+		initialMLock:         p.MLock,
+		mlock:                p.MLock,
 		focus:                0,
 		navigating:           true,
 		descDir:              1,
@@ -446,6 +463,10 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case len(m.form.fields):
 			m.form.flash = !m.form.flash
 		case len(m.form.fields) + 1:
+			m.form.cpuOnly = !m.form.cpuOnly
+		case len(m.form.fields) + 2:
+			m.form.mlock = !m.form.mlock
+		case len(m.form.fields) + 3:
 			return m.submitForm()
 		default:
 			m.form.navigating = false
@@ -625,6 +646,8 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		UBatchSize:        ubatchSize,
 		RepeatLastN:       repeatLastN,
 		FlashAttn:         m.form.flash,
+		CPUOnly:           m.form.cpuOnly,
+		MLock:             m.form.mlock,
 		GPULayers:         gpuLayers,
 		MMap:              mmap,
 		KVOffload:         kvOffload,
