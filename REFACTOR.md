@@ -56,11 +56,11 @@ each responsible for one screen section. All stay in `package tui`.
 
 ### Tasks
 
-- [ ] **1a** Move layout helpers → `view_layout.go`, commit
-- [ ] **1b** Move models/recents/settings/header rendering → `view_models.go`, commit
-- [ ] **1c** Move running list + output pane → `view_running.go`, commit
-- [ ] **1d** Move details/preview/VRAM → `view_details.go`, commit
-- [ ] **1e** Move all RPC rendering → `view_rpc.go`, commit
+- [x] **1a** Move layout helpers → `view_layout.go`, commit
+- [x] **1b** Move models/recents/settings/header rendering → `view_models.go`, commit
+- [x] **1c** Move running list + output pane → `view_running.go`, commit
+- [x] **1d** Move details/preview/VRAM → `view_details.go`, commit
+- [x] **1e** Move all RPC rendering → `view_rpc.go`, commit
 
 ### Milestone Verification — Phase 1
 
@@ -272,7 +272,7 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 
 | Phase | Status |
 |-------|--------|
-| Phase 1 — Split view.go | ⬜ Not started |
+| Phase 1 — Split view.go | ✅ Done (view.go: 1825 → 279 lines) |
 | Phase 2 — Split model.go | ⬜ Not started |
 | Phase 3 — Split update.go | ⬜ Not started |
 | Phase 4 — Split form.go | ⬜ Not started |
