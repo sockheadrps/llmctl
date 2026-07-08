@@ -90,10 +90,10 @@ and background polling from the core Model struct and `New()`.
 
 ### Tasks
 
-- [ ] **2a** Move all message/type definitions → `model_types.go`, commit
-- [ ] **2b** Move row-building functions → `model_rows.go`, commit
-- [ ] **2c** Move status-server logic → `model_status.go`, commit
-- [ ] **2d** Move background check commands → `model_checks.go`, commit
+- [x] **2a** Move all message/type definitions → `model_types.go`, commit
+- [x] **2b** Move row-building functions → `model_rows.go`, commit
+- [x] **2c** Move status-server logic → `model_status.go`, commit
+- [x] **2d** Move background check commands → `model_checks.go`, commit
 
 ### Milestone Verification — Phase 2
 
@@ -273,7 +273,7 @@ Get-ChildItem internal/tui/*.go | ForEach-Object { "$($_.Name): $($(Get-Content 
 | Phase | Status |
 |-------|--------|
 | Phase 1 — Split view.go | ✅ Done (view.go: 1825 → 279 lines) |
-| Phase 2 — Split model.go | ⬜ Not started |
+| Phase 2 — Split model.go | ✅ Done (model.go: 922 → 370 lines) |
 | Phase 3 — Split update.go | ⬜ Not started |
 | Phase 4 — Split form.go | ⬜ Not started |
 | Phase 5 — Split settings.go | ⬜ Not started |
