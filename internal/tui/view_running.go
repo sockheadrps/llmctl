@@ -310,7 +310,7 @@ func (m Model) renderTokSparkline(key string) string {
 		}
 		sb.WriteRune(runes[idx])
 	}
-	return infoStyle.Render(sb.String()) + detailMutedStyle.Render(fmt.Sprintf("  last %d samples", n))
+	return infoStyle.Render(sb.String())
 }
 
 // renderRateMeter renders a horizontal bar showing current tok/s relative to
