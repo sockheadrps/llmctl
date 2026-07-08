@@ -3,10 +3,13 @@ package tui
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/sockheadrps/llmctl/internal/config"
+	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
@@ -36,8 +39,99 @@ func TestRPCServerModeOwnsStatusServer(t *testing.T) {
 	}
 }
 
+func TestStatusServerRequiresRPCServerMode(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{name: "rpc disabled with stale flag", cfg: &config.Config{StatusServerEnabled: true}, want: false},
+		{name: "rpc client with stale flag", cfg: &config.Config{RPCEnabled: true, RPCMode: "client", StatusServerEnabled: true}, want: false},
+		{name: "rpc server", cfg: &config.Config{RPCEnabled: true, RPCMode: "server"}, want: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (Model{cfg: tc.cfg}).shouldRunStatusServer(); got != tc.want {
+				t.Fatalf("shouldRunStatusServer() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSelectingRPCServerStartsStatusServer(t *testing.T) {
+	port := freeTCPPort(t)
+	m := Model{
+		cfg: &config.Config{
+			RPCEnabled:       true,
+			StatusServerHost: "127.0.0.1",
+			StatusServerPort: port,
+			Models:           map[string]models.Model{},
+		},
+		cfgPath: filepath.Join(t.TempDir(), "config.yaml"),
+		settings: settingsState{rpc: rpcContentState{
+			cursor: 2,
+		}},
+		health: healthMsg{"rpc-server": health.StatusUp},
+	}
+
+	next, _ := m.activateRPCRow()
+	got := next.(Model)
+	if got.statusServer == nil {
+		t.Fatal("expected selecting RPC server mode to start the status server")
+	}
+	t.Cleanup(got.statusServer.Stop)
+	if !got.cfg.StatusServerEnabled {
+		t.Fatal("expected selecting RPC server mode to mark status server enabled")
+	}
+	if _, err := statusserver.PollAddr(fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
+		t.Fatalf("expected selected server-mode status server to respond: %v", err)
+	}
+}
+
+func TestTickPublishesStatusOutsideMainScreen(t *testing.T) {
+	port := freeTCPPort(t)
+	m := Model{
+		cfg: &config.Config{
+			RPCEnabled:       true,
+			RPCMode:          "server",
+			StatusServerHost: "127.0.0.1",
+			StatusServerPort: port,
+			Models:           map[string]models.Model{},
+		},
+		screen: screenLogs,
+		running: []models.Running{{
+			ModelKey:    "model",
+			ModelName:   "Model",
+			ProfileKey:  "profile",
+			ProfileName: "Profile",
+			Port:        8080,
+		}},
+	}
+	if err := m.reconcileStatusServer(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.statusServer.Stop)
+
+	next, _ := m.Update(tickMsg(time.Now()))
+	gotModel := next.(Model)
+	st := pollStatusEventually(t, fmt.Sprintf("127.0.0.1:%d", port), func(st statusserver.Status) bool {
+		return len(st.Running) == 1
+	})
+	if got := st.Running[0].Model; got != "Model" {
+		t.Fatalf("expected tick to publish running model outside main screen, got %q", got)
+	}
+	if gotModel.screen != screenLogs {
+		t.Fatalf("expected to remain on logs screen, got %v", gotModel.screen)
+	}
+}
+
 func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
 	port := freeTCPPort(t)
+	modelPath := filepath.Join(t.TempDir(), "client-model.gguf")
+	if err := os.WriteFile(modelPath, make([]byte, 4096), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	server := Model{
 		cfg: &config.Config{
 			RPCEnabled:       true,
@@ -60,6 +154,9 @@ func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
 			StatusServerEnabled: true,
 			StatusServerHost:    "127.0.0.1",
 			StatusServerPort:    freeTCPPort(t),
+			Models: map[string]models.Model{
+				"model": {Name: "Client Model", Path: modelPath},
+			},
 		},
 		statusPublisher: statusserver.NewPublisher("client-a", "Client A"),
 		running: []models.Running{
@@ -84,6 +181,9 @@ func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
 	})
 	if got := st.Clients[0].Running[0].Model; got != "Client Model" {
 		t.Fatalf("expected pushed client model name, got %q", got)
+	}
+	if got := st.Clients[0].Running[0].ModelSizeBytes; got != 4096 {
+		t.Fatalf("expected pushed client model size, got %d", got)
 	}
 }
 

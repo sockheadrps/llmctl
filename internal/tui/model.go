@@ -270,10 +270,7 @@ func (m Model) shouldRunStatusServer() bool {
 	if m.cfg == nil {
 		return false
 	}
-	if m.cfg.RPCEnabled {
-		return m.cfg.RPCMode == "server"
-	}
-	return m.cfg.StatusServerEnabled
+	return m.cfg.RPCEnabled && m.cfg.RPCMode == "server"
 }
 
 func (m Model) statusServerBindAddr() (string, int) {
@@ -697,6 +694,11 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			Profile: r.ProfileName,
 			Port:    r.Port,
 			TokS:    m.tokRates[key],
+		}
+		if mdl, ok := m.cfg.Models[r.ModelKey]; ok && mdl.Path != "" {
+			if stat, err := os.Stat(mdl.Path); err == nil {
+				info.ModelSizeBytes = stat.Size()
+			}
 		}
 		if mb, ok := m.gpuByPID[r.PID]; ok {
 			info.VRAMMiB = mb

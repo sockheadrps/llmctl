@@ -596,24 +596,34 @@ func (m Model) renderClientStatusLines(client statusserver.ClientInfo) string {
 	if len(client.Running) == 0 {
 		return ""
 	}
-	name := client.Name
-	if name == "" {
-		name = client.Addr
-	}
 	var b strings.Builder
 	for _, ri := range client.Running {
-		meta := ""
+		meta := m.clientModelSizeMeta(ri)
 		if ri.TokS > 0 {
 			meta += fmt.Sprintf("  %.0f tok/s", ri.TokS)
 		}
-		if ri.VRAMMiB > 0 {
-			meta += fmt.Sprintf("  %.1fG", float64(ri.VRAMMiB)/1024)
-		}
-		fmt.Fprintf(&b, "  %s %s%s\n", runningStyle.Render("â—"), profileStyle.Render(name+": "+ri.Model+" / "+ri.Profile), detailMutedStyle.Render(meta))
+		fmt.Fprintf(&b, "  %s%s\n", profileStyle.Render(ri.Model+" / "+ri.Profile), detailMutedStyle.Render(meta))
 	}
 	return b.String()
 }
 
+func (m Model) clientModelSizeMeta(ri statusserver.RunningInfo) string {
+	if ri.ModelSizeBytes <= 0 {
+		return ""
+	}
+	loaded := m.rpcServerLoadedVRAMMiB()
+	if loaded <= 0 {
+		return "  " + util.FormatBytes(ri.ModelSizeBytes)
+	}
+	return fmt.Sprintf("  %s / %s server GPU", util.FormatBytes(ri.ModelSizeBytes), util.FormatBytes(loaded*1024*1024))
+}
+
+func (m Model) rpcServerLoadedVRAMMiB() int64 {
+	if !m.rpcServerAlive || m.rpcServerState.PID == 0 {
+		return 0
+	}
+	return m.gpuByPID[m.rpcServerState.PID]
+}
 func (m Model) renderRunningRow(r models.Running, selected, focused bool) string {
 	return m.renderRunningRowWithWidth(r, selected, focused, 0)
 }

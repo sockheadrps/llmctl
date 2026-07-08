@@ -11,6 +11,8 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/models"
+	"github.com/sockheadrps/llmctl/internal/runtime"
+	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
 func TestPickerSpinnerFrame(t *testing.T) {
@@ -175,5 +177,31 @@ func TestRenderDetailsShowsProfileNotesBelowModelSource(t *testing.T) {
 	}
 	if strings.Contains(got, "Notes:") {
 		t.Fatalf("expected notes not to render as a lower Notes section, got %q", got)
+	}
+}
+
+func TestRenderClientStatusLinesShowsModelAndSizeOnly(t *testing.T) {
+	m := Model{
+		rpcServerAlive: true,
+		rpcServerState: runtime.RPCServerState{PID: 42},
+		gpuByPID:       map[int]int64{42: 2048},
+	}
+	got := stripANSI(m.renderClientStatusLines(statusserver.ClientInfo{
+		Name: "client-machine",
+		Running: []statusserver.RunningInfo{{
+			Model:          "Model",
+			Profile:        "Profile",
+			ModelSizeBytes: 4 * 1024 * 1024 * 1024,
+		}},
+	}))
+
+	if !strings.Contains(got, "Model / Profile") {
+		t.Fatalf("expected model/profile label, got %q", got)
+	}
+	if !strings.Contains(got, "4.0 GB / 2.0 GB server GPU") {
+		t.Fatalf("expected full/server GPU size metadata, got %q", got)
+	}
+	if strings.Contains(got, "client-machine") {
+		t.Fatalf("expected client name to be omitted, got %q", got)
 	}
 }

@@ -22,6 +22,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		if m.mgr != nil {
+			m.refreshRunning(true)
+		}
+		m.pushStatusServer()
 		if m.screen == screenLogs {
 			m.refreshLogs()
 			return m, tickCmd()
@@ -29,8 +33,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen != screenMain {
 			return m, tickCmd()
 		}
-		m.refreshRunning(true)
-		m.pushStatusServer()
 		return m, tea.Batch(tickCmd(), m.backgroundChecks())
 
 	case scrollTickMsg:

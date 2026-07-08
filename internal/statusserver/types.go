@@ -14,11 +14,12 @@ type Status struct {
 
 // RunningInfo describes one active llama-server instance.
 type RunningInfo struct {
-	Model   string  `json:"model"`
-	Profile string  `json:"profile"`
-	Port    int     `json:"port"`
-	TokS    float64 `json:"tok_s,omitempty"`
-	VRAMMiB int64   `json:"vram_mib,omitempty"`
+	Model          string  `json:"model"`
+	Profile        string  `json:"profile"`
+	Port           int     `json:"port"`
+	TokS           float64 `json:"tok_s,omitempty"`
+	VRAMMiB        int64   `json:"vram_mib,omitempty"`
+	ModelSizeBytes int64   `json:"model_size_bytes,omitempty"`
 }
 
 // RPCInfo describes the local ggml-rpc-server state.

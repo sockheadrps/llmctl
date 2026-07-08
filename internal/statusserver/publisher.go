@@ -107,6 +107,7 @@ func (p *Publisher) run(ctx context.Context, addr string, ch <-chan Status) {
 					conn = c
 				}
 				msg := clientUpdate{ID: p.id, Name: p.name, Status: st}
+				_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 				if err := conn.WriteJSON(msg); err != nil {
 					_ = conn.Close()
 					conn = nil
