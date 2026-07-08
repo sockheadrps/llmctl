@@ -55,7 +55,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.pendingInstances, key)
 					m.health[key] = status
 				}
-				// While pending and still down, leave health as StatusLoading (zero/default).
+				// While pending and not yet up (loading or down), leave health as StatusLoading (zero/default).
 			} else {
 				m.health[key] = status
 			}

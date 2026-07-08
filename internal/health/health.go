@@ -3,6 +3,7 @@
 package health
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -23,12 +24,14 @@ const (
 )
 
 // Check hits the llama-server /health endpoint on host:port and
-// classifies the result. A refused connection means the process hasn't
-// opened its listener yet (still loading, or dead).
+// classifies the result.
 //
-// llama-server returns 200 when idle and 503 when all slots are busy
-// processing requests - both mean the server is alive and healthy.
-// Connection refused or timeout means it's still loading or dead.
+// llama-server status field meanings:
+//   - 200 "ok"                → StatusUp (idle, fully loaded)
+//   - 503 "loading model"     → StatusLoading (still initialising)
+//   - 503 "no slot available" → StatusUp (busy but fully loaded)
+//
+// Connection refused or timeout means the HTTP listener isn't up yet.
 func Check(host string, port int) Status {
 	client := http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://%s:%d/health", probeHost(host), port))
@@ -38,7 +41,18 @@ func Check(host string, port int) Status {
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusServiceUnavailable:
+	case http.StatusOK:
+		return StatusUp
+	case http.StatusServiceUnavailable:
+		var body struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return StatusUp
+		}
+		if body.Status == "loading model" {
+			return StatusLoading
+		}
 		return StatusUp
 	default:
 		return StatusDown
