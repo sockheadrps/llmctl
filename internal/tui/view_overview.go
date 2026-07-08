@@ -128,7 +128,7 @@ func (m Model) renderOverviewContent(innerW, boxH int) string {
 	for i, l := range joinedLines {
 		joinedLines[i] = pad + l
 	}
-	return strings.Join(joinedLines, "\n") + "\n"
+	return strings.Join(joinedLines, "\n")
 }
 
 // renderTitledInnerBox builds a rounded box with the title centered in the top
