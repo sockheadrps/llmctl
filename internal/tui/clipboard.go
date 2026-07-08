@@ -125,11 +125,11 @@ func (m Model) overviewClickedEntry(x, y int) (models.Running, bool) {
 
 	// Left inner box X range: margin(1) .. margin+leftBoxW (exclusive)
 	// Y layout: 0=topBorder 1=blank 2=innerTopBorder 3=header 4=Local label 5+=entries
-	// Entry stride: 3 lines (wide) or 4 lines (narrow, contentW < 50).
+	// Entry stride: 3 lines (wide) or 5 lines (narrow, contentW < 50).
 	leftContentW := leftBoxW - 2
 	entryStride := 3
 	if leftContentW < 50 {
-		entryStride = 4
+		entryStride = 5
 	}
 	const entryStartY = 5
 	if x < 1 || x >= 1+leftBoxW || y < entryStartY {

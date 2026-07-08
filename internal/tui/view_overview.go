@@ -323,9 +323,10 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	}
 
 	if narrow {
-		// Narrow: stack Current / (Avg | Peak) on separate lines.
+		// Narrow: each stat on its own line.
 		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
-		b.WriteString(detailMutedStyle.Render("     Avg: "+avg+"  Peak: "+peak+" T/S") + "\n")
+		b.WriteString(detailMutedStyle.Render("     Avg: "+avg) + "\n")
+		b.WriteString(detailMutedStyle.Render("     Peak: "+peak+" T/S") + "\n")
 	} else {
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
@@ -358,13 +359,14 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 
 	narrow := contentW < 50
 
-	// Brief "✓ copied" flash.
+	// Brief "✓ copied" flash — pad to the same height as a normal entry.
 	if m.overviewCopied == hkey {
 		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
 		b.WriteString(runningStyle.Render("  └─ ✓ copied to clipboard") + "\n")
-		b.WriteString("\n") // keep entry height consistent
+		b.WriteString("\n")
 		if narrow {
-			b.WriteString("\n") // narrow adds an extra line
+			b.WriteString("\n") // narrow has 5 lines total
+			b.WriteString("\n")
 		}
 		return b.String()
 	}
@@ -398,9 +400,10 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	}
 
 	if narrow {
-		// Narrow: stack Current / (Avg | Peak) on separate lines.
+		// Narrow: each stat on its own line.
 		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
-		b.WriteString(detailMutedStyle.Render("     Avg: "+avg+"  Peak: "+peak+" T/S") + "\n")
+		b.WriteString(detailMutedStyle.Render("     Avg: "+avg) + "\n")
+		b.WriteString(detailMutedStyle.Render("     Peak: "+peak+" T/S") + "\n")
 	} else {
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
