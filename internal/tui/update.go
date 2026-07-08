@@ -63,11 +63,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case slotsMsg:
 		m.applyTokSamples(msg)
+		m.pushStatusServer()
 		return m, nil
 
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuByPID = msg.byPID
+		m.pushStatusServer()
 		return m, nil
 
 	case clientStatusesMsg:
@@ -134,6 +136,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refreshRunning(false)
+		m.pushStatusServer()
 		m.rebuildRecentRows()
 		m.clearError()
 		key := msg.modelKey + "/" + msg.profileKey
@@ -148,6 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refreshRunning(false)
+		m.pushStatusServer()
 		m.clearError()
 		return m, nil
 
@@ -159,6 +163,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refreshRunning(false)
+		m.pushStatusServer()
 		m.clearError()
 		return m, m.backgroundChecks()
 
@@ -170,6 +175,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refreshRunning(false)
+		m.pushStatusServer()
 		m.clearError()
 		return m, m.backgroundChecks()
 

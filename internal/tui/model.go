@@ -154,8 +154,8 @@ type Model struct {
 
 	running          []models.Running
 	runningCursor    int
-	rpcServerState runtime.RPCServerState
-	rpcServerAlive bool
+	rpcServerState   runtime.RPCServerState
+	rpcServerAlive   bool
 	health           healthMsg
 	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
 
@@ -169,11 +169,13 @@ type Model struct {
 	gpuByPID     map[int]int64
 
 	statusServer          *statusserver.Server
+	statusServerHost      string
+	statusServerPort      int
 	remoteStatus          *statusserver.Status
 	clientStatuses        map[string]*statusserver.Status // client IP → their status (nil if unreachable)
 	discoveredRPCEndpoint string                          // derived from remote status poll: host:rpc_port
-	rpcAddrCopied         bool // true briefly after copying the status server address
-	rpcIPCursor           int  // which LAN IP is selected on the RPC Server tab
+	rpcAddrCopied         bool                            // true briefly after copying the status server address
+	rpcIPCursor           int                             // which LAN IP is selected on the RPC Server tab
 
 	err        error
 	errLogPath string // log file behind the current error, if any; "" means none to view
@@ -190,17 +192,17 @@ type Model struct {
 	detailsDir           int
 	detailsPause         int
 
-	picker         pickerState
-	form           formState
-	formExit       formExitState
-	confirm        confirmState
-	logs           logsState
-	settings       settingsState
-	runningAction      runningActionState
+	picker               pickerState
+	form                 formState
+	formExit             formExitState
+	confirm              confirmState
+	logs                 logsState
+	settings             settingsState
+	runningAction        runningActionState
 	rpcServerActionState rpcServerActionState
-	stopConfirm        stopConfirmState
-	exportArgs         exportArgsState
-	templatePicker     templatePickerState
+	stopConfirm          stopConfirmState
+	exportArgs           exportArgsState
+	templatePicker       templatePickerState
 
 	tokHistory map[string][]float64
 
@@ -239,27 +241,80 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		tokRates:         map[string]float64{},
 		tokPeak:          map[string]float64{},
 		tokHistory:       map[string][]float64{},
-		gpuAvailable:    gpu.Available(),
-		netSupported:    runtimeos.GOOS == "linux",
-		netInternetConn: firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
-		netRPCConn:      firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
-		netIface:        firstNonEmpty(cfg.NetworkIface, netIface),
+		gpuAvailable:     gpu.Available(),
+		netSupported:     runtimeos.GOOS == "linux",
+		netInternetConn:  firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
+		netRPCConn:       firstNonEmpty(cfg.NetworkRPCConn, netRPCConn),
+		netIface:         firstNonEmpty(cfg.NetworkIface, netIface),
 	}
 	if m.gpuAvailable {
 		if name, err := gpu.Name(); err == nil {
 			m.gpuName = name
 		}
 	}
-	if cfg.StatusServerEnabled {
-		srv := statusserver.NewServer()
-		if err := srv.Start(cfg.StatusServerHost, cfg.StatusServerPort); err == nil {
-			m.statusServer = srv
-		}
+	if err := m.reconcileStatusServer(); err != nil {
+		m.setError(fmt.Errorf("status server: %w", err), "")
 	}
 	m.rebuildRows()
 	m.rebuildRecentRows()
 	m.refreshRunning(false)
+	m.pushStatusServer()
 	return m
+}
+
+func (m Model) shouldRunStatusServer() bool {
+	if m.cfg == nil {
+		return false
+	}
+	return m.cfg.StatusServerEnabled || (m.cfg.RPCEnabled && m.cfg.RPCMode == "client")
+}
+
+func (m Model) statusServerBindAddr() (string, int) {
+	if m.cfg == nil {
+		return "0.0.0.0", 11435
+	}
+	host := m.cfg.StatusServerHost
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port := m.cfg.StatusServerPort
+	if port == 0 {
+		port = 11435
+	}
+	return host, port
+}
+
+func (m *Model) reconcileStatusServer() error {
+	if !m.shouldRunStatusServer() {
+		if m.statusServer != nil {
+			m.statusServer.Stop()
+			m.statusServer = nil
+			m.statusServerHost = ""
+			m.statusServerPort = 0
+		}
+		return nil
+	}
+
+	host, port := m.statusServerBindAddr()
+	if m.statusServer != nil && m.statusServerHost == host && m.statusServerPort == port {
+		return nil
+	}
+	if m.statusServer != nil {
+		m.statusServer.Stop()
+		m.statusServer = nil
+		m.statusServerHost = ""
+		m.statusServerPort = 0
+	}
+
+	srv := statusserver.NewServer()
+	if err := srv.Start(host, port); err != nil {
+		return err
+	}
+	m.statusServer = srv
+	m.statusServerHost = host
+	m.statusServerPort = port
+	m.pushStatusServer()
+	return nil
 }
 
 func (m *Model) rebuildRows() {
@@ -414,11 +469,11 @@ func visibleModelKeys(cfg *config.Config) []string {
 }
 
 // buildSettingsRows lists the Settings tab's menu. Status Server is hidden
-// when RPC is in client mode (clients don't serve status).
+// in RPC client mode because client status is managed automatically.
 func (m Model) buildSettingsRows() []row {
 	var rows []row
 	for _, c := range settingsCategories {
-		if c.id == "status_server" && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" {
+		if c.id == "status_server" && m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" {
 			continue
 		}
 		rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})

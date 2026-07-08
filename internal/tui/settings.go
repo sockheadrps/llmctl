@@ -202,6 +202,8 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		}
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.rpc.err = "status server: " + err.Error()
 		}
 		return m, nil
 	case 1:
@@ -209,6 +211,8 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		m.cfg.RPCMode = "client"
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.rpc.err = "status server: " + err.Error()
 		}
 		return m, nil
 	case 2:
@@ -216,6 +220,8 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		m.cfg.RPCMode = "server"
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.rpc.err = "status server: " + err.Error()
 		}
 		return m, nil
 	case 3:
@@ -374,6 +380,8 @@ func (m Model) activateStatusServerRow() (tea.Model, tea.Cmd) {
 		m.cfg.StatusServerEnabled = !m.cfg.StatusServerEnabled
 		if err := m.saveConfig(); err != nil {
 			m.settings.statusSrv.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.statusSrv.err = err.Error()
 		}
 	case 1:
 		return m.openStatusServerHostForm()
@@ -433,6 +441,10 @@ func (m Model) submitStatusServerHostForm() (tea.Model, tea.Cmd) {
 		m.settings.statusSrv.err = err.Error()
 		return m, nil
 	}
+	if err := m.reconcileStatusServer(); err != nil {
+		m.settings.statusSrv.err = err.Error()
+		return m, nil
+	}
 	m.settings.statusSrv.hostEditing = false
 	m.settings.statusSrv.err = ""
 	return m, nil
@@ -461,6 +473,10 @@ func (m Model) submitStatusServerPortForm() (tea.Model, tea.Cmd) {
 	}
 	m.cfg.StatusServerPort = port
 	if err := m.saveConfig(); err != nil {
+		m.settings.statusSrv.err = err.Error()
+		return m, nil
+	}
+	if err := m.reconcileStatusServer(); err != nil {
 		m.settings.statusSrv.err = err.Error()
 		return m, nil
 	}
