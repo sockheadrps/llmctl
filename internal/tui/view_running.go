@@ -153,15 +153,9 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 
 	if rate, ok := m.tokRates[hkey]; ok {
 		row += "   " + m.renderRateMeter(hkey, rate) + "\n"
-		if spark := m.renderTokSparkline(hkey); spark != "" {
-			row += "   " + spark + "\n"
-		}
 	} else if peak := m.tokPeak[hkey]; peak > 0 {
 		// model is idle but has a session history — show the meter at zero
 		row += "   " + m.renderRateMeter(hkey, 0) + "\n"
-		if spark := m.renderTokSparkline(hkey); spark != "" {
-			row += "   " + spark + "\n"
-		}
 	}
 	return row
 }
