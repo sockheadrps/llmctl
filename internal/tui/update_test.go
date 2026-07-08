@@ -190,6 +190,35 @@ func TestRenderSettingsListDoesNotShowFocusedRowOnTabs(t *testing.T) {
 	}
 }
 
+func TestBuildSettingsRowsShowsStatusServerOnlyForRPCServerMode(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{name: "nil config", cfg: nil, want: false},
+		{name: "rpc disabled", cfg: &config.Config{}, want: false},
+		{name: "rpc client", cfg: &config.Config{RPCEnabled: true, RPCMode: "client"}, want: false},
+		{name: "rpc server", cfg: &config.Config{RPCEnabled: true, RPCMode: "server"}, want: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := (Model{cfg: tc.cfg}).buildSettingsRows()
+			got := false
+			for _, r := range rows {
+				if r.modelKey == "status_server" {
+					got = true
+					break
+				}
+			}
+			if got != tc.want {
+				t.Fatalf("status_server row visibility = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEnterModelsPaneExpandsFirstModel(t *testing.T) {
 	m := Model{
 		cfg: &config.Config{Models: map[string]models.Model{

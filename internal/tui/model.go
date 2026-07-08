@@ -504,12 +504,12 @@ func visibleModelKeys(cfg *config.Config) []string {
 	return keys
 }
 
-// buildSettingsRows lists the Settings tab's menu. Status Server is a
-// standalone/non-RPC setting; RPC mode owns status through the selected role.
+// buildSettingsRows lists the Settings tab's menu. Status Server is only
+// exposed for RPC server mode; clients publish to the remote server instead.
 func (m Model) buildSettingsRows() []row {
 	var rows []row
 	for _, c := range settingsCategories {
-		if c.id == "status_server" && m.cfg != nil && m.cfg.RPCEnabled {
+		if c.id == "status_server" && (m.cfg == nil || !m.cfg.RPCEnabled || m.cfg.RPCMode != "server") {
 			continue
 		}
 		rows = append(rows, row{kind: rowSettingsCategory, modelKey: c.id, label: c.label})
