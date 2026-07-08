@@ -314,6 +314,9 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
 	}
+	if spark := tokSparkline(ri.TokHistory); spark != "" {
+		b.WriteString("   " + spark + "\n")
+	}
 	return b.String()
 }
 

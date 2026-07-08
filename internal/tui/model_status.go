@@ -142,6 +142,12 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 				sum += v
 			}
 			info.TokAvg = sum / float64(len(hist))
+			const maxSend = 20
+			if len(hist) > maxSend {
+				info.TokHistory = hist[len(hist)-maxSend:]
+			} else {
+				info.TokHistory = hist
+			}
 		} else if histAvg, ok := m.tokRateHistory.average(key); ok && histAvg > 0 {
 			info.TokAvg = histAvg
 		}
