@@ -303,20 +303,18 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	detail += profileStyle.Render(fmt.Sprintf("  :%d", ri.Port))
 	b.WriteString(detail + "\n")
 
-	// Line 3: Current: X - Avg: Y - Peak: Z T/S
-	cur := "—"
+	// Line 3: Current: X | Avg: Y | Peak Z T/S
+	var cur, avg, peak string
 	if ri.TokS > 0 {
 		cur = fmt.Sprintf("%.0ft/s", ri.TokS)
 	}
-	avg := "—"
 	if ri.TokAvg > 0 {
 		avg = fmt.Sprintf("%.0f", ri.TokAvg)
 	}
-	peak := "—"
 	if ri.TokPeak > 0 {
 		peak = fmt.Sprintf("%.0f", ri.TokPeak)
 	}
-	spd := "Current: " + cur + " - Avg: " + avg + " - Peak: " + peak + " T/S"
+	spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 	b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
 	return b.String()
 }
@@ -373,15 +371,12 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	detail += profileStyle.Render(fmt.Sprintf("  :%d", r.Port))
 	b.WriteString(detail + "\n")
 
-	// Line 3: Current: X - Avg: Y - Peak: Z T/S
+	// Line 3: Current: X | Avg: Y | Peak Z T/S
 	cur, avg, peak := m.overviewSpeeds(hkey, r.ModelKey, r.ProfileKey)
-	if avg == "" {
-		avg = "—"
+	if cur == "—" {
+		cur = ""
 	}
-	if peak == "" {
-		peak = "—"
-	}
-	spd := "Current: " + cur + " - Avg: " + avg + " - Peak: " + peak + " T/S"
+	spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 	b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
 	return b.String()
 }
