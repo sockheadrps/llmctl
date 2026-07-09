@@ -52,16 +52,20 @@ func (m Model) viewOverviewPage() string {
 		leftCW = avail - rightCW
 	}
 
+	// sepCol is the visual column of the │ separator.
+	// Row: │(0) space(1) leftContent(leftCW, cols 2..leftCW+1) space(leftCW+2) │(leftCW+3) …
+	sepCol := leftCW + 3
+
 	leftLines := strings.Split(strings.TrimRight(m.renderActiveServices(leftCW, contentH), "\n"), "\n")
 	rightLines := strings.Split(strings.TrimRight(m.renderSystemTelemetry(rightCW, contentH), "\n"), "\n")
 
 	navText, versionText := m.overviewNavVersion(leftCW, rightCW)
 
 	var sb strings.Builder
-	sb.WriteString(m.buildOverviewTopBorder(totalW))
+	sb.WriteString(m.buildOverviewTopBorder(totalW, sepCol))
 	sb.WriteString("\n")
-	// Blank row between tab bar and content.
-	sb.WriteString(bs.Render("│") + strings.Repeat(" ", totalW-2) + bs.Render("│") + "\n")
+	// Blank row between tab bar and content — │ at separator column.
+	sb.WriteString(bs.Render("│") + strings.Repeat(" ", sepCol-1) + bs.Render("│") + strings.Repeat(" ", totalW-2-sepCol) + bs.Render("│") + "\n")
 
 	sep := bs.Render("│")
 	for i := 0; i < contentH; i++ {
@@ -83,52 +87,48 @@ func (m Model) viewOverviewPage() string {
 		}
 		sb.WriteString(bs.Render("│") + " " + l + strings.Repeat(" ", lpad) + " " + sep + r + strings.Repeat(" ", rpad) + " " + bs.Render("│") + "\n")
 	}
-	sb.WriteString(m.buildOverviewBottomBorder(totalW, navText, versionText))
+	sb.WriteString(m.buildOverviewBottomBorder(totalW, navText, versionText, sepCol))
 	return sb.String()
 }
 
-// buildOverviewBottomBorder builds ╰─ navText ──── versionText ─╯.
-func (m Model) buildOverviewBottomBorder(totalW int, navText, versionText string) string {
+// buildOverviewBottomBorder builds ╰─ navText ─┴─ versionText ─╯ with a ┴ at
+// sepCol where the column separator │ meets the bottom border.
+// Left zone (cols 0..sepCol-1): ╰─ nav ─×n
+// Right zone (cols sepCol+1..totalW-1): ─×m version ─╯
+func (m Model) buildOverviewBottomBorder(totalW int, navText, versionText string, sepCol int) string {
 	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
-	innerW := totalW - 2
 	navW := lipgloss.Width(navText)
 	verW := lipgloss.Width(versionText)
 
-	if navText == "" && versionText == "" {
-		return bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯")
-	}
-	if versionText == "" {
-		mid := innerW - navW - 3
-		if mid < 0 {
-			mid = 0
+	// Left zone: ╰─ nav ─×leftDashes  (visual width = sepCol)
+	// ╰(1) ─(1) sp(1) nav(navW) sp(1) ─×n = navW+4+n = sepCol → n = sepCol-navW-4
+	var leftPart string
+	if navText != "" {
+		leftDashes := sepCol - navW - 4
+		if leftDashes < 0 {
+			leftDashes = 0
 		}
-		return bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", mid)) + bs.Render("╯")
+		leftPart = bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", leftDashes))
+	} else {
+		leftPart = bs.Render("╰") + bs.Render(strings.Repeat("─", sepCol-1))
 	}
-	if navText == "" {
-		mid := (innerW - verW - 2) / 2
-		right := innerW - verW - 2 - mid
-		if mid < 0 {
-			mid = 0
-			right = max(0, innerW-verW-2)
+
+	// Right zone: ─×rightDashes version ─╯  (visual width = totalW-1-sepCol)
+	// rightLen = totalW-1-sepCol chars for cols sepCol+1..totalW-1
+	rightLen := totalW - 1 - sepCol
+	var rightPart string
+	if versionText != "" {
+		// ─×r sp ver sp ─ ╯ → r + verW + 4 = rightLen → r = rightLen-verW-4
+		rightDashes := rightLen - verW - 4
+		if rightDashes < 0 {
+			rightDashes = 0
 		}
-		return bs.Render("╰") + bs.Render(strings.Repeat("─", mid)) + " " + versionText + " " + bs.Render(strings.Repeat("─", right)) + bs.Render("╯")
+		rightPart = bs.Render(strings.Repeat("─", rightDashes)) + " " + versionText + " " + bs.Render("─") + bs.Render("╯")
+	} else {
+		rightPart = bs.Render(strings.Repeat("─", rightLen-1)) + bs.Render("╯")
 	}
-	// Both: nav at left, version at right.
-	// Between ╰ and ╯: ─(1) sp nav sp ─×mid sp ver sp ─(1) = navW+verW+mid+6 = innerW
-	mid := innerW - navW - verW - 6
-	if mid < 2 {
-		// No room for both; show nav only.
-		mid2 := innerW - navW - 3
-		if mid2 < 0 {
-			mid2 = 0
-		}
-		return bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", mid2)) + bs.Render("╯")
-	}
-	return bs.Render("╰") +
-		bs.Render("─") + " " + navText + " " +
-		bs.Render(strings.Repeat("─", mid)) +
-		" " + versionText + " " + bs.Render("─") +
-		bs.Render("╯")
+
+	return leftPart + bs.Render("┴") + rightPart
 }
 
 // overviewNavVersion returns the nav and version strings for the bottom border,
@@ -173,17 +173,11 @@ func (m Model) overviewNavVersion(leftCW, rightCW int) (navText, versionText str
 	return
 }
 
-// buildOverviewTopBorder builds the top border line with the tab bar embedded
-// near the left edge: ╭─ <tabs> ──────╮  (full terminal width)
-func (m Model) buildOverviewTopBorder(totalW int) string {
+// buildOverviewTopBorder builds ╭─ tabs ─┬─╮ with a ┬ at sepCol where the
+// column separator │ meets the top border.
+func (m Model) buildOverviewTopBorder(totalW, sepCol int) string {
 	tabs := m.renderTabBarLabels()
 	tabsW := lipgloss.Width(tabs)
-	innerW := totalW - 2
-	// 1 dash + space before tabs, space after, rest fills to ╮
-	rightDash := innerW - 1 - 1 - tabsW - 1
-	if rightDash < 0 {
-		rightDash = 0
-	}
 
 	focused := m.focus == focusTabs
 	dashColor := lipgloss.Color("38")
@@ -193,10 +187,23 @@ func (m Model) buildOverviewTopBorder(totalW int) string {
 	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
 	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
 
+	// Fixed prefix: ╭─ tabs  (visual width = tabsW+4: ╭─ space tabs space)
+	preW := tabsW + 4
+	// Dashes between prefix and ┬, then dashes from ┬ to ╮.
+	leftDashes := sepCol - preW
+	if leftDashes < 0 {
+		leftDashes = 0
+	}
+	rightDashes := totalW - 1 - sepCol - 1 // cols sepCol+1..totalW-2
+	if rightDashes < 0 {
+		rightDashes = 0
+	}
+
 	return bs.Render("╭") +
-		dashStyle.Render("─") +
-		" " + tabs + " " +
-		dashStyle.Render(strings.Repeat("─", rightDash)) +
+		dashStyle.Render("─") + " " + tabs + " " +
+		dashStyle.Render(strings.Repeat("─", leftDashes)) +
+		bs.Render("┬") +
+		dashStyle.Render(strings.Repeat("─", rightDashes)) +
 		bs.Render("╮")
 }
 
