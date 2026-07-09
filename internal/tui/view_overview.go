@@ -30,9 +30,10 @@ func (m Model) viewOverviewPage() string {
 		totalH = fallbackHeight
 	}
 
-	// top border (1) + spacer row with │ (1) + inner box (boxH+2) = totalH
-	// → boxH = totalH - 4
-	boxH := totalH - 4
+	// top border (1) + inner box (boxH+2) = totalH → boxH = totalH - 3
+	// No spacer row: outer ╭╮ sits directly above inner box ╭╮ in the same
+	// column so the corners appear as a continuous connected frame.
+	boxH := totalH - 3
 	if boxH < 4 {
 		boxH = 4
 	}
@@ -42,20 +43,13 @@ func (m Model) viewOverviewPage() string {
 	innerW := totalW - 2
 
 	topBorder := m.buildOverviewTopBorder(totalW)
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
-
-	// Spacer row: │ at col 1 and col totalW-4, aligned with inner box corners.
-	spacerInner := totalW - 6
-	if spacerInner < 0 {
-		spacerInner = 0
-	}
 
 	var sb strings.Builder
 	sb.WriteString(topBorder)
 	sb.WriteString("\n")
-	// One spacer row bridging top border → inner boxes; │ aligned with box corners.
-	sb.WriteString(" " + borderStyle.Render("│") + strings.Repeat(" ", spacerInner) + borderStyle.Render("│") + "   \n")
-	// Inner boxes rendered directly — no outer │ wrapping below this point.
+	// Inner boxes rendered directly below the top border — no spacer row.
+	// The outer ╭╮ corners (col 1, col totalW-4) align with the inner box
+	// corners, making the frame read as one connected structure.
 	sb.WriteString(m.renderOverviewContent(innerW, boxH))
 	return sb.String()
 }
@@ -80,12 +74,12 @@ func (m Model) buildOverviewTopBorder(totalW int) string {
 	}
 
 	focused := m.focus == focusTabs
-	dashColor := lipgloss.Color("30")
+	dashColor := lipgloss.Color("38")
 	if focused {
-		dashColor = lipgloss.Color("240")
+		dashColor = lipgloss.Color("39")
 	}
 	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
 
 	border := borderStyle.Render("╭") +
 		dashStyle.Render("─") +
@@ -179,7 +173,7 @@ func (m Model) renderOverviewContent(innerW, boxH int) string {
 // border and bottomText embedded in the bottom border. When centerBottom is
 // true the text is centered; otherwise it sits at the left edge after ╰─.
 func renderTitledInnerBox(title, content, bottomText string, centerBottom bool, boxW, boxH int) string {
-	borderColor := lipgloss.Color("240")
+	borderColor := lipgloss.Color("38")
 	bs := lipgloss.NewStyle().Foreground(borderColor)
 	innerW := boxW - 2
 
