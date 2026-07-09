@@ -14,12 +14,10 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
-// viewOverviewPage renders the complete Overview screen. The outer border's
-// vertical lines appear only on the single spacer row between the top border
-// and the inner boxes; below that the inner boxes sit flush, with nav text
-// embedded in the left box's bottom border and the version in the right box's.
-// The top border ╭╮ and spacer │ align with the inner box corners (col 1 and
-// col totalW-4), matching the inner box edges rather than the terminal edges.
+// viewOverviewPage renders the complete Overview screen as a single outer box
+// (╭ at col 0, ╮ at col totalW-1) with a vertical │ separator between two
+// columns: ACTIVE SERVICES on the left, SYSTEM TELEMETRY on the right.
+// Using one box eliminates the "disconnected inner boxes" problem entirely.
 func (m Model) viewOverviewPage() string {
 	totalW := m.width
 	if totalW <= 0 {
@@ -30,90 +28,112 @@ func (m Model) viewOverviewPage() string {
 		totalH = fallbackHeight
 	}
 
-	// top border (1) + inner box (boxH+2) = totalH → boxH = totalH - 3
-	// No spacer row: outer ╭╮ sits directly above inner box ╭╮ in the same
-	// column so the corners appear as a continuous connected frame.
-	boxH := totalH - 3
-	if boxH < 4 {
-		boxH = 4
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+
+	// top(1) + blank(1) + content(contentH) + bottom(1) = totalH
+	contentH := totalH - 3
+	if contentH < 2 {
+		contentH = 2
 	}
 
-	// innerW is the available width for renderOverviewContent, which applies a
-	// margin=1 on each side → boxes are totalW-4 wide, spanning col 1..totalW-4.
-	innerW := totalW - 2
+	// Row format: │ leftContent │ rightContent │
+	// 1 + 1 + leftCW + 1 + 1 + rightCW + 1 + 1 = totalW → leftCW+rightCW = totalW-6
+	avail := totalW - 6
+	if avail < 24 {
+		avail = 24
+	}
+	leftCW := avail * 3 / 5
+	if leftCW < 18 {
+		leftCW = 18
+	}
+	rightCW := avail - leftCW
+	if rightCW < 14 {
+		rightCW = 14
+		leftCW = avail - rightCW
+	}
 
-	topBorder := m.buildOverviewTopBorder(totalW)
+	leftLines := strings.Split(strings.TrimRight(m.renderActiveServices(leftCW, contentH), "\n"), "\n")
+	rightLines := strings.Split(strings.TrimRight(m.renderSystemTelemetry(rightCW, contentH), "\n"), "\n")
+
+	navText, versionText := m.overviewNavVersion(leftCW, rightCW)
 
 	var sb strings.Builder
-	sb.WriteString(topBorder)
+	sb.WriteString(m.buildOverviewTopBorder(totalW))
 	sb.WriteString("\n")
-	// Inner boxes rendered directly below the top border — no spacer row.
-	// The outer ╭╮ corners (col 1, col totalW-4) align with the inner box
-	// corners, making the frame read as one connected structure.
-	sb.WriteString(m.renderOverviewContent(innerW, boxH))
+	// Blank row between tab bar and content.
+	sb.WriteString(bs.Render("│") + strings.Repeat(" ", totalW-2) + bs.Render("│") + "\n")
+
+	sep := bs.Render("│")
+	for i := 0; i < contentH; i++ {
+		l := ""
+		if i < len(leftLines) {
+			l = leftLines[i]
+		}
+		r := ""
+		if i < len(rightLines) {
+			r = rightLines[i]
+		}
+		lpad := leftCW - lipgloss.Width(l)
+		if lpad < 0 {
+			lpad = 0
+		}
+		rpad := rightCW - lipgloss.Width(r)
+		if rpad < 0 {
+			rpad = 0
+		}
+		sb.WriteString(bs.Render("│") + " " + l + strings.Repeat(" ", lpad) + " " + sep + r + strings.Repeat(" ", rpad) + " " + bs.Render("│") + "\n")
+	}
+	sb.WriteString(m.buildOverviewBottomBorder(totalW, navText, versionText))
 	return sb.String()
 }
 
-// buildOverviewTopBorder builds the top border line with the tab bar embedded
-// near the left edge: " ╭─ <tabs> ──────╮   "
-// The border is totalW-4 wide so that ╭ lands at col 1 and ╮ at col totalW-4,
-// aligning with the inner box corners in renderOverviewContent.
-func (m Model) buildOverviewTopBorder(totalW int) string {
-	tabs := m.renderTabBarLabels()
-	tabsW := lipgloss.Width(tabs)
-	// Border spans col 1..totalW-4 → width = totalW-4; inner dash space = totalW-6.
-	borderW := totalW - 4
-	if borderW < 2 {
-		borderW = 2
-	}
-	innerW := borderW - 2
-	// 1 dash + space before tabs, space after, rest fills to ╮
-	rightDash := innerW - 1 - 1 - tabsW - 1
-	if rightDash < 0 {
-		rightDash = 0
-	}
+// buildOverviewBottomBorder builds ╰─ navText ──── versionText ─╯.
+func (m Model) buildOverviewBottomBorder(totalW int, navText, versionText string) string {
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+	innerW := totalW - 2
+	navW := lipgloss.Width(navText)
+	verW := lipgloss.Width(versionText)
 
-	focused := m.focus == focusTabs
-	dashColor := lipgloss.Color("38")
-	if focused {
-		dashColor = lipgloss.Color("39")
+	if navText == "" && versionText == "" {
+		return bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯")
 	}
-	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
-
-	border := borderStyle.Render("╭") +
-		dashStyle.Render("─") +
-		" " + tabs + " " +
-		dashStyle.Render(strings.Repeat("─", rightDash)) +
-		borderStyle.Render("╮")
-	// Pad to full terminal width: 1 space before, 3 spaces after.
-	return " " + border + "   "
+	if versionText == "" {
+		mid := innerW - navW - 3
+		if mid < 0 {
+			mid = 0
+		}
+		return bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", mid)) + bs.Render("╯")
+	}
+	if navText == "" {
+		mid := (innerW - verW - 2) / 2
+		right := innerW - verW - 2 - mid
+		if mid < 0 {
+			mid = 0
+			right = max(0, innerW-verW-2)
+		}
+		return bs.Render("╰") + bs.Render(strings.Repeat("─", mid)) + " " + versionText + " " + bs.Render(strings.Repeat("─", right)) + bs.Render("╯")
+	}
+	// Both: nav at left, version at right.
+	// Between ╰ and ╯: ─(1) sp nav sp ─×mid sp ver sp ─(1) = navW+verW+mid+6 = innerW
+	mid := innerW - navW - verW - 6
+	if mid < 2 {
+		// No room for both; show nav only.
+		mid2 := innerW - navW - 3
+		if mid2 < 0 {
+			mid2 = 0
+		}
+		return bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", mid2)) + bs.Render("╯")
+	}
+	return bs.Render("╰") +
+		bs.Render("─") + " " + navText + " " +
+		bs.Render(strings.Repeat("─", mid)) +
+		" " + versionText + " " + bs.Render("─") +
+		bs.Render("╯")
 }
 
-// renderOverviewContent builds the two-column body: ACTIVE SERVICES on the
-// left, SYSTEM TELEMETRY on the right. Nav text is embedded in the left box's
-// bottom border; version is centered in the right box's bottom border.
-func (m Model) renderOverviewContent(innerW, boxH int) string {
-	margin := 1
-	available := innerW - margin*2
-
-	leftBoxW := available * 3 / 5
-	if leftBoxW < 34 {
-		leftBoxW = 34
-	}
-	rightBoxW := available - leftBoxW
-	if rightBoxW < 26 {
-		rightBoxW = 26
-		leftBoxW = available - rightBoxW
-	}
-
-	leftContentW := leftBoxW - 2
-	rightContentW := rightBoxW - 2
-
-	leftContent := m.renderActiveServices(leftContentW, boxH)
-	rightContent := m.renderSystemTelemetry(rightContentW, boxH)
-
-	// Build status text for the left box bottom border.
+// overviewNavVersion returns the nav and version strings for the bottom border,
+// sized to fit the column widths.
+func (m Model) overviewNavVersion(leftCW, rightCW int) (navText, versionText string) {
 	var statusStr string
 	switch {
 	case m.starting:
@@ -130,117 +150,54 @@ func (m Model) renderOverviewContent(innerW, boxH int) string {
 		statusStr = "  " + errorStyle.Render(msg)
 	}
 
-	// Progressive nav text: full → medium → minimal → hidden as left box narrows.
-	leftBoxInnerW := leftBoxW - 2
 	navFull := helpStyle.Render("click to copy addr  ·  ←→/ad tabs  ·  q quit") + statusStr
 	navMid := helpStyle.Render("←→/ad tabs  ·  q quit")
 	navMin := helpStyle.Render("q quit")
-	var navText string
 	switch {
-	case leftBoxInnerW >= lipgloss.Width(navFull)+4:
+	case leftCW >= lipgloss.Width(navFull)+2:
 		navText = navFull
-	case leftBoxInnerW >= lipgloss.Width(navMid)+4:
+	case leftCW >= lipgloss.Width(navMid)+2:
 		navText = navMid
-	case leftBoxInnerW >= lipgloss.Width(navMin)+4:
+	case leftCW >= lipgloss.Width(navMin)+2:
 		navText = navMin
 	}
 
-	// Progressive version text: full → short → hidden as right box narrows.
-	rightBoxInnerW := rightBoxW - 2
 	verFull := detailMutedStyle.Render("llmctl " + build.Version)
 	verShort := detailMutedStyle.Render(build.Version)
-	var versionText string
 	switch {
-	case rightBoxInnerW >= lipgloss.Width(verFull)+4:
+	case rightCW >= lipgloss.Width(verFull)+2:
 		versionText = verFull
-	case rightBoxInnerW >= lipgloss.Width(verShort)+4:
+	case rightCW >= lipgloss.Width(verShort)+2:
 		versionText = verShort
 	}
-
-	leftBox := renderTitledInnerBox("ACTIVE SERVICES", leftContent, navText, false, leftBoxW, boxH)
-	rightBox := renderTitledInnerBox("SYSTEM TELEMETRY", rightContent, versionText, true, rightBoxW, boxH)
-
-	joined := lipgloss.JoinHorizontal(lipgloss.Top, leftBox, rightBox)
-	joinedLines := strings.Split(joined, "\n")
-	pad := strings.Repeat(" ", margin)
-	for i, l := range joinedLines {
-		joinedLines[i] = pad + l
-	}
-	return strings.Join(joinedLines, "\n")
+	return
 }
 
-// renderTitledInnerBox builds a rounded box with the title centered in the top
-// border and bottomText embedded in the bottom border. When centerBottom is
-// true the text is centered; otherwise it sits at the left edge after ╰─.
-func renderTitledInnerBox(title, content, bottomText string, centerBottom bool, boxW, boxH int) string {
-	borderColor := lipgloss.Color("38")
-	bs := lipgloss.NewStyle().Foreground(borderColor)
-	innerW := boxW - 2
-
-	styledTitle := detailMutedStyle.Render(title)
-	titleW := lipgloss.Width(styledTitle)
-	remaining := innerW - titleW
-	if remaining < 0 {
-		remaining = 0
+// buildOverviewTopBorder builds the top border line with the tab bar embedded
+// near the left edge: ╭─ <tabs> ──────╮  (full terminal width)
+func (m Model) buildOverviewTopBorder(totalW int) string {
+	tabs := m.renderTabBarLabels()
+	tabsW := lipgloss.Width(tabs)
+	innerW := totalW - 2
+	// 1 dash + space before tabs, space after, rest fills to ╮
+	rightDash := innerW - 1 - 1 - tabsW - 1
+	if rightDash < 0 {
+		rightDash = 0
 	}
-	leftDash := remaining / 2
-	rightDash := remaining - leftDash
 
-	topBorder := bs.Render("╭") +
-		bs.Render(strings.Repeat("─", leftDash)) +
-		styledTitle +
-		bs.Render(strings.Repeat("─", rightDash)) +
+	focused := m.focus == focusTabs
+	dashColor := lipgloss.Color("38")
+	if focused {
+		dashColor = lipgloss.Color("39")
+	}
+	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+
+	return bs.Render("╭") +
+		dashStyle.Render("─") +
+		" " + tabs + " " +
+		dashStyle.Render(strings.Repeat("─", rightDash)) +
 		bs.Render("╮")
-
-	// Bottom border with embedded text — hide text independently if the box
-	// is too narrow to fit it with at least a couple of dashes on each side.
-	plainBottom := func() string {
-		return bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯")
-	}
-	var bottomBorder string
-	if bottomText == "" {
-		bottomBorder = plainBottom()
-	} else {
-		textW := lipgloss.Width(bottomText)
-		dashTotal := innerW - textW - 2 // 1 space on each side of the text
-		if dashTotal < 2 {
-			// Not enough room for this box's label — fall back to plain dashes.
-			bottomBorder = plainBottom()
-		} else {
-			var leftD, rightD int
-			if centerBottom {
-				leftD = dashTotal / 2
-				rightD = dashTotal - leftD
-			} else {
-				leftD = 1
-				rightD = dashTotal - 1
-			}
-			bottomBorder = bs.Render("╰") +
-				bs.Render(strings.Repeat("─", leftD)) +
-				" " + bottomText + " " +
-				bs.Render(strings.Repeat("─", rightD)) +
-				bs.Render("╯")
-		}
-	}
-
-	rawLines := strings.Split(strings.TrimRight(content, "\n"), "\n")
-
-	var sb strings.Builder
-	sb.WriteString(topBorder)
-	sb.WriteString("\n")
-	for i := 0; i < boxH; i++ {
-		var line string
-		if i < len(rawLines) {
-			line = rawLines[i]
-		}
-		pad := innerW - lipgloss.Width(line)
-		if pad < 0 {
-			pad = 0
-		}
-		sb.WriteString(bs.Render("│") + line + strings.Repeat(" ", pad) + bs.Render("│") + "\n")
-	}
-	sb.WriteString(bottomBorder)
-	return sb.String()
 }
 
 // ─── ACTIVE SERVICES ─────────────────────────────────────────────────────────
@@ -248,6 +205,8 @@ func renderTitledInnerBox(title, content, bottomText string, centerBottom bool, 
 func (m Model) renderActiveServices(contentW, contentH int) string {
 	var b strings.Builder
 
+	b.WriteString(detailMutedStyle.Render("ACTIVE SERVICES"))
+	b.WriteString("\n")
 	// Header — just the ALIAS label, no port/spd columns.
 	b.WriteString(detailMutedStyle.Render("  ALIAS"))
 	b.WriteString("\n")
@@ -506,6 +465,9 @@ func (m Model) overviewModelSize(modelKey string) string {
 
 func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
+
+	b.WriteString(detailMutedStyle.Render("SYSTEM TELEMETRY"))
+	b.WriteString("\n")
 
 	// GPU 0: local GPU.
 	// -1 for the margin space prepended to every line at the end of this function.

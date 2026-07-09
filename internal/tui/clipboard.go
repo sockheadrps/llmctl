@@ -103,36 +103,38 @@ func (m Model) copyEndpoint(run models.Running) (tea.Model, tea.Cmd) {
 }
 
 // overviewClickedEntry maps a mouse click (x, y) to the running entry it falls
-// on in the Overview ACTIVE SERVICES box, using the same layout math as
-// renderOverviewContent / renderActiveServices.
+// on in the Overview ACTIVE SERVICES column, using the same layout math as
+// viewOverviewPage / renderActiveServices.
 func (m Model) overviewClickedEntry(x, y int) (models.Running, bool) {
 	totalW := m.width
 	if totalW <= 0 {
 		totalW = fallbackWidth
 	}
-	innerW := totalW - 2
-	available := innerW - 1*2 // equal left+right margin
-	leftBoxW := available * 3 / 5
-	if leftBoxW < 34 {
-		leftBoxW = 34
+	avail := totalW - 6
+	if avail < 24 {
+		avail = 24
 	}
-	rightBoxW := available - leftBoxW
-	if rightBoxW < 26 {
-		rightBoxW = 26
-		leftBoxW = available - rightBoxW
+	leftCW := avail * 3 / 5
+	if leftCW < 18 {
+		leftCW = 18
 	}
-	_ = rightBoxW
+	rightCW := avail - leftCW
+	if rightCW < 14 {
+		rightCW = 14
+		leftCW = avail - rightCW
+	}
+	_ = rightCW
 
-	// Left inner box X range: margin(1) .. margin+leftBoxW (exclusive)
-	// Y layout: 0=topBorder 1=blank 2=innerTopBorder 3=header 4=Local label 5+=entries
-	// Entry stride: 3 lines (wide) or 5 lines (narrow, contentW < 50).
-	leftContentW := leftBoxW - 2
+	// Left column X range: cols 1..leftCW+2 (outer space + content + trailing space)
+	// Y layout: 0=top border 1=blank 2=ACTIVE SERVICES header 3=ALIAS header
+	//           4=Local label 5+=entries
+	// Entry stride: 3 lines (wide) or 5 lines (narrow, leftCW < 50).
 	entryStride := 3
-	if leftContentW < 50 {
+	if leftCW < 50 {
 		entryStride = 5
 	}
 	const entryStartY = 5
-	if x < 1 || x >= 1+leftBoxW || y < entryStartY {
+	if x < 1 || x > leftCW+2 || y < entryStartY {
 		return models.Running{}, false
 	}
 	idx := (y - entryStartY) / entryStride
