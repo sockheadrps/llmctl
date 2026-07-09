@@ -23,17 +23,10 @@ const to = (path) => withBase(path)
           llmctl wraps llama.cpp's <code>llama-server</code> workflow in a terminal UI and a small CLI, so you can
           import models, save reusable profiles, run detached servers, watch health, and get back to work.
         </p>
-                <div class="hero-badge">
+        <div class="hero-badge">
           <span class="dot"></span>
           Built with Go - Single Binary - Apache 2.0
         </div>
-
-        <div class="hero-actions">
-          <a class="primary-btn" :href="to('/installation')">Installation</a>
-          <a class="secondary-btn" :href="to('/quickstart')">Quickstart</a>
-      <a class="secondary-btn" href="https://github.com/sockheadrps/llmctl" target="_blank" rel="noopener">GitHub</a>
-        </div>
-
       </div>
 
       <div class="hero-media">
@@ -42,6 +35,11 @@ const to = (path) => withBase(path)
           alt="llmctl TUI showing models, profiles, running services, and status panes"
           loading="eager"
         />
+        <div class="hero-actions">
+          <a class="primary-btn" :href="to('/installation')">Installation</a>
+          <a class="secondary-btn" :href="to('/quickstart')">Quickstart</a>
+          <a class="secondary-btn" href="https://github.com/sockheadrps/llmctl" target="_blank" rel="noopener">GitHub</a>
+        </div>
       </div>
     </section>
 
@@ -211,6 +209,14 @@ const to = (path) => withBase(path)
   padding: 0 0 2rem;
 }
 
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  max-width: none;
+}
+
 
 
 .hero-badge {
@@ -226,6 +232,8 @@ const to = (path) => withBase(path)
   font-weight: 600;
   color: var(--accent);
   animation: badgePulse 3s ease-in-out infinite;
+  margin-top: 25px;
+
 }
 
 .hero-badge .dot {
@@ -240,9 +248,9 @@ const to = (path) => withBase(path)
   margin: 0;
   font-size: clamp(2.8rem, 7.2vw, 5.7rem);
   font-weight: 900;
-  line-height: .95;
+  line-height: .84;
   letter-spacing: -.04em;
-  margin-bottom: 1.5rem;
+  margin-bottom: .9rem;
   position: relative;
   color: #f2f6ff;
 }
@@ -250,7 +258,7 @@ const to = (path) => withBase(path)
 .hero-title .line {
   display: block;
   overflow: hidden;
-  padding-bottom: .1em;
+  padding-bottom: 0;
 }
 
 .hero-title .line span {
@@ -309,7 +317,7 @@ const to = (path) => withBase(path)
 }
 
 .hero-title .line:last-child {
-  padding-bottom: .18em;
+  padding-bottom: .08em;
 }
 
 .eyebrow,
@@ -341,6 +349,10 @@ const to = (path) => withBase(path)
   gap: .75rem;
   flex-wrap: wrap;
   margin: 2rem 0 2rem;
+  align-self: stretch;
+  justify-content: flex-end;
+  width: max-content;
+  margin-left: auto;
 }
 
 .primary-btn,
