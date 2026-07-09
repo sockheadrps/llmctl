@@ -18,6 +18,8 @@ import (
 // vertical lines appear only on the single spacer row between the top border
 // and the inner boxes; below that the inner boxes sit flush, with nav text
 // embedded in the left box's bottom border and the version in the right box's.
+// The top border ╭╮ and spacer │ align with the inner box corners (col 1 and
+// col totalW-4), matching the inner box edges rather than the terminal edges.
 func (m Model) viewOverviewPage() string {
 	totalW := m.width
 	if totalW <= 0 {
@@ -35,27 +37,42 @@ func (m Model) viewOverviewPage() string {
 		boxH = 4
 	}
 
-	innerW := totalW - 2 // content width between outer │ on the spacer row
+	// innerW is the available width for renderOverviewContent, which applies a
+	// margin=1 on each side → boxes are totalW-4 wide, spanning col 1..totalW-4.
+	innerW := totalW - 2
 
 	topBorder := m.buildOverviewTopBorder(totalW)
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 
+	// Spacer row: │ at col 1 and col totalW-4, aligned with inner box corners.
+	spacerInner := totalW - 6
+	if spacerInner < 0 {
+		spacerInner = 0
+	}
+
 	var sb strings.Builder
 	sb.WriteString(topBorder)
 	sb.WriteString("\n")
-	// One spacer row with outer vertical lines bridging top border → inner boxes.
-	sb.WriteString(borderStyle.Render("│") + strings.Repeat(" ", innerW) + borderStyle.Render("│") + "\n")
+	// One spacer row bridging top border → inner boxes; │ aligned with box corners.
+	sb.WriteString(" " + borderStyle.Render("│") + strings.Repeat(" ", spacerInner) + borderStyle.Render("│") + "   \n")
 	// Inner boxes rendered directly — no outer │ wrapping below this point.
 	sb.WriteString(m.renderOverviewContent(innerW, boxH))
 	return sb.String()
 }
 
 // buildOverviewTopBorder builds the top border line with the tab bar embedded
-// near the left edge: ╭─ <tabs> ──────╮
+// near the left edge: " ╭─ <tabs> ──────╮   "
+// The border is totalW-4 wide so that ╭ lands at col 1 and ╮ at col totalW-4,
+// aligning with the inner box corners in renderOverviewContent.
 func (m Model) buildOverviewTopBorder(totalW int) string {
 	tabs := m.renderTabBarLabels()
 	tabsW := lipgloss.Width(tabs)
-	innerW := totalW - 2
+	// Border spans col 1..totalW-4 → width = totalW-4; inner dash space = totalW-6.
+	borderW := totalW - 4
+	if borderW < 2 {
+		borderW = 2
+	}
+	innerW := borderW - 2
 	// 1 dash + space before tabs, space after, rest fills to ╮
 	rightDash := innerW - 1 - 1 - tabsW - 1
 	if rightDash < 0 {
@@ -70,11 +87,13 @@ func (m Model) buildOverviewTopBorder(totalW int) string {
 	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 
-	return borderStyle.Render("╭") +
+	border := borderStyle.Render("╭") +
 		dashStyle.Render("─") +
 		" " + tabs + " " +
 		dashStyle.Render(strings.Repeat("─", rightDash)) +
 		borderStyle.Render("╮")
+	// Pad to full terminal width: 1 space before, 3 spaces after.
+	return " " + border + "   "
 }
 
 // renderOverviewContent builds the two-column body: ACTIVE SERVICES on the
@@ -116,8 +135,33 @@ func (m Model) renderOverviewContent(innerW, boxH int) string {
 		}
 		statusStr = "  " + errorStyle.Render(msg)
 	}
-	navText := helpStyle.Render("click to copy addr  ·  ←→/ad tabs  ·  q quit") + statusStr
-	versionText := detailMutedStyle.Render("llmctl " + build.Version)
+
+	// Progressive nav text: full → medium → minimal → hidden as left box narrows.
+	leftBoxInnerW := leftBoxW - 2
+	navFull := helpStyle.Render("click to copy addr  ·  ←→/ad tabs  ·  q quit") + statusStr
+	navMid := helpStyle.Render("←→/ad tabs  ·  q quit")
+	navMin := helpStyle.Render("q quit")
+	var navText string
+	switch {
+	case leftBoxInnerW >= lipgloss.Width(navFull)+4:
+		navText = navFull
+	case leftBoxInnerW >= lipgloss.Width(navMid)+4:
+		navText = navMid
+	case leftBoxInnerW >= lipgloss.Width(navMin)+4:
+		navText = navMin
+	}
+
+	// Progressive version text: full → short → hidden as right box narrows.
+	rightBoxInnerW := rightBoxW - 2
+	verFull := detailMutedStyle.Render("llmctl " + build.Version)
+	verShort := detailMutedStyle.Render(build.Version)
+	var versionText string
+	switch {
+	case rightBoxInnerW >= lipgloss.Width(verFull)+4:
+		versionText = verFull
+	case rightBoxInnerW >= lipgloss.Width(verShort)+4:
+		versionText = verShort
+	}
 
 	leftBox := renderTitledInnerBox("ACTIVE SERVICES", leftContent, navText, false, leftBoxW, boxH)
 	rightBox := renderTitledInnerBox("SYSTEM TELEMETRY", rightContent, versionText, true, rightBoxW, boxH)
