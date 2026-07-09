@@ -1,0 +1,215 @@
+:root {
+  --vp-sidebar-width: 140px;
+}
+
+.VPNav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.VPSidebar {
+  overflow-y: hidden !important;
+}
+
+.VPSidebar .nav {
+  overflow-y: hidden !important;
+}
+
+@media (min-width: 960px) {
+  .VPSidebar {
+    min-width: 240px;
+    max-width: 240px;
+  }
+
+  .VPSidebar .nav {
+    padding-top: calc(var(--vp-nav-height) + 10px);
+  }
+}
+
+.VPNavBar {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(7, 9, 15, 0.58);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition:
+    margin-top .28s ease,
+    background-color .28s ease,
+    border-color .28s ease,
+    box-shadow .28s ease,
+    transform .28s ease,
+    border-radius .28s ease,
+    padding .28s ease;
+}
+
+.VPNavBar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(168, 85, 247, 0.16), transparent 30%),
+    radial-gradient(circle at 80% 0%, rgba(0, 229, 255, 0.12), transparent 26%);
+  opacity: 0;
+  transition: opacity .28s ease;
+}
+
+.VPNavBar .content {
+  transition: padding .28s ease;
+}
+
+.VPNavBar .content-body {
+  background-color: transparent !important;
+}
+
+.VPNavBar .divider-line {
+  background-color: transparent !important;
+}
+
+.VPNavBar .divider {
+  background-color: transparent !important;
+}
+
+html.docs-scrolled .VPNavBar {
+  margin: 0;
+  left: 0;
+  right: 0;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: linear-gradient(135deg, rgba(10, 12, 18, 0.88), rgba(18, 22, 36, 0.74));
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(168, 85, 247, 0.14) inset;
+  transform: translateY(0);
+}
+
+html.docs-scrolled .VPNavBar .content-body {
+  justify-content: flex-start !important;
+  background: transparent !important;
+  align-items: center;
+}
+
+html.docs-scrolled .VPNavBar .search,
+html.docs-scrolled .VPNavBar .menu,
+html.docs-scrolled .VPNavBar .translations,
+html.docs-scrolled .VPNavBar .extra,
+html.docs-scrolled .VPNavBar .hamburger {
+  display: none !important;
+}
+
+html.docs-scrolled .VPNavBar .menu + .translations::before,
+html.docs-scrolled .VPNavBar .menu + .appearance::before,
+html.docs-scrolled .VPNavBar .menu + .social-links::before,
+html.docs-scrolled .VPNavBar .translations + .appearance::before,
+html.docs-scrolled .VPNavBar .appearance + .social-links::before {
+  display: none !important;
+  content: none !important;
+  margin: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html.docs-scrolled .VPNavBar .content {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .content {
+  position: absolute !important;
+  left: 154px !important;
+  top: 0 !important;
+  right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  height: 100% !important;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .content-body {
+  justify-content: flex-start !important;
+  height: 100% !important;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .appearance,
+html.docs-scrolled .VPNavBar.has-sidebar .social-links {
+  align-self: center;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .appearance {
+  margin-top: 0 !important;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .social-links {
+  margin-top: 0 !important;
+}
+
+html.docs-scrolled .VPNavBar.has-sidebar .divider {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  html.docs-scrolled .VPNavBar.has-sidebar .content-body {
+    min-height: var(--vp-nav-height);
+  }
+
+  html.docs-scrolled .VPNavBar.has-sidebar .content {
+    display: flex !important;
+    align-items: center !important;
+  }
+}
+
+html.docs-scrolled .VPNavBar::before {
+  opacity: 1;
+}
+
+html.docs-scrolled .VPNavBar .content {
+  padding-top: .45rem;
+  padding-bottom: .45rem;
+}
+
+html.docs-scrolled .VPNavBarTitle,
+html.docs-scrolled .VPNavBarMenuLink {
+  transition: color .22s ease, text-shadow .22s ease, opacity .22s ease, transform .22s ease;
+}
+
+html.docs-scrolled .VPNavBarTitle {
+  color: #f2f6ff;
+  text-shadow: 0 0 18px rgba(0, 229, 255, 0.18);
+}
+
+html.docs-scrolled .VPNavBarMenuLink {
+  color: rgba(232, 232, 240, 0.88);
+}
+
+html.docs-scrolled .VPNavBarMenuLink:hover,
+html.docs-scrolled .VPNavBarMenuLink.active {
+  color: #00e5ff;
+  text-shadow: 0 0 14px rgba(0, 229, 255, 0.2);
+}
+
+html.docs-scrolled .VPNavBar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.9), rgba(168, 85, 247, 0.9), transparent);
+  opacity: 0.85;
+  max-width: 5rem;
+}
+
+html:not(.docs-scrolled) .VPNavBar .content {
+  padding-top: .6rem;
+  padding-bottom: .6rem;
+}
+
+@media (max-width: 768px) {
+  html.docs-scrolled .VPNavBar {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+  }
+}

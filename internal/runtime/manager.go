@@ -76,8 +76,8 @@ func (mgr *Manager) List() ([]models.Running, error) {
 // Start launches modelKey/profileKey from cfg, records it in the state
 // file, and returns the resulting Running entry. It refuses to start a
 // model+profile pair that is already running.
-// Start launches a model profile. rpcEndpointOverride, when non-empty, is used
-// as the --rpc endpoint instead of cfg.RPCEndpoint (e.g. an auto-discovered addr).
+// rpcEndpointOverride, when non-empty, is used as the --rpc endpoint instead
+// of cfg.RPCEndpoint (e.g. an auto-discovered addr).
 func (mgr *Manager) Start(cfg *config.Config, modelKey, profileKey string, rpcEndpointOverride string) (models.Running, error) {
 	m, p, err := cfg.FindProfile(modelKey, profileKey)
 	if err != nil {

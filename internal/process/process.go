@@ -87,6 +87,9 @@ func BuildProfileArgs(p models.Profile) []string {
 	if ngl > 0 {
 		args = append(args, flag(p, "--n-gpu-layers"), strconv.Itoa(ngl))
 	}
+	if p.TensorSplit != "" {
+		args = append(args, "--tensor-split", p.TensorSplit)
+	}
 	if p.MLock {
 		args = append(args, "--mlock")
 	}

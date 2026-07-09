@@ -92,7 +92,7 @@ func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.commitFlagInput()
 	f.flagFocus = false
 	f.flagInput.Blur()
-	total := len(f.fields) + 4 // + flash toggle + cpu only toggle + mlock toggle + save action
+	total := len(f.fields) + 5 // + flash toggle + cpu only toggle + mlock toggle + tensor split slider + save action
 	f.blurAll()
 	f.focus = ((f.focus+delta)%total + total) % total
 	f.resetDescriptionScroll()
@@ -119,6 +119,9 @@ func (f formState) dirty() bool {
 		return true
 	}
 	if f.mlock != f.initialMLock {
+		return true
+	}
+	if f.rpcClientLayers != f.initialRPCClientLayers {
 		return true
 	}
 	if len(f.initial) != len(f.fields) {
@@ -228,17 +231,19 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 
 	fi := buildFlagInput()
 	m.form = formState{
-		modelKey:             modelKey,
-		fields:               buildFormFields(defaults),
-		initial:              append([]string(nil), defaults...),
-		initialFlash:         true,
-		flash:                true,
-		initialCPUOnly:       false,
-		cpuOnly:              false,
-		initialMLock:         false,
-		mlock:                false,
-		focus:                0,
-		navigating:           true,
+		modelKey:               modelKey,
+		fields:                 buildFormFields(defaults),
+		initial:                append([]string(nil), defaults...),
+		initialFlash:           true,
+		flash:                  true,
+		initialCPUOnly:         false,
+		cpuOnly:                false,
+		initialMLock:           false,
+		mlock:                  false,
+		rpcClientLayers:        0,
+		initialRPCClientLayers: 0,
+		focus:                  0,
+		navigating:             true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
@@ -299,21 +304,31 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldNotes] = p.Notes
 	defaults[fieldRPCEnabled] = boolPtrOrEmpty(p.RPCEnabled)
 
+	initClientLayers := 0
+	if p.TensorSplit != "" {
+		parts := strings.SplitN(p.TensorSplit, ",", 2)
+		if n, err := strconv.Atoi(strings.TrimSpace(parts[0])); err == nil && n >= 0 {
+			initClientLayers = n
+		}
+	}
+
 	fi := buildFlagInput()
 	m.form = formState{
-		modelKey:             modelKey,
-		editing:              true,
-		originalKey:          profileKey,
-		fields:               buildFormFields(defaults),
-		initial:              append([]string(nil), defaults...),
-		initialFlash:         p.FlashAttn,
-		flash:                p.FlashAttn,
-		initialCPUOnly:       p.CPUOnly,
-		cpuOnly:              p.CPUOnly,
-		initialMLock:         p.MLock,
-		mlock:                p.MLock,
-		focus:                0,
-		navigating:           true,
+		modelKey:               modelKey,
+		editing:                true,
+		originalKey:            profileKey,
+		fields:                 buildFormFields(defaults),
+		initial:                append([]string(nil), defaults...),
+		initialFlash:           p.FlashAttn,
+		flash:                  p.FlashAttn,
+		initialCPUOnly:         p.CPUOnly,
+		cpuOnly:                p.CPUOnly,
+		initialMLock:           p.MLock,
+		mlock:                  p.MLock,
+		rpcClientLayers:        initClientLayers,
+		initialRPCClientLayers: initClientLayers,
+		focus:                  0,
+		navigating:             true,
 		descDir:              1,
 		descPause:            scrollPauseTicks,
 		flagInput:            fi,
@@ -436,7 +451,44 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearError()
 		return m, nil
 
+	case "left", "a":
+		if m.form.focus == len(m.form.fields)+3 {
+			if m.form.rpcClientLayers > 0 {
+				m.form.rpcClientLayers--
+			}
+			return m, nil
+		}
+		return m, nil
+
+	case "shift+left":
+		if m.form.focus == len(m.form.fields)+3 {
+			m.form.rpcClientLayers -= 5
+			if m.form.rpcClientLayers < 0 {
+				m.form.rpcClientLayers = 0
+			}
+			return m, nil
+		}
+		return m, nil
+
+	case "shift+right":
+		if m.form.focus == len(m.form.fields)+3 {
+			total := m.formSliderTotal()
+			m.form.rpcClientLayers += 5
+			if total > 0 && m.form.rpcClientLayers > total {
+				m.form.rpcClientLayers = total
+			}
+			return m, nil
+		}
+		return m, nil
+
 	case "right", "d":
+		if m.form.focus == len(m.form.fields)+3 {
+			total := m.formSliderTotal()
+			if total > 0 && m.form.rpcClientLayers < total {
+				m.form.rpcClientLayers++
+			}
+			return m, nil
+		}
 		if flag := m.form.focusedFlag(); flag != "" {
 			m.form.flagFocus = true
 			m.form.flagInput.Focus()
@@ -467,6 +519,8 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case len(m.form.fields) + 2:
 			m.form.mlock = !m.form.mlock
 		case len(m.form.fields) + 3:
+			// tensor split slider: adjusted with ← →, Enter does nothing
+		case len(m.form.fields) + 4:
 			return m.submitForm()
 		default:
 			m.form.navigating = false
@@ -628,6 +682,18 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	if renamed {
 		delete(mdl.Profiles, m.form.originalKey)
 	}
+	tensorSplit := ""
+	if !m.form.cpuOnly && gpuLayers > 0 {
+		client := m.form.rpcClientLayers
+		if client < 0 {
+			client = 0
+		}
+		if client > gpuLayers {
+			client = gpuLayers
+		}
+		tensorSplit = fmt.Sprintf("%d,%d", client, gpuLayers-client)
+	}
+
 	mdl.Profiles[key] = models.Profile{
 		Name:              key,
 		Host:              value(fieldHost),
@@ -663,6 +729,7 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		ExtraArgs:      extraArgs,
 		Notes:          value(fieldNotes),
 		RPCEnabled:     rpcEnabled,
+		TensorSplit:    tensorSplit,
 		FlagOverrides: func() map[string]string {
 			m.form.commitFlagInput()
 			if len(m.form.flagOverrides) == 0 {

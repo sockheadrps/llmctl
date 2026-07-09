@@ -95,6 +95,8 @@ type Model struct {
 	detailsScroll        int
 	detailsDir           int
 	detailsPause         int
+	detailsHovered       bool // mouse is over the details pane; suppresses auto-scroll
+	detailsManualScroll  bool // user scrolled with wheel; stays suppressed until row changes
 
 	picker               pickerState
 	form                 formState
@@ -114,6 +116,9 @@ type Model struct {
 	leftWidthOverride    int // 0 = auto (avail*2/5); positive = user-dragged override
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
+
+	overviewSepDragging bool
+	overviewSepX        int // 0 = auto; positive = user-dragged overview column separator X
 
 	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
 
@@ -298,7 +303,7 @@ func (m *Model) applyTokSamples(msg slotsMsg) {
 
 	for key, decoded := range msg {
 		if prev, ok := m.tokSamples[key]; ok && decoded >= prev.decoded {
-			if dt := now.Sub(prev.at).Seconds(); dt > 0 {
+			if dt := now.Sub(prev.at).Seconds(); dt >= 0.25 {
 				rate := float64(decoded-prev.decoded) / dt
 				m.tokRates[key] = rate
 				if rate > m.tokPeak[key] {

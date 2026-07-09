@@ -14,8 +14,10 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
-// viewOverviewPage renders the complete Overview screen with the tab bar
-// embedded in the top border and help+version in the bottom border.
+// viewOverviewPage renders the complete Overview screen as a single outer box
+// (╭ at col 0, ╮ at col totalW-1) with a vertical │ separator between two
+// columns: ACTIVE SERVICES on the left, SYSTEM TELEMETRY on the right.
+// Using one box eliminates the "disconnected inner boxes" problem entirely.
 func (m Model) viewOverviewPage() string {
 	totalW := m.width
 	if totalW <= 0 {
@@ -26,78 +28,100 @@ func (m Model) viewOverviewPage() string {
 		totalH = fallbackHeight
 	}
 
-	innerW := totalW - 2 // minus left/right outer border │
-	innerH := totalH - 2 // minus top/bottom outer border lines
-	if innerH < 4 {
-		innerH = 4
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+
+	// top(1) + blank(1) + content(contentH) + bottom(1) = totalH
+	contentH := totalH - 3
+	if contentH < 2 {
+		contentH = 2
 	}
 
-	content := m.renderOverviewContent(innerW, innerH)
+	// Row format: │ leftContent │ rightContent │
+	// 1 + 1 + leftCW + 1 + 1 + rightCW + 1 + 1 = totalW → leftCW+rightCW = totalW-6
+	leftCW, rightCW := m.overviewColumnWidths(totalW)
 
-	topBorder := m.buildOverviewTopBorder(totalW)
-	bottomBorder := m.buildOverviewBottomBorder(totalW)
+	// sepCol is the visual column of the │ separator.
+	// Row: │(0) space(1) leftContent(leftCW, cols 2..leftCW+1) space(leftCW+2) │(leftCW+3) …
+	sepCol := leftCW + 3
 
-	// Split content into lines and pad each to innerW, wrapping in side borders.
-	rawLines := strings.Split(content, "\n")
-	// Trim trailing empty lines from the content split.
-	for len(rawLines) > 0 && rawLines[len(rawLines)-1] == "" {
-		rawLines = rawLines[:len(rawLines)-1]
-	}
+	leftLines := strings.Split(strings.TrimRight(m.renderActiveServices(leftCW, contentH), "\n"), "\n")
+	rightLines := strings.Split(strings.TrimRight(m.renderSystemTelemetry(rightCW, contentH), "\n"), "\n")
 
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
+	navText, versionText := m.overviewNavVersion(leftCW, rightCW)
 
 	var sb strings.Builder
-	sb.WriteString(topBorder)
+	sb.WriteString(m.buildOverviewTopBorder(totalW, sepCol))
 	sb.WriteString("\n")
-	for i := 0; i < innerH; i++ {
-		var line string
-		if i < len(rawLines) {
-			line = rawLines[i]
+	// Blank row between tab bar and content — │ at separator column.
+	sb.WriteString(bs.Render("│") + strings.Repeat(" ", sepCol-1) + bs.Render("│") + strings.Repeat(" ", totalW-2-sepCol) + bs.Render("│") + "\n")
+
+	sep := bs.Render("│")
+	for i := 0; i < contentH; i++ {
+		l := ""
+		if i < len(leftLines) {
+			l = leftLines[i]
 		}
-		lineW := lipgloss.Width(line)
-		pad := innerW - lineW
-		if pad < 0 {
-			pad = 0
+		r := ""
+		if i < len(rightLines) {
+			r = rightLines[i]
 		}
-		sb.WriteString(borderStyle.Render("│") + line + strings.Repeat(" ", pad) + borderStyle.Render("│") + "\n")
+		lpad := leftCW - lipgloss.Width(l)
+		if lpad < 0 {
+			lpad = 0
+		}
+		rpad := rightCW - lipgloss.Width(r)
+		if rpad < 0 {
+			rpad = 0
+		}
+		sb.WriteString(bs.Render("│") + " " + l + strings.Repeat(" ", lpad) + " " + sep + r + strings.Repeat(" ", rpad) + " " + bs.Render("│") + "\n")
 	}
-	sb.WriteString(bottomBorder)
+	sb.WriteString(m.buildOverviewBottomBorder(totalW, navText, versionText, sepCol))
 	return sb.String()
 }
 
-// buildOverviewTopBorder builds the top border line with the tab bar embedded
-// near the left edge: ╭─ <tabs> ──────╮
-func (m Model) buildOverviewTopBorder(totalW int) string {
-	tabs := m.renderTabBarLabels()
-	tabsW := lipgloss.Width(tabs)
-	innerW := totalW - 2
-	// 1 dash + space before tabs, space after, rest fills to ╮
-	rightDash := innerW - 1 - 1 - tabsW - 1
-	if rightDash < 0 {
-		rightDash = 0
+// buildOverviewBottomBorder builds ╰─ navText ─┴─ versionText ─╯ with a ┴ at
+// sepCol where the column separator │ meets the bottom border.
+// Left zone (cols 0..sepCol-1): ╰─ nav ─×n
+// Right zone (cols sepCol+1..totalW-1): ─×m version ─╯
+func (m Model) buildOverviewBottomBorder(totalW int, navText, versionText string, sepCol int) string {
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+	navW := lipgloss.Width(navText)
+	verW := lipgloss.Width(versionText)
+
+	// Left zone: ╰─ nav ─×leftDashes  (visual width = sepCol)
+	// ╰(1) ─(1) sp(1) nav(navW) sp(1) ─×n = navW+4+n = sepCol → n = sepCol-navW-4
+	var leftPart string
+	if navText != "" {
+		leftDashes := sepCol - navW - 4
+		if leftDashes < 0 {
+			leftDashes = 0
+		}
+		leftPart = bs.Render("╰") + bs.Render("─") + " " + navText + " " + bs.Render(strings.Repeat("─", leftDashes))
+	} else {
+		leftPart = bs.Render("╰") + bs.Render(strings.Repeat("─", sepCol-1))
 	}
 
-	focused := m.focus == focusTabs
-	dashColor := lipgloss.Color("30")
-	if focused {
-		dashColor = lipgloss.Color("240")
+	// Right zone: ─×rightDashes version ─╯  (visual width = totalW-1-sepCol)
+	// rightLen = totalW-1-sepCol chars for cols sepCol+1..totalW-1
+	rightLen := totalW - 1 - sepCol
+	var rightPart string
+	if versionText != "" {
+		// ─×r sp ver sp ─ ╯ → r + verW + 4 = rightLen → r = rightLen-verW-4
+		rightDashes := rightLen - verW - 4
+		if rightDashes < 0 {
+			rightDashes = 0
+		}
+		rightPart = bs.Render(strings.Repeat("─", rightDashes)) + " " + versionText + " " + bs.Render("─") + bs.Render("╯")
+	} else {
+		rightPart = bs.Render(strings.Repeat("─", rightLen-1)) + bs.Render("╯")
 	}
-	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 
-	return borderStyle.Render("╭") +
-		dashStyle.Render("─") +
-		" " + tabs + " " +
-		dashStyle.Render(strings.Repeat("─", rightDash)) +
-		borderStyle.Render("╮")
+	return leftPart + bs.Render("┴") + rightPart
 }
 
-// buildOverviewBottomBorder builds the bottom border with help, any status
-// message, and the version string.
-func (m Model) buildOverviewBottomBorder(totalW int) string {
-	helpText := helpStyle.Render("click model to copy addr  ·  ← (a) / → (d)  ·  q quit")
-	versionText := detailMutedStyle.Render("llmctl " + build.Version)
-
+// overviewNavVersion returns the nav and version strings for the bottom border,
+// sized to fit the column widths.
+func (m Model) overviewNavVersion(leftCW, rightCW int) (navText, versionText string) {
 	var statusStr string
 	switch {
 	case m.starting:
@@ -114,112 +138,84 @@ func (m Model) buildOverviewBottomBorder(totalW int) string {
 		statusStr = "  " + errorStyle.Render(msg)
 	}
 
-	leftPart := " " + helpText + statusStr + " "
-	rightPart := " " + versionText + " "
-	leftW := lipgloss.Width(leftPart)
-	rightW := lipgloss.Width(rightPart)
-	dashW := totalW - 2 - leftW - rightW
-	if dashW < 0 {
-		dashW = 0
+	navFull := helpStyle.Render("click to copy addr  ·  ←→/ad tabs  ·  q quit") + statusStr
+	navMid := helpStyle.Render("←→/ad tabs  ·  q quit")
+	navMin := helpStyle.Render("q quit")
+	switch {
+	case leftCW >= lipgloss.Width(navFull)+2:
+		navText = navFull
+	case leftCW >= lipgloss.Width(navMid)+2:
+		navText = navMid
+	case leftCW >= lipgloss.Width(navMin)+2:
+		navText = navMin
 	}
 
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
-	dashStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
-	return borderStyle.Render("╰") +
-		leftPart +
-		dashStyle.Render(strings.Repeat("─", dashW)) +
-		rightPart +
-		borderStyle.Render("╯")
+	verFull := detailMutedStyle.Render("llmctl " + build.Version)
+	verShort := detailMutedStyle.Render(build.Version)
+	switch {
+	case rightCW >= lipgloss.Width(verFull)+2:
+		versionText = verFull
+	case rightCW >= lipgloss.Width(verShort)+2:
+		versionText = verShort
+	}
+	return
 }
 
-// renderOverviewContent builds the two-column body: ACTIVE SERVICES on the
-// left, SYSTEM TELEMETRY on the right.
-func (m Model) renderOverviewContent(innerW, innerH int) string {
-	margin := 1
-	// Subtract both sides so the outer padding loop fills a matching gap on
-	// the right, giving equal margins on both sides of the inner boxes.
-	available := innerW - margin*2
+// buildOverviewTopBorder builds ╭─ tabs ─┬─╮ with a ┬ at sepCol where the
+// column separator │ meets the top border.
+func (m Model) buildOverviewTopBorder(totalW, sepCol int) string {
+	tabs := m.renderTabBarLabels()
+	tabsW := lipgloss.Width(tabs)
 
-	// ~60/40 split; minimum widths so the layout stays usable on narrow terminals.
-	leftBoxW := available * 3 / 5
-	if leftBoxW < 34 {
-		leftBoxW = 34
+	focused := m.focus == focusTabs
+	dashColor := lipgloss.Color("38")
+	if focused {
+		dashColor = lipgloss.Color("39")
 	}
-	rightBoxW := available - leftBoxW
-	if rightBoxW < 26 {
-		rightBoxW = 26
-		leftBoxW = available - rightBoxW
+	dashStyle := lipgloss.NewStyle().Foreground(dashColor)
+	bs := lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+
+	// Fixed prefix: ╭─ tabs  (visual width = tabsW+4: ╭─ space tabs space)
+	preW := tabsW + 4
+	// Dashes between prefix and ┬, then dashes from ┬ to ╮.
+	leftDashes := sepCol - preW
+	if leftDashes < 0 {
+		leftDashes = 0
 	}
-
-	// Inner box content widths (rendered box = contentW + 2 for border).
-	leftContentW := leftBoxW - 2
-	rightContentW := rightBoxW - 2
-
-	// 1 blank line at top + box (top border + content rows + bottom border).
-	boxH := innerH - 3
-	if boxH < 4 {
-		boxH = 4
+	rightDashes := totalW - 1 - sepCol - 1 // cols sepCol+1..totalW-2
+	if rightDashes < 0 {
+		rightDashes = 0
 	}
 
-	leftContent := m.renderActiveServices(leftContentW, boxH)
-	rightContent := m.renderSystemTelemetry(rightContentW, boxH)
-
-	leftBox := renderTitledInnerBox("ACTIVE SERVICES", leftContent, leftBoxW, boxH)
-	rightBox := renderTitledInnerBox("SYSTEM TELEMETRY", rightContent, rightBoxW, boxH)
-
-	// JoinHorizontal produces a multi-line string; prepend the margin to every
-	// line so all rows are the same visual width as the outer box expects.
-	joined := lipgloss.JoinHorizontal(lipgloss.Top, leftBox, rightBox)
-	joinedLines := strings.Split(joined, "\n")
-	pad := strings.Repeat(" ", margin)
-	for i, l := range joinedLines {
-		joinedLines[i] = pad + l
-	}
-	boxRow := strings.Join(joinedLines, "\n")
-
-	return "\n" + boxRow
-}
-
-// renderTitledInnerBox builds a rounded box with the title centered in the top
-// border: ╭──── TITLE ────╮  content rows  ╰───────────────╯
-func renderTitledInnerBox(title, content string, boxW, boxH int) string {
-	borderColor := lipgloss.Color("240")
-	bs := lipgloss.NewStyle().Foreground(borderColor)
-	innerW := boxW - 2
-
-	styledTitle := detailMutedStyle.Render(title)
-	titleW := lipgloss.Width(styledTitle)
-	remaining := innerW - titleW
-	if remaining < 0 {
-		remaining = 0
-	}
-	leftDash := remaining / 2
-	rightDash := remaining - leftDash
-
-	topBorder := bs.Render("╭") +
-		bs.Render(strings.Repeat("─", leftDash)) +
-		styledTitle +
-		bs.Render(strings.Repeat("─", rightDash)) +
+	return bs.Render("╭") +
+		dashStyle.Render("─") + " " + tabs + " " +
+		dashStyle.Render(strings.Repeat("─", leftDashes)) +
+		bs.Render("┬") +
+		dashStyle.Render(strings.Repeat("─", rightDashes)) +
 		bs.Render("╮")
+}
 
-	rawLines := strings.Split(strings.TrimRight(content, "\n"), "\n")
-
-	var sb strings.Builder
-	sb.WriteString(topBorder)
-	sb.WriteString("\n")
-	for i := 0; i < boxH; i++ {
-		var line string
-		if i < len(rawLines) {
-			line = rawLines[i]
-		}
-		pad := innerW - lipgloss.Width(line)
-		if pad < 0 {
-			pad = 0
-		}
-		sb.WriteString(bs.Render("│") + line + strings.Repeat(" ", pad) + bs.Render("│") + "\n")
+// overviewColumnWidths returns (leftCW, rightCW) respecting the user-dragged
+// separator position stored in overviewSepX.
+func (m Model) overviewColumnWidths(totalW int) (leftCW, rightCW int) {
+	const minLeft, minRight = 18, 14
+	avail := totalW - 6
+	if avail < minLeft+minRight {
+		avail = minLeft + minRight
 	}
-	sb.WriteString(bs.Render("╰") + bs.Render(strings.Repeat("─", innerW)) + bs.Render("╯"))
-	return sb.String()
+	if m.overviewSepX > 0 {
+		leftCW = m.overviewSepX - 3
+	} else {
+		leftCW = avail * 3 / 5
+	}
+	if leftCW < minLeft {
+		leftCW = minLeft
+	}
+	if leftCW > avail-minRight {
+		leftCW = avail - minRight
+	}
+	rightCW = avail - leftCW
+	return
 }
 
 // ─── ACTIVE SERVICES ─────────────────────────────────────────────────────────
@@ -227,6 +223,8 @@ func renderTitledInnerBox(title, content string, boxW, boxH int) string {
 func (m Model) renderActiveServices(contentW, contentH int) string {
 	var b strings.Builder
 
+	b.WriteString(detailMutedStyle.Render("ACTIVE SERVICES"))
+	b.WriteString("\n")
 	// Header — just the ALIAS label, no port/spd columns.
 	b.WriteString(detailMutedStyle.Render("  ALIAS"))
 	b.WriteString("\n")
@@ -331,6 +329,9 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
 	}
+	if spark := tokSparkline(ri.TokHistory); spark != "" {
+		b.WriteString("   " + spark + "\n")
+	}
 	return b.String()
 }
 
@@ -360,6 +361,7 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	narrow := contentW < 50
 
 	// Brief "✓ copied" flash — pad to the same height as a normal entry.
+	hasSpark := len(m.tokHistory[hkey]) >= 2
 	if m.overviewCopied == hkey {
 		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
 		b.WriteString(runningStyle.Render("  └─ ✓ copied to clipboard") + "\n")
@@ -367,6 +369,9 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		if narrow {
 			b.WriteString("\n") // narrow has 5 lines total
 			b.WriteString("\n")
+		}
+		if hasSpark {
+			b.WriteString("\n") // match sparkline row
 		}
 		return b.String()
 	}
@@ -399,6 +404,8 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		cur = ""
 	}
 
+	spark := m.renderTokSparkline(hkey)
+
 	if narrow {
 		// Narrow: each stat on its own line.
 		b.WriteString(detailMutedStyle.Render("     Current: "+cur) + "\n")
@@ -407,6 +414,9 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	} else {
 		spd := "Current: " + cur + " | Avg: " + avg + " | Peak " + peak + " T/S"
 		b.WriteString(detailMutedStyle.Render("     "+spd) + "\n")
+	}
+	if spark != "" {
+		b.WriteString("   " + spark + "\n")
 	}
 	return b.String()
 }
@@ -473,6 +483,9 @@ func (m Model) overviewModelSize(modelKey string) string {
 
 func (m Model) renderSystemTelemetry(contentW, contentH int) string {
 	var b strings.Builder
+
+	b.WriteString(detailMutedStyle.Render("SYSTEM TELEMETRY"))
+	b.WriteString("\n")
 
 	// GPU 0: local GPU.
 	// -1 for the margin space prepended to every line at the end of this function.

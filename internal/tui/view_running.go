@@ -233,11 +233,15 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 
 	key := run.ModelKey + "/" + run.ProfileKey
 	hasMeter := m.tokPeak[key] > 0
+	hasSpark := hasMeter && len(m.tokHistory[key]) >= 2
 
-	// header + (meter) + blank + tail + blank + help
+	// header + (meter) + (sparkline) + blank + tail + blank + help
 	overhead := 4
 	if hasMeter {
-		overhead = 5
+		overhead++
+	}
+	if hasSpark {
+		overhead++
 	}
 	budget := innerH - overhead
 	if budget < 1 {
@@ -250,6 +254,10 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 		b.WriteString(m.renderRateMeter(key, rate))
 		b.WriteString("\n")
 	}
+	if hasSpark {
+		b.WriteString(m.renderTokSparkline(key))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 	if tail := tailFittingHeight(run.LogFile, rightW, budget); tail != "" {
 		b.WriteString(profileStyle.Render(tail))
@@ -259,6 +267,48 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 	b.WriteString("\n\n")
 	b.WriteString(help)
 	return b.String()
+}
+
+// renderTokSparkline renders a compact Unicode bar chart of recent tok/s samples.
+func (m Model) renderTokSparkline(key string) string {
+	return tokSparkline(m.tokHistory[key])
+}
+
+// tokSparkline builds the sparkline string from a raw sample slice so it can
+// be called with history received over the status protocol (remote entries).
+func tokSparkline(hist []float64) string {
+	if len(hist) < 2 {
+		return ""
+	}
+	const maxWidth = 20
+	const sparks = "▁▂▃▄▅▆▇█"
+	n := len(hist)
+	if n > maxWidth {
+		n = maxWidth
+	}
+	samples := hist[len(hist)-n:]
+	var peak float64
+	for _, v := range samples {
+		if v > peak {
+			peak = v
+		}
+	}
+	if peak <= 0 {
+		return ""
+	}
+	runes := []rune(sparks)
+	var sb strings.Builder
+	for _, v := range samples {
+		idx := int(v/peak*float64(len(runes)-1) + 0.5)
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(runes) {
+			idx = len(runes) - 1
+		}
+		sb.WriteRune(runes[idx])
+	}
+	return infoStyle.Render(sb.String())
 }
 
 // renderRateMeter renders a horizontal bar showing current tok/s relative to
