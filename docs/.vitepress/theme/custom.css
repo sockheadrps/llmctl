@@ -1,5 +1,5 @@
 :root {
-  --vp-sidebar-width: 140px;
+  --vp-sidebar-width: 176px;
 }
 
 .VPNav {
@@ -9,7 +9,16 @@
 }
 
 .VPSidebar {
-  overflow-y: hidden !important;
+  background: rgba(5, 5, 10, 0.72) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  /* cap width and fix VitePress 1440px+ padding-left calc that clips text */
+  width: 176px !important;
+  max-width: 176px !important;
+  min-width: 0 !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
 }
 
 .VPSidebar .nav {
@@ -17,14 +26,52 @@
 }
 
 @media (min-width: 960px) {
-  .VPSidebar {
-    min-width: 240px;
-    max-width: 240px;
-  }
-
   .VPSidebar .nav {
     padding-top: calc(var(--vp-nav-height) + 10px);
   }
+}
+
+/* Section titles */
+.VPSidebarItem.level-0 > .item > .text {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(168, 85, 247, 0.8) !important;
+}
+
+/* Links */
+.VPSidebarItem .link {
+  border-radius: 6px;
+  transition: background .18s ease, color .18s ease;
+}
+
+.VPSidebarItem .link .text {
+  font-size: .95rem;
+  color: rgba(232, 232, 240, 0.6) !important;
+  font-weight: 500;
+}
+
+.VPSidebarItem .link:hover .text {
+  color: rgba(232, 232, 240, 0.95) !important;
+}
+
+.VPSidebarItem .link:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Active */
+.VPSidebarItem.is-active > .item > .link {
+  background: transparent !important;
+}
+
+.VPSidebarItem.is-active > .item > .link .text {
+  color: #00e5ff !important;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 229, 255, 0.5);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 .VPNavBar {
@@ -120,7 +167,7 @@ html.docs-scrolled .VPNavBar .content {
 
 html.docs-scrolled .VPNavBar.has-sidebar .content {
   position: absolute !important;
-  left: 154px !important;
+  left: 176px !important;
   top: 0 !important;
   right: 0 !important;
   padding-left: 0 !important;
@@ -203,8 +250,8 @@ html.docs-scrolled .VPNavBar::after {
 }
 
 html:not(.docs-scrolled) .VPNavBar .content {
-  padding-top: .6rem;
-  padding-bottom: .6rem;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 @media (max-width: 768px) {
@@ -212,4 +259,9 @@ html:not(.docs-scrolled) .VPNavBar .content {
     width: 100vw;
     margin-left: calc(50% - 50vw);
   }
+}
+
+.VPNavBar .appearance,
+.VPNavBarAppearance {
+  display: none !important;
 }

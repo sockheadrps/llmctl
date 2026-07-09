@@ -1,7 +1,21 @@
 <script setup>
 import { withBase } from 'vitepress'
+import { onMounted } from 'vue'
 
 const to = (path) => withBase(path)
+
+onMounted(() => {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible')
+        observer.unobserve(e.target)
+      }
+    })
+  }, { threshold: .15, rootMargin: '0px 0px -40px 0px' })
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
+})
 </script>
 
 <template>
@@ -13,19 +27,22 @@ const to = (path) => withBase(path)
     <div class="noise"></div>
     <section class="hero">
       <div class="hero-copy">
-
+        <div class="hero-badge">
+          <span class="dot"></span>
+          Go · Single Binary · Apache 2.0
+        </div>
         <h1 class="hero-title">
           <span class="line"><span>Local</span></span>
           <span class="line"><span class="gradient">LLMs.</span></span>
           <span class="line"><span class="glitch" data-text="Managed.">Managed.</span></span>
         </h1>
         <p class="lede">
-          llmctl wraps llama.cpp's <code>llama-server</code> workflow in a terminal UI and a small CLI, so you can
-          import models, save reusable profiles, run detached servers, watch health, and get back to work.
+          Import models, save profiles, run detached servers — all from one terminal UI or a single CLI command.
         </p>
-        <div class="hero-badge">
-          <span class="dot"></span>
-          Built with Go - Single Binary - Apache 2.0
+        <div class="hero-actions">
+          <a class="primary-btn" :href="to('/installation')">Installation</a>
+          <a class="secondary-btn" :href="to('/quickstart')">Quickstart</a>
+          <a class="secondary-btn" href="https://github.com/sockheadrps/llmctl" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
 
@@ -35,81 +52,102 @@ const to = (path) => withBase(path)
           alt="llmctl TUI showing models, profiles, running services, and status panes"
           loading="eager"
         />
-        <div class="hero-actions">
-          <a class="primary-btn" :href="to('/installation')">Installation</a>
-          <a class="secondary-btn" :href="to('/quickstart')">Quickstart</a>
-          <a class="secondary-btn" href="https://github.com/sockheadrps/llmctl" target="_blank" rel="noopener">GitHub</a>
+      </div>
+
+      <div class="marquee-wrap" aria-label="Highlights">
+        <div class="marquee">
+          <span>Terminal UI</span><span class="sep">◆</span>
+          <span>Profile Management</span><span class="sep">◆</span>
+          <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
+          <span>Detached Processes</span><span class="sep">◆</span>
+          <span>Live Health Monitoring</span><span class="sep">◆</span>
+          <span>Token Rate Polling</span><span class="sep">◆</span>
+          <span>RPC Offload</span><span class="sep">◆</span>
+          <span>Single Binary</span><span class="sep">◆</span>
+          <span>Terminal UI</span><span class="sep">◆</span>
+          <span>Profile Management</span><span class="sep">◆</span>
+          <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
+          <span>Detached Processes</span><span class="sep">◆</span>
+          <span>Live Health Monitoring</span><span class="sep">◆</span>
+          <span>Token Rate Polling</span><span class="sep">◆</span>
+          <span>RPC Offload</span><span class="sep">◆</span>
+          <span>Single Binary</span><span class="sep">◆</span>
         </div>
       </div>
-    </section>
 
-    <section class="marquee-wrap" aria-label="Highlights">
-      <div class="marquee">
-        <span>Terminal UI</span><span class="sep">◆</span>
-        <span>Profile Management</span><span class="sep">◆</span>
-        <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
-        <span>Detached Processes</span><span class="sep">◆</span>
-        <span>Live Health Monitoring</span><span class="sep">◆</span>
-        <span>Token Rate Polling</span><span class="sep">◆</span>
-        <span>RPC Offload</span><span class="sep">◆</span>
-        <span>Single Binary</span><span class="sep">◆</span>
+      <div class="hero-scroll">
+        <span>Scroll</span>
+        <div class="scroll-line"></div>
       </div>
     </section>
 
-    <section class="feature-band">
-      <a class="feature-card" :href="to('/quickstart')">
-        <span class="feature-kicker">Start here</span>
-        <strong>Get a model running fast</strong>
-        <span>Follow the shortest path from install to a live local server.</span>
-      </a>
-      <a class="feature-card" :href="to('/guides/profiles')">
-        <span class="feature-kicker">Profiles</span>
-        <strong>Save and reuse launch flags</strong>
-        <span>Keep fast-draft, high-quality, and custom profiles side by side.</span>
-      </a>
-      <a class="feature-card" :href="to('/guides/rpc')">
-        <span class="feature-kicker">RPC</span>
-        <strong>Distribute layers across machines</strong>
-        <span>Use the RPC workflow for Linux to Windows GPU offload.</span>
-      </a>
-      <a class="feature-card" :href="to('/reference/tui')">
-        <span class="feature-kicker">Reference</span>
-        <strong>Learn the full TUI surface</strong>
-        <span>See the tabs, keys, and supported actions in one place.</span>
-      </a>
-    </section>
+    <section class="cards-section">
+      <div class="section-label reveal">Get Around</div>
+      <h2 class="section-title reveal reveal-delay-1">
+        Start anywhere.<br>
+        <span style="color:var(--text2)">Everything is one click away.</span>
+      </h2>
+      <p class="section-subtitle reveal reveal-delay-2">
+        Jump to the workflow you need — first run, profile setup, RPC offload, or the full TUI reference.
+      </p>
 
-    <section class="docs-grid">
-      <a class="docs-card" :href="to('/installation')">
-        <span>01</span>
-        <strong>Install</strong>
-        <p>Grab the release artifact, put it on PATH, and launch the TUI.</p>
-      </a>
-      <a class="docs-card" :href="to('/quickstart')">
-        <span>02</span>
-        <strong>Quickstart</strong>
-        <p>Walk through your first import, profile, and running server.</p>
-      </a>
-      <a class="docs-card" :href="to('/guides/local-models')">
-        <span>03</span>
-        <strong>Local models</strong>
-        <p>Configure directories and import GGUF files into llmctl.</p>
-      </a>
-      <a class="docs-card" :href="to('/guides/status-server')">
-        <span>04</span>
-        <strong>Status server</strong>
-        <p>Expose runtime state so other tools can see what is live.</p>
-      </a>
-      <a class="docs-card" :href="to('/guides/troubleshooting')">
-        <span>05</span>
-        <strong>Troubleshooting</strong>
-        <p>Handle missing binaries, empty model directories, and port issues.</p>
-      </a>
-      <a class="docs-card" :href="to('/reference/cli')">
-        <span>06</span>
-        <strong>CLI reference</strong>
-        <p>Check the commands and flags without digging through the source.</p>
-      </a>
+      <div class="cards-shell">
+        <div class="cards-grid cards-grid-features">
+          <a class="feature-card reveal" :href="to('/quickstart')">
+            <span class="feature-kicker">Start here</span>
+            <strong>Get a model running fast</strong>
+            <span>Follow the shortest path from install to a live local server.</span>
+          </a>
+          <a class="feature-card reveal reveal-delay-1" :href="to('/guides/profiles')">
+            <span class="feature-kicker">Profiles</span>
+            <strong>Save and reuse launch flags</strong>
+            <span>Keep fast-draft, high-quality, and custom profiles side by side.</span>
+          </a>
+          <a class="feature-card reveal reveal-delay-2" :href="to('/guides/rpc')">
+            <span class="feature-kicker">RPC</span>
+            <strong>Distribute layers across machines</strong>
+            <span>Use the RPC workflow for Linux to Windows GPU offload.</span>
+          </a>
+          <a class="feature-card reveal reveal-delay-3" :href="to('/reference/tui')">
+            <span class="feature-kicker">Reference</span>
+            <strong>Learn the full TUI surface</strong>
+            <span>See the tabs, keys, and supported actions in one place.</span>
+          </a>
+        </div>
+
+        <div class="cards-grid cards-grid-docs">
+          <a class="docs-card reveal" :href="to('/installation')">
+            <span>01</span>
+            <strong>Install</strong>
+            <p>Grab the release artifact, put it on PATH, and launch the TUI.</p>
+          </a>
+          <a class="docs-card reveal reveal-delay-1" :href="to('/quickstart')">
+            <span>02</span>
+            <strong>Quickstart</strong>
+            <p>Walk through your first import, profile, and running server.</p>
+          </a>
+          <a class="docs-card reveal reveal-delay-2" :href="to('/guides/local-models')">
+            <span>03</span>
+            <strong>Local models</strong>
+            <p>Configure directories and import GGUF files into llmctl.</p>
+          </a>
+          <a class="docs-card reveal reveal-delay-3" :href="to('/guides/status-server')">
+            <span>04</span>
+            <strong>Status server</strong>
+            <p>Expose runtime state so other tools can see what is live.</p>
+          </a>
+          <a class="docs-card reveal reveal-delay-4" :href="to('/guides/troubleshooting')">
+            <span>05</span>
+            <strong>Troubleshooting</strong>
+            <p>Handle missing binaries, empty model directories, and port issues.</p>
+          </a>
+          <a class="docs-card reveal reveal-delay-4" :href="to('/reference/cli')">
+            <span>06</span>
+            <strong>CLI reference</strong>
+            <p>Check the commands and flags without digging through the source.</p>
+          </a>
+        </div>
+      </div>
     </section>
 
     <section class="quote-panel">
@@ -204,9 +242,55 @@ const to = (path) => withBase(path)
 
 .hero {
   display: grid;
-  grid-template-columns: .82fr 1.68fr;
+  grid-template-columns: 1fr 1.4fr;
+  grid-template-rows: 1fr auto;
   align-items: center;
-  padding: 0 0 2rem;
+  gap: 3rem 3rem;
+  min-height: calc(100vh - var(--vp-nav-height));
+  position: relative;
+  width: 120%;
+  right: 120px;
+}
+
+
+.hero-copy  { grid-column: 1; grid-row: 1; }
+.hero-media { grid-column: 2; grid-row: 1; }
+.marquee-wrap { grid-column: 1 / -1; grid-row: 2; align-self: end; }
+
+.hero-scroll {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  color: rgba(232, 232, 240, 0.4);
+  font-size: .68rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  animation: scrollBounce 2s ease-in-out infinite;
+  pointer-events: none;
+  bottom: 10rem;
+}
+
+.scroll-line {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--accent-3), transparent);
+  animation: scrollLine 2s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(8px); }
+}
+
+@keyframes scrollLine {
+  0%   { opacity: 0; transform: scaleY(0); transform-origin: top; }
+  50%  { opacity: 1; transform: scaleY(1); }
+  100% { opacity: 0; transform: scaleY(0); transform-origin: bottom; }
 }
 
 .hero-copy {
@@ -214,7 +298,6 @@ const to = (path) => withBase(path)
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
-  max-width: none;
 }
 
 
@@ -223,7 +306,6 @@ const to = (path) => withBase(path)
   display: inline-flex;
   align-items: center;
   gap: .5rem;
-  margin-top: 1rem;
   padding: .4rem 1rem;
   border-radius: 100px;
   border: 1px solid rgba(168, 85, 247, .3);
@@ -232,8 +314,7 @@ const to = (path) => withBase(path)
   font-weight: 600;
   color: var(--accent);
   animation: badgePulse 3s ease-in-out infinite;
-  margin-top: 25px;
-
+  margin-bottom: 1.25rem;
 }
 
 .hero-badge .dot {
@@ -248,7 +329,7 @@ const to = (path) => withBase(path)
   margin: 0;
   font-size: clamp(2.8rem, 7.2vw, 5.7rem);
   font-weight: 900;
-  line-height: .84;
+  line-height: .94;
   letter-spacing: -.04em;
   margin-bottom: .9rem;
   position: relative;
@@ -317,7 +398,8 @@ const to = (path) => withBase(path)
 }
 
 .hero-title .line:last-child {
-  padding-bottom: .08em;
+  overflow: visible;
+  padding-bottom: .24em;
 }
 
 .eyebrow,
@@ -336,23 +418,57 @@ const to = (path) => withBase(path)
   margin: 0 0 .85rem;
 }
 
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.section-label::before {
+  content: '';
+  width: 30px;
+  height: 1px;
+  background: var(--accent);
+}
+
+.section-title {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin: 0 0 1.5rem;
+  letter-spacing: -.03em;
+}
+
+.section-subtitle {
+  font-size: 1.15rem;
+  color: rgba(232, 232, 240, 0.72);
+  max-width: 600px;
+  line-height: 1.7;
+  margin: 0;
+}
+
 .lede {
-  margin: 1.25rem 0 0;
   max-width: 500px;
   font-size: 1rem;
   line-height: 1.75;
   color: rgba(232, 232, 240, 0.78);
+  opacity: 0;
+  transform: translateY(16px);
+  animation: ledeReveal 1.1s cubic-bezier(.4, 0, .2, 1) .9s forwards;
+}
+
+@keyframes ledeReveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hero-actions {
   display: flex;
   gap: .75rem;
   flex-wrap: wrap;
-  margin: 2rem 0 2rem;
-  align-self: stretch;
-  justify-content: flex-end;
-  width: max-content;
-  margin-left: auto;
+  margin-top: 2rem;
 }
 
 .primary-btn,
@@ -382,9 +498,7 @@ const to = (path) => withBase(path)
 }
 
 .primary-btn:hover,
-.secondary-btn:hover,
-.feature-card:hover,
-.docs-card:hover {
+.secondary-btn:hover {
   transform: translateY(-2px);
 }
 
@@ -408,7 +522,6 @@ const to = (path) => withBase(path)
   padding: 1rem;
   border-radius: 24px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, .05);
-  transform: translateX(.75rem);
 }
 
 .hero-media img {
@@ -418,95 +531,21 @@ const to = (path) => withBase(path)
   border-radius: 16px;
 }
 
-.feature-band {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.feature-card,
-.docs-card,
-.panel,
 .quote-panel {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(12px);
-}
-
-.feature-card {
-  display: flex;
-  flex-direction: column;
-  gap: .45rem;
-  padding: 1rem;
-  border-radius: 18px;
-  color: inherit;
-  text-decoration: none;
-  transition: transform .2s ease, border-color .2s ease, background .2s ease;
-}
-
-.feature-card:hover {
-  border-color: rgba(0, 229, 255, 0.32);
-  background: rgba(19, 25, 40, 0.95);
-}
-
-.feature-kicker {
-  color: var(--accent-2);
-}
-
-.feature-card strong,
-.docs-card strong {
-  color: #f2f6ff;
-}
-
-.feature-card span:last-child,
-.docs-card p,
-.intro-panel p,
-.quote-panel blockquote {
-  color: rgba(232, 232, 240, 0.72);
-  line-height: 1.65;
-}
-
-.docs-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.docs-card {
-  display: flex;
-  flex-direction: column;
-  gap: .6rem;
-  padding: 1.1rem;
-  border-radius: 18px;
-  text-decoration: none;
-  transition: transform .2s ease, border-color .2s ease, background .2s ease;
-}
-
-.docs-card:hover {
-  border-color: rgba(168, 85, 247, 0.34);
-  background: rgba(19, 25, 40, 0.96);
-}
-
-.docs-card span {
-  color: var(--accent-5);
-}
-
-.docs-card p {
-  margin: 0;
-}
-
-.quote-panel {
-  margin-top: 1rem;
-  padding: 1.3rem 1.4rem;
-  border-radius: 22px;
+  margin-top: 3rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .02);
+  border-left: 3px solid var(--accent-3);
 }
 
 .quote-panel blockquote {
   margin: .35rem 0 0;
   font-size: 1.1rem;
+  color: rgba(232, 232, 240, .85);
+  font-style: italic;
+  line-height: 1.65;
 }
 
 .marquee-wrap {
@@ -521,6 +560,7 @@ const to = (path) => withBase(path)
   gap: 1.6rem;
   width: max-content;
   animation: marqueeScroll 22s linear infinite;
+  margin-bottom: 3rem;
 }
 
 .marquee span {
@@ -540,9 +580,22 @@ const to = (path) => withBase(path)
 }
 
 @media (max-width: 960px) {
-  .hero,
-  .docs-grid,
-  .feature-band {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .cards-grid-features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cards-grid-docs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cards-grid-features,
+  .cards-grid-docs {
     grid-template-columns: 1fr;
   }
 }
@@ -624,5 +677,131 @@ const to = (path) => withBase(path)
 @keyframes marqueeScroll {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
+}
+
+/* ── Scroll Reveal ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(48px);
+  transition: opacity 1s cubic-bezier(.16, 1, .3, 1), transform 1s cubic-bezier(.16, 1, .3, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: .12s; }
+.reveal-delay-2 { transition-delay: .26s; }
+.reveal-delay-3 { transition-delay: .4s; }
+.reveal-delay-4 { transition-delay: .54s; }
+
+/* marquee fades in without the upward slide */
+.marquee-wrap.reveal {
+  transform: none;
+  transition: opacity 1.2s ease;
+}
+
+/* ── Cards Section ── */
+.cards-section {
+  padding: 6rem 0 3rem;
+  position: relative;
+}
+
+.cards-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+.cards-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.cards-grid-features {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.cards-grid-docs {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* ── Feature & Docs Cards — t1.html problem-card style ── */
+.feature-card,
+.docs-card {
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .02);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  transition: border-color .4s, transform .4s, box-shadow .4s;
+}
+
+.feature-card:hover,
+.docs-card:hover {
+  border-color: rgba(168, 85, 247, .3);
+  transform: translateY(-5px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+}
+
+.feature-card::before,
+.docs-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent-4), var(--accent));
+  opacity: 0;
+  transition: opacity .4s;
+}
+
+.feature-card:hover::before,
+.docs-card:hover::before {
+  opacity: 1;
+}
+
+.feature-kicker {
+  color: var(--accent-3);
+}
+
+.feature-card strong {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f2f6ff;
+}
+
+.feature-card > span:not(.feature-kicker) {
+  font-size: .85rem;
+  color: rgba(232, 232, 240, .72);
+  line-height: 1.6;
+}
+
+.docs-card > span {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  margin-bottom: .25rem;
+}
+
+.docs-card strong {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f2f6ff;
+}
+
+.docs-card p {
+  font-size: .85rem;
+  color: rgba(232, 232, 240, .72);
+  line-height: 1.6;
+  margin: 0;
 }
 </style>
