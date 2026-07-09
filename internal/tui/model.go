@@ -117,6 +117,9 @@ type Model struct {
 	rightDividerDragging bool
 	rightSplitOverride   int // 0 = auto; positive = user-dragged running-box content height
 
+	overviewSepDragging bool
+	overviewSepX        int // 0 = auto; positive = user-dragged overview column separator X
+
 	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
 
 	overviewCopied   string // modelKey/profileKey briefly set after copying from the Overview tab

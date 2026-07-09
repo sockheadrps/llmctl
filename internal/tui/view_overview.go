@@ -38,19 +38,7 @@ func (m Model) viewOverviewPage() string {
 
 	// Row format: │ leftContent │ rightContent │
 	// 1 + 1 + leftCW + 1 + 1 + rightCW + 1 + 1 = totalW → leftCW+rightCW = totalW-6
-	avail := totalW - 6
-	if avail < 24 {
-		avail = 24
-	}
-	leftCW := avail * 3 / 5
-	if leftCW < 18 {
-		leftCW = 18
-	}
-	rightCW := avail - leftCW
-	if rightCW < 14 {
-		rightCW = 14
-		leftCW = avail - rightCW
-	}
+	leftCW, rightCW := m.overviewColumnWidths(totalW)
 
 	// sepCol is the visual column of the │ separator.
 	// Row: │(0) space(1) leftContent(leftCW, cols 2..leftCW+1) space(leftCW+2) │(leftCW+3) …
@@ -205,6 +193,29 @@ func (m Model) buildOverviewTopBorder(totalW, sepCol int) string {
 		bs.Render("┬") +
 		dashStyle.Render(strings.Repeat("─", rightDashes)) +
 		bs.Render("╮")
+}
+
+// overviewColumnWidths returns (leftCW, rightCW) respecting the user-dragged
+// separator position stored in overviewSepX.
+func (m Model) overviewColumnWidths(totalW int) (leftCW, rightCW int) {
+	const minLeft, minRight = 18, 14
+	avail := totalW - 6
+	if avail < minLeft+minRight {
+		avail = minLeft + minRight
+	}
+	if m.overviewSepX > 0 {
+		leftCW = m.overviewSepX - 3
+	} else {
+		leftCW = avail * 3 / 5
+	}
+	if leftCW < minLeft {
+		leftCW = minLeft
+	}
+	if leftCW > avail-minRight {
+		leftCW = avail - minRight
+	}
+	rightCW = avail - leftCW
+	return
 }
 
 // ─── ACTIVE SERVICES ─────────────────────────────────────────────────────────

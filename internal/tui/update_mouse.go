@@ -44,8 +44,14 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if msg.Button != tea.MouseButtonLeft {
 			break
 		}
-		// Overview tab: clicks on service entries copy host:port.
+		// Overview tab: drag separator or click service entries.
 		if m.leftMode == modeOverview {
+			leftCW, _ := m.overviewColumnWidths(m.width)
+			sepCol := leftCW + 3
+			if msg.X == sepCol {
+				m.overviewSepDragging = true
+				break
+			}
 			if run, ok := m.overviewClickedEntry(msg.X, msg.Y); ok {
 				return m.copyOverviewEntry(run)
 			}
@@ -62,6 +68,18 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case tea.MouseActionMotion:
 		// Track hover so auto-scroll pauses while the cursor is over the pane.
 		m.detailsHovered = inDetailsPane
+		if m.overviewSepDragging {
+			const minLeft, minRight = 18, 14
+			avail := m.width - 6
+			newLeftCW := msg.X - 3
+			if newLeftCW < minLeft {
+				newLeftCW = minLeft
+			}
+			if newLeftCW > avail-minRight {
+				newLeftCW = avail - minRight
+			}
+			m.overviewSepX = newLeftCW + 3
+		}
 		if m.dividerDragging {
 			newLeft := msg.X - 1
 			avail := m.width - 4
@@ -100,6 +118,7 @@ func (m Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case tea.MouseActionRelease:
 		m.dividerDragging = false
 		m.rightDividerDragging = false
+		m.overviewSepDragging = false
 	}
 	return m, nil
 }
