@@ -186,14 +186,15 @@ html.docs-scrolled .VPNavBar.has-sidebar .content {
   left: 176px !important;
   top: 0 !important;
   right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  padding-left: 1.25rem !important;
+  padding-right: 1.25rem !important;
   height: 100% !important;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .content-body {
   justify-content: flex-start !important;
   height: 100% !important;
+  gap: 1rem;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .appearance,
@@ -207,6 +208,7 @@ html.docs-scrolled .VPNavBar.has-sidebar .appearance {
 
 html.docs-scrolled .VPNavBar.has-sidebar .social-links {
   margin-top: 0 !important;
+  margin-left: auto;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .divider {
