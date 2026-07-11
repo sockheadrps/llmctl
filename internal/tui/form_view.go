@@ -106,6 +106,14 @@ func (m Model) viewForm() string {
 			}
 			selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
 			rowIndex++
+
+			if idx == fieldGPULayers {
+				selectedRows = append(selectedRows, fitStyledLine(m.renderLayerDistRow(labelWidth, rowWidth), rowWidth))
+				if m.form.focus == len(m.form.fields)+3 {
+					focusedRow = rowIndex
+				}
+				rowIndex++
+			}
 		}
 	}
 	flashLabel := formLabelStyle
@@ -145,41 +153,6 @@ func (m Model) viewForm() string {
 		mlockValue = "true"
 	}
 	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(truncateText("MLock:", labelWidth)), mlockValue), rowWidth))
-	rowIndex++
-
-	layerDistLabel := formLabelStyle
-	if m.form.focus == len(m.form.fields)+3 {
-		layerDistLabel = formFocusedLabelStyle
-		focusedRow = rowIndex
-	}
-	layerDistLabel = layerDistLabel.Width(labelWidth)
-	total := m.formSliderTotal()
-	client := m.form.rpcClientLayers
-	if total > 0 && client > total {
-		client = total
-	}
-	server := 0
-	if total > 0 {
-		server = total - client
-	}
-	active := m.formRPCActive() && total > 0 && !m.form.cpuOnly
-	const sliderBarWidth = 20
-	var layerDistRowStr string
-	if active {
-		filled := 0
-		if total > 0 {
-			filled = sliderBarWidth * client / total
-		}
-		bar := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(strings.Repeat("█", filled)) +
-			detailMutedStyle.Render(strings.Repeat("░", sliderBarWidth-filled))
-		counts := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(fmt.Sprintf("%d local", client)) +
-			detailMutedStyle.Render(" · ") +
-			lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(fmt.Sprintf("%d remote", server))
-		layerDistRowStr = fmt.Sprintf("%s %s  %s", layerDistLabel.Render(truncateText("Layer Distribution:", labelWidth)), bar, counts)
-	} else {
-		layerDistRowStr = fmt.Sprintf("%s %s", layerDistLabel.Render(truncateText("Layer Distribution:", labelWidth)), detailMutedStyle.Render("n/a — enable RPC and set GPU Layers"))
-	}
-	selectedRows = append(selectedRows, fitStyledLine(layerDistRowStr, rowWidth))
 	rowIndex++
 
 	selectedRows = append(selectedRows, "")
@@ -302,7 +275,7 @@ func (m Model) formDescriptionTitle() string {
 	case 2:
 		return "MLock"
 	case 3:
-		return "Layer Distribution"
+		return "Layer Split"
 	}
 	return "Save Profile"
 }
@@ -431,4 +404,55 @@ func wrapWords(text string, width int) []string {
 		lines = append(lines, word)
 	}
 	return lines
+}
+
+func (m Model) renderLayerDistRow(labelWidth, rowWidth int) string {
+	focused := m.form.focus == len(m.form.fields)+3
+	lbl := formLabelStyle
+	if focused {
+		lbl = formFocusedLabelStyle
+	}
+	lbl = lbl.Width(labelWidth)
+
+	total := m.formSliderTotal()
+	client := m.form.rpcClientLayers
+	if total > 0 && client > total {
+		client = total
+	}
+	server := 0
+	if total > 0 {
+		server = total - client
+	}
+	active := m.formRPCActive() && total > 0 && !m.form.cpuOnly
+
+	if !active {
+		hint := "enable RPC + GPU Layers to adjust"
+		return fmt.Sprintf("%s %s", lbl.Render(truncateText("Layer Split:", labelWidth)), detailMutedStyle.Render(hint))
+	}
+
+	const barWidth = 24
+	filled := 0
+	if total > 0 {
+		filled = barWidth * client / total
+	}
+
+	localStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	remoteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	if focused {
+		arrowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+	}
+
+	bar := localStyle.Render(strings.Repeat("█", filled)) +
+		detailMutedStyle.Render(strings.Repeat("░", barWidth-filled))
+
+	left := arrowStyle.Render("◄")
+	right := arrowStyle.Render("►")
+
+	counts := localStyle.Render(fmt.Sprintf("%d", client)) +
+		detailMutedStyle.Render("↔") +
+		remoteStyle.Render(fmt.Sprintf("%d", server)) +
+		detailMutedStyle.Render(fmt.Sprintf("/%d", total))
+
+	return fmt.Sprintf("%s %s%s%s %s", lbl.Render(truncateText("Layer Split:", labelWidth)), left, bar, right, counts)
 }
