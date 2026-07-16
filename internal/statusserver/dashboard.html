@@ -489,20 +489,20 @@
       return { path, area };
     }
 
-    function sparkline(values, color, label) {
+    function sparkline(values, color, label, valueText = null) {
       const width = 220;
       const height = 82;
       const pad = 8;
       const data = pointToXY(values, width, height, pad);
       if (!data) return '<div class="empty">No samples yet</div>';
-      const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
+      const topRight = valueText ? escapeHtml(valueText) : fmtNum(Math.max(...values.filter(v => Number.isFinite(v))));
       return `
         <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
           <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
           <path class="area" d="${data.area}" style="fill:${color}"></path>
           <path class="line" d="${data.path}" style="stroke:${color}"></path>
           <text x="${pad}" y="18" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
-          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${fmtNum(maxValue)}</text>
+          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>
         </svg>`;
     }
 
@@ -667,14 +667,15 @@
       }).join('');
     }
 
-    function trendCard(label, series, color, subtitle) {
+    function trendCard(label, series, color, subtitle, valueText = null) {
       const current = series.length ? series[series.length - 1] : 0;
+      const value = valueText || (label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
       return `
         <article class="trend-card">
           <div class="label">${label}</div>
-          <div class="value">${escapeHtml(label.includes('tok/s') ? fmtNum(current) : fmtMiB(current))}</div>
+          <div class="value">${escapeHtml(value)}</div>
           <div class="model-meta">${escapeHtml(subtitle)}</div>
-          <div style="margin-top: 10px">${sparkline(series, color, label)}</div>
+          <div style="margin-top: 10px">${sparkline(series, color, label, valueText)}</div>
         </article>`;
     }
 
@@ -690,10 +691,14 @@
       }
       const gpuEntries = sourceGpuEntries(status);
       const vramSeries = aggregateSamples(history, runs, 'vram_mib');
+      const totalVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
+      const usedVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.used) || 0), 0);
+      const vramValue = totalVram > 0 ? `${fmtMiB(usedVram)} / ${fmtMiB(totalVram)}` : `${fmtMiB(usedVram)} used`;
       container.innerHTML = [
         `
           <article class="trend-card">
-            <div class="label">Source VRAM</div>
+            <div class="label">Source VRAM Used / Total</div>
+            <div class="value">${escapeHtml(vramValue)}</div>
             <div class="model-meta">Per-GPU utilization across the selected source</div>
             ${
               gpuEntries.length
@@ -718,7 +723,7 @@
             }
           </article>
         `,
-        trendCard('Source VRAM Trend', vramSeries, '#a78bfa', 'Combined VRAM across the selected source'),
+        trendCard('Source VRAM Trend', vramSeries, '#a78bfa', 'Combined VRAM across the selected source', vramValue),
       ].join('');
     }
 
