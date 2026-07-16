@@ -345,6 +345,11 @@ func (m Model) renderStatusServerContent() string {
 		historyLabel = "Persist History (Disabled)"
 	}
 	row(3, historyLabel, profileStyle)
+	dashboardLabel := "Dashboard (Enabled)"
+	if !m.cfg.StatusDashboardEnabled() {
+		dashboardLabel = "Dashboard (Disabled)"
+	}
+	row(4, dashboardLabel, profileStyle)
 
 	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
 		copyLabel := "Copy Windows Firewall Rule"
@@ -353,7 +358,7 @@ func (m Model) renderStatusServerContent() string {
 			copyLabel = "✓ Copied to clipboard"
 			copyStyle = runningStyle
 		}
-		row(4, copyLabel, copyStyle)
+		row(5, copyLabel, copyStyle)
 	}
 
 	b.WriteString("\n")
@@ -362,6 +367,7 @@ func (m Model) renderStatusServerContent() string {
 			"on the same LAN can poll model name, VRAM and tok/s.\n" +
 			"GET /history feeds the browser dashboard, and persistence\n" +
 			"keeps that history across restarts when enabled.\n" +
+			"GET /dashboard is optional and can be disabled here.\n" +
 			"Default: 0.0.0.0:11435 (accessible from other machines)."))
 	b.WriteString("\n")
 

@@ -29,6 +29,7 @@ type Server struct {
 	historyLoadedPath string
 	srv               *http.Server
 	clientUpdates     map[string]ClientInfo
+	dashboardEnabled  bool
 	upgrader          websocket.Upgrader
 }
 
@@ -37,12 +38,20 @@ const defaultHistoryLimit = 240
 // NewServer creates a Server. Call Start to bind and begin serving.
 func NewServer() *Server {
 	return &Server{
-		clientUpdates: make(map[string]ClientInfo),
-		historyLimit:  defaultHistoryLimit,
+		clientUpdates:    make(map[string]ClientInfo),
+		historyLimit:     defaultHistoryLimit,
+		dashboardEnabled: true,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+}
+
+// ConfigureDashboard controls whether the browser dashboard is served.
+func (s *Server) ConfigureDashboard(enabled bool) {
+	s.mu.Lock()
+	s.dashboardEnabled = enabled
+	s.mu.Unlock()
 }
 
 // SetStatus replaces the current local snapshot atomically.
@@ -158,7 +167,14 @@ func (s *Server) handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		http.Redirect(w, r, "/dashboard", http.StatusFound)
+		s.mu.RLock()
+		enabled := s.dashboardEnabled
+		s.mu.RUnlock()
+		if enabled {
+			http.Redirect(w, r, "/dashboard", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "/status", http.StatusFound)
 	})
 	mux.HandleFunc("/dashboard", s.handleDashboard)
 	mux.HandleFunc("/status", s.handleStatus)
@@ -232,6 +248,13 @@ func (s *Server) handleClientStatusWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	enabled := s.dashboardEnabled
+	s.mu.RUnlock()
+	if !enabled {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = fmt.Fprint(w, dashboardHTML)
 }

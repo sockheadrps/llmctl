@@ -37,6 +37,7 @@ Build a browser-style dashboard for server-enabled `llmctl` processes by extendi
 - [x] Show connected RPC client snapshots.
 - [x] Add an all-client summary row.
 - [x] Make the main model chart source-selectable across local and connected clients.
+- [x] Add a setting to disable the browser dashboard while keeping `/status` and `/history`.
 
 ## Phase 4: Polish
 

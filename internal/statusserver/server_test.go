@@ -116,6 +116,37 @@ func TestHandlersServeDashboardAndHistory(t *testing.T) {
 	}
 }
 
+func TestHandlersHideDashboardWhenDisabled(t *testing.T) {
+	srv := NewServer()
+	srv.ConfigureDashboard(false)
+	ts := httptest.NewServer(srv.handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("/dashboard returned %d, want 404", resp.StatusCode)
+	}
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err = client.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("/ returned %d, want redirect", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/status" {
+		t.Fatalf("redirect location = %q, want /status", loc)
+	}
+}
+
 func TestHistoryPersistenceRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "status_history.json")
 

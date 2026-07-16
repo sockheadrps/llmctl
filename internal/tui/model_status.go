@@ -55,6 +55,7 @@ func (m *Model) reconcileStatusServer() error {
 		if err := m.statusServer.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
 			return err
 		}
+		m.statusServer.ConfigureDashboard(m.cfg.StatusDashboardEnabled())
 		return nil
 	}
 	if m.statusServer != nil {
@@ -77,6 +78,7 @@ func (m *Model) reconcileStatusServer() error {
 		srv.Stop()
 		return err
 	}
+	srv.ConfigureDashboard(m.cfg.StatusDashboardEnabled())
 	m.statusServer = srv
 	m.statusServerHost = host
 	m.statusServerPort = port

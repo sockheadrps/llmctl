@@ -49,7 +49,8 @@ type statusServerContentState struct {
 	// 1 = edit host
 	// 2 = edit port
 	// 3 = toggle history persistence
-	// 4 = copy firewall rule (Windows only, when enabled)
+	// 4 = toggle dashboard availability
+	// 5 = copy firewall rule (Windows only, when enabled)
 	cursor      int
 	hostEditing bool
 	hostInput   textinput.Model

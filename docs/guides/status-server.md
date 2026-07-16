@@ -10,13 +10,15 @@ The server serves:
 
 - `GET /status` for the current snapshot
 - `GET /history` for recent snapshots
-- `GET /dashboard` for the browser view
+- `GET /dashboard` for the browser view when dashboard serving is enabled
 
 `/status` remains the source of truth for the live state. `/history` is what the dashboard uses to draw charts.
 
 When history persistence is enabled, llmctl stores those samples in `~/.llmctl/status_history.json` and restores them on restart.
 
 The dashboard also includes model and profile filters, a time-range control, and health-change coloring so you can zoom into one run or compare several at once.
+
+You can disable the browser dashboard from the Status Server settings while keeping `/status` and `/history` available for JSON and remote-client use.
 
 You can also ask the CLI for the local instance list:
 
@@ -53,7 +55,7 @@ The Overview tab is the human-friendly view of the status server snapshot:
 
 That means you usually do not need to hit `/status` by hand unless you're integrating llmctl with another tool.
 
-If you want a browser view, open the same host and port at `/dashboard`. The page reads `/status` and `/history` from the same server.
+If you want a browser view, open the same host and port at `/dashboard` while dashboard serving is enabled. The page reads `/status` and `/history` from the same server.
 
 ---
 
