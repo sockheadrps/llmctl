@@ -103,15 +103,20 @@
     .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; }
     .value { margin-top: 10px; font-size: clamp(24px, 3vw, 38px); line-height: 1; letter-spacing: -0.04em; }
     .subvalue { margin-top: 10px; color: var(--muted); font-size: 13px; }
-    .panels { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 14px; }
+    .panels { display: grid; gap: 14px; }
     .panel { padding: 18px; }
     .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; }
     .panel-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.03em; }
     .meta { color: var(--muted); font-size: 13px; }
     .model-list { display: grid; gap: 12px; }
     .model {
-      display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: center;
+      display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap: 12px; align-items: start;
       padding: 16px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .model-side {
+      display: grid;
+      gap: 10px;
+      align-self: stretch;
     }
     .model-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .model-title { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
@@ -143,8 +148,11 @@
     .area { fill-opacity: 0.18; }
     .empty { padding: 20px; border-radius: 16px; border: 1px dashed rgba(148, 163, 184, 0.22); color: var(--muted); text-align: center; }
     .trend-row { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
+    .source-trend-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
+    .model-trends { display: grid; gap: 12px; }
+    .model-trends .trend-row { margin-bottom: 0; }
     .pill {
       border: 1px solid rgba(148, 163, 184, 0.16);
       border-radius: 999px;
@@ -220,9 +228,8 @@
     }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
     @media (max-width: 1080px) {
-      .hero, .panels, .stats, .trend-row, .controls, .client-grid { grid-template-columns: 1fr; }
+      .hero, .panels, .stats, .trend-row, .controls, .model, .client-grid { grid-template-columns: 1fr; }
       .statusbar { justify-items: start; text-align: left; }
-      .model { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
       .shell { padding: 14px 10px 24px; }
@@ -257,25 +264,23 @@
       </div>
     </section>
 
+    <section class="panel" style="margin-top: 14px;">
+      <div class="panel-head">
+        <h2>Source Trends</h2>
+        <div class="meta" id="history-count">0 samples</div>
+      </div>
+      <div class="trend-row source-trend-row" id="source-trends"></div>
+      <div class="empty" id="source-trends-empty">Waiting for enough samples to chart.</div>
+    </section>
+
     <section class="stats" id="stats"></section>
 
-    <section class="panels">
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Active Models</h2>
-          <div class="meta" id="active-count">0 running</div>
-        </div>
-        <div class="model-list" id="models"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Source Trends</h2>
-          <div class="meta" id="history-count">0 samples</div>
-        </div>
-        <div class="trend-row" id="source-trends"></div>
-        <div class="empty" id="source-trends-empty">Waiting for enough samples to chart.</div>
-      </section>
+    <section class="panel" style="margin-top: 14px;">
+      <div class="panel-head">
+        <h2>Active Models</h2>
+        <div class="meta" id="active-count">0 running</div>
+      </div>
+      <div class="model-list" id="models"></div>
     </section>
 
     <div class="footer">
@@ -598,6 +603,17 @@
         const transition = healthTransition(history, run);
         const key = sourceRunKey(run);
         const expanded = !!state.expandedRunKeys[key];
+        const trendSummary = expanded ? `
+          <div class="model-trends">
+            <div class="trend-row">
+              ${trendCard(`${run.model} VRAM`, vramSeries, '#a78bfa', 'Per-model VRAM trend')}
+              ${trendCard(`${run.model} RAM`, ramSeries, '#34d399', 'Per-model RAM trend')}
+            </div>
+            <div class="trend-row">
+              ${trendCard(`${run.model} tok/s`, series, '#7dd3fc', 'Per-model tok/s trend')}
+            </div>
+          </div>
+        ` : '';
         const meta = [
           run.sourceId && run.sourceId !== 'local' ? `source ${run.sourceName || run.sourceId}` : null,
           run.alias ? `alias ${run.alias}` : null,
@@ -628,14 +644,10 @@
               </div>
               <div class="metrics">${metrics}</div>
             </div>
-            <div>${sparkline(series, '#7dd3fc', `${run.model} tok/s`)}</div>
-            ${expanded ? `
-              <div class="trend-row" style="margin-top: 12px;">
-                ${trendCard(`${run.model} tok/s`, series, '#7dd3fc', 'Per-model tok/s trend')}
-                ${trendCard(`${run.model} VRAM`, vramSeries, '#a78bfa', 'Per-model VRAM trend')}
-                ${trendCard(`${run.model} RAM`, ramSeries, '#34d399', 'Per-model RAM trend')}
-              </div>
-            ` : ''}
+            <div class="model-side">
+              <div>${sparkline(series, '#7dd3fc', `${run.model} tok/s`)}</div>
+              ${trendSummary}
+            </div>
           </article>`;
       }).join('');
       list.querySelectorAll('button[data-expand]').forEach(btn => {
@@ -673,11 +685,9 @@
         return;
       }
       empty.style.display = 'none';
-      const tokSeries = aggregateSamples(history, runs, 'tok_s');
       const vramSeries = aggregateSamples(history, runs, 'vram_mib');
       const ramSeries = aggregateSamples(history, runs, 'ram_mib');
       container.innerHTML = [
-        trendCard('Source tok/s', tokSeries, '#7dd3fc', 'Across the selected source'),
         trendCard('Source VRAM', vramSeries, '#a78bfa', 'Sum of tracked VRAM'),
         trendCard('Source RAM', ramSeries, '#34d399', 'Sum of tracked RAM'),
       ].join('');

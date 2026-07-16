@@ -62,6 +62,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
   - VRAM and RAM trends
   - health transition badges
 - The source trends panel now shows correlated source-level VRAM and RAM charts.
+- The source trends panel no longer shows a separate source tok/s card.
 - The dashboard no longer has a separate Remote Clients section.
 - The top status chip reflects connected client activity instead of implying only local runs exist.
 - Remote runs are labeled with their source so the selected view is easier to read.
