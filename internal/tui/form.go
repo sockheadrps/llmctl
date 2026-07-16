@@ -88,16 +88,42 @@ func (f *formState) blurAll() {
 	}
 }
 
+// formNavOrder returns the Tab/arrow navigation sequence for the form.
+// The layer-split slider (len(fields)+3) is inserted immediately after
+// fieldGPULayers so it's reachable without scrolling past all other fields.
+func formNavOrder(numFields int) []int {
+	order := make([]int, 0, numFields+5)
+	for i := 0; i <= fieldGPULayers; i++ {
+		order = append(order, i)
+	}
+	order = append(order, numFields+3) // layer split slider
+	for i := fieldGPULayers + 1; i < numFields; i++ {
+		order = append(order, i)
+	}
+	order = append(order, numFields+0) // flash attention
+	order = append(order, numFields+1) // cpu only
+	order = append(order, numFields+2) // mlock
+	order = append(order, numFields+4) // save
+	return order
+}
+
 func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.commitFlagInput()
 	f.flagFocus = false
 	f.flagInput.Blur()
-	total := len(f.fields) + 5 // + flash toggle + cpu only toggle + mlock toggle + tensor split slider + save action
+	order := formNavOrder(len(f.fields))
+	pos := 0
+	for i, v := range order {
+		if v == f.focus {
+			pos = i
+			break
+		}
+	}
+	pos = ((pos+delta)%len(order) + len(order)) % len(order)
 	f.blurAll()
-	f.focus = ((f.focus+delta)%total + total) % total
+	f.focus = order[pos]
 	f.resetDescriptionScroll()
-	// Don't auto-focus the text input: navigate mode controls activation via Enter.
-	f.ensureVisible(visibleRows, total)
+	f.ensureVisible(visibleRows, len(order))
 	f.syncFlagInput()
 }
 
@@ -452,7 +478,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "left", "a":
-		if m.form.focus == len(m.form.fields)+3 {
+		if m.form.focus == len(m.form.fields)+3 && m.formRPCActive() {
 			if m.form.rpcClientLayers > 0 {
 				m.form.rpcClientLayers--
 			}
@@ -461,7 +487,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "shift+left":
-		if m.form.focus == len(m.form.fields)+3 {
+		if m.form.focus == len(m.form.fields)+3 && m.formRPCActive() {
 			m.form.rpcClientLayers -= 5
 			if m.form.rpcClientLayers < 0 {
 				m.form.rpcClientLayers = 0
@@ -471,7 +497,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "shift+right":
-		if m.form.focus == len(m.form.fields)+3 {
+		if m.form.focus == len(m.form.fields)+3 && m.formRPCActive() {
 			total := m.formSliderTotal()
 			m.form.rpcClientLayers += 5
 			if total > 0 && m.form.rpcClientLayers > total {
@@ -482,7 +508,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "right", "d":
-		if m.form.focus == len(m.form.fields)+3 {
+		if m.form.focus == len(m.form.fields)+3 && m.formRPCActive() {
 			total := m.formSliderTotal()
 			if total > 0 && m.form.rpcClientLayers < total {
 				m.form.rpcClientLayers++
@@ -682,8 +708,9 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	if renamed {
 		delete(mdl.Profiles, m.form.originalKey)
 	}
+	rpcActive := (rpcEnabled != nil && *rpcEnabled) || (rpcEnabled == nil && m.cfg.RPCEnabled)
 	tensorSplit := ""
-	if !m.form.cpuOnly && gpuLayers > 0 {
+	if !m.form.cpuOnly && gpuLayers > 0 && rpcActive {
 		client := m.form.rpcClientLayers
 		if client < 0 {
 			client = 0

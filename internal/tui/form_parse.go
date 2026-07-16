@@ -235,6 +235,17 @@ func (f *formState) applyImportedArgs(argsStr string) error {
 		return fmt.Errorf("no recognizable CLI args found")
 	}
 
+	// Clear all arg fields except the profile key, then apply what was parsed.
+	for i := range f.fields {
+		if i != fieldKey {
+			f.fields[i].input.SetValue("")
+		}
+	}
+	f.flash = false
+	f.cpuOnly = false
+	f.mlock = false
+	f.rpcClientLayers = 0
+
 	for idx, val := range values {
 		switch idx {
 		case len(formLabels):

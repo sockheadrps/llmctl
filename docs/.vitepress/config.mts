@@ -4,7 +4,6 @@ export default defineConfig({
   base: '/llmctl/',
   title: 'llmctl',
   description: 'A TUI-first tool for running, configuring, and distributing local llama.cpp models.',
-  base: '/llmctl/',
   appearance: 'dark',
   themeConfig: {
     nav: [

@@ -242,14 +242,12 @@ onMounted(() => {
 
 .hero {
   display: grid;
-  grid-template-columns: 1fr 1.4fr;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 2fr);
   grid-template-rows: 1fr auto;
   align-items: center;
-  gap: 3rem 3rem;
+  gap: 3rem 5rem;
   min-height: calc(100vh - var(--vp-nav-height));
   position: relative;
-  width: 120%;
-  right: 120px;
 }
 
 
@@ -560,7 +558,6 @@ onMounted(() => {
   gap: 1.6rem;
   width: max-content;
   animation: marqueeScroll 22s linear infinite;
-  margin-bottom: 3rem;
 }
 
 .marquee span {
@@ -584,20 +581,9 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .cards-grid-features {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .cards-grid-docs {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .cards-grid-features,
-  .cards-grid-docs {
-    grid-template-columns: 1fr;
-  }
+  .hero-copy  { grid-column: 1; grid-row: 1; }
+  .hero-media { grid-column: 1; grid-row: 2; }
+  .marquee-wrap { grid-column: 1; grid-row: 3; }
 }
 
 @media (max-width: 720px) {
@@ -610,13 +596,7 @@ onMounted(() => {
   }
 
   .hero-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .primary-btn,
-  .secondary-btn {
-    width: 100%;
+    flex-wrap: wrap;
   }
 }
 
@@ -726,6 +706,23 @@ onMounted(() => {
 
 .cards-grid-docs {
   grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 960px) {
+  .cards-grid-features {
+    grid-template-columns: 1fr;
+  }
+
+  .cards-grid-docs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .cards-grid-features,
+  .cards-grid-docs {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Feature & Docs Cards — t1.html problem-card style ── */

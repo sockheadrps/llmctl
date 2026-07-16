@@ -2,6 +2,11 @@
   --vp-sidebar-width: 176px;
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 .VPNav {
   position: sticky;
   top: 0;
@@ -13,21 +18,32 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
-  /* cap width and fix VitePress 1440px+ padding-left calc that clips text */
-  width: 176px !important;
-  max-width: 176px !important;
-  min-width: 0 !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
 }
 
 .VPSidebar .nav {
   overflow-y: hidden !important;
 }
 
+/* Desktop: lock sidebar to 176px with compact padding */
 @media (min-width: 960px) {
+  .VPSidebar {
+    width: 176px !important;
+    max-width: 176px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
   .VPSidebar .nav {
     padding-top: calc(var(--vp-nav-height) + 10px);
+  }
+}
+
+/* Wide screens: prevent VitePress's expanding calc from growing the sidebar */
+@media (min-width: 1440px) {
+  .VPSidebar {
+    width: 176px !important;
+    max-width: 176px !important;
+    padding-left: 16px !important;
   }
 }
 
@@ -170,14 +186,15 @@ html.docs-scrolled .VPNavBar.has-sidebar .content {
   left: 176px !important;
   top: 0 !important;
   right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  padding-left: 1.25rem !important;
+  padding-right: 1.25rem !important;
   height: 100% !important;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .content-body {
   justify-content: flex-start !important;
   height: 100% !important;
+  gap: 1rem;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .appearance,
@@ -191,6 +208,7 @@ html.docs-scrolled .VPNavBar.has-sidebar .appearance {
 
 html.docs-scrolled .VPNavBar.has-sidebar .social-links {
   margin-top: 0 !important;
+  margin-left: auto;
 }
 
 html.docs-scrolled .VPNavBar.has-sidebar .divider {
