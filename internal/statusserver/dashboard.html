@@ -215,6 +215,16 @@
       gap: 8px;
       white-space: nowrap;
     }
+    .gpu-load-card .chart-wrap {
+      margin-top: 8px;
+      min-height: 74px;
+      flex: 1;
+      display: flex;
+    }
+    .gpu-load-card .chart-wrap .spark {
+      min-height: 74px;
+      height: 74px;
+    }
     .gpu-load-card .gpu-bar {
       margin-top: 9px;
       height: 13px;
@@ -726,22 +736,27 @@
       };
     }
 
-    function runSourceGpuUtilSeries(history, run) {
+    function gpuKey(gpu) {
+      if (!gpu) return '';
+      if (gpu.uuid) return `uuid:${gpu.uuid}`;
+      if (Number.isFinite(Number(gpu.index))) return `index:${Number(gpu.index)}`;
+      if (gpu.name) return `name:${gpu.name}`;
+      return '';
+    }
+
+    function runGpuLoadSeries(history, run, gpu) {
+      const targetKey = gpuKey(gpu);
+      if (!targetKey) return [];
       return filteredSamples(history).map(sample => {
         const found = sourceRunsForSample(sample).find(item => sourceRunKey(item) === sourceRunKey(run));
         if (!found) return null;
-        const sourceGpu = run.sourceId === 'local'
-          ? sample.status && sample.status.gpu
-          : ((sample.status && (sample.status.clients || []).find(client => client.id === run.sourceId)) || null);
-        const gpu = sourceGpu && sourceGpu.gpu ? sourceGpu.gpu : sourceGpu;
-        const total = Number(gpu && gpu.total_mib) || 0;
-        const used = Number(found.vram_mib) || 0;
-        if (total <= 0 || used < 0) return null;
-        return (used / total) * 100;
+        const match = (found.gpus || []).find(entry => gpuKey(entry) === targetKey);
+        if (!match) return null;
+        return Number(match.used_mib) || 0;
       });
     }
 
-    function modelGpuCards(run) {
+    function modelGpuCards(history, run) {
       const gpus = (run.gpus || []).slice().sort((a, b) => {
         const ai = Number.isFinite(Number(a.index)) ? Number(a.index) : Number.MAX_SAFE_INTEGER;
         const bi = Number.isFinite(Number(b.index)) ? Number(b.index) : Number.MAX_SAFE_INTEGER;
@@ -749,14 +764,16 @@
         return String(a.name || '').localeCompare(String(b.name || ''));
       });
       if (!gpus.length) return '';
+      const totalLoad = gpus.reduce((sum, gpu) => sum + (Number(gpu.used_mib) || 0), 0);
       return gpus.map(gpu => {
         const used = Number(gpu.used_mib) || 0;
-        const total = Number(gpu.total_mib) || 0;
-        const pct = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : (used > 0 ? 100 : 0);
         const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
-        const amount = total > 0 ? `${fmtMiB(used)} / ${fmtMiB(total)}` : `${fmtMiB(used)} loaded`;
         const modelName = gpu.name || gpu.uuid || 'Unknown GPU';
-        const pctText = `${pct.toFixed(1)}%`;
+        const amount = `${fmtMiB(used)} loaded`;
+        const pct = totalLoad > 0 ? Math.max(0, Math.min(100, (used / totalLoad) * 100)) : 0;
+        const pctText = totalLoad > 0 ? `${pct.toFixed(1)}% of model` : 'model slice';
+        const series = runGpuLoadSeries(history, run, gpu);
+        const current = series.length ? series[series.length - 1] : used;
         return `
           <article class="trend-card gpu-load-card">
             <div class="gpu-load-head">
@@ -766,12 +783,10 @@
             <div class="value">${escapeHtml(amount)}</div>
             <div class="gpu-model">${escapeHtml(modelName)}</div>
             <div class="gpu-load-meta">
-              <span>${escapeHtml(amount)}</span>
-              <span>${escapeHtml(pctText)}</span>
+              <span>${escapeHtml(totalLoad > 0 ? `${fmtMiB(totalLoad)} model total` : 'model load')}</span>
+              <span>${escapeHtml(totalLoad > 0 ? `${fmtNum(pct)}%` : amount)}</span>
             </div>
-            <div class="gpu-bar" aria-hidden="true">
-              <div class="gpu-fill" style="width: ${pct.toFixed(1)}%"></div>
-            </div>
+            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
           </article>`;
       }).join('');
     }
@@ -803,18 +818,12 @@
         const series = valuesFor(history, run, 'tok_s');
         const vramSeries = valuesFor(history, run, 'vram_mib');
         const ramSeries = valuesFor(history, run, 'ram_mib');
-        const sourceGpu = runSourceGpuInfo(status, run);
-        const sourceGpuUtilSeries = runSourceGpuUtilSeries(history, run);
-        const gpuCards = modelGpuCards(run);
+        const gpuCards = modelGpuCards(history, run);
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
         const trendCards = [];
         if (!gpuCards && (Number(run.vram_mib) || 0) > 0) {
-          if (run.sourceId !== 'local' && sourceGpu && sourceGpu.total > 0) {
-            trendCards.push(trendCard('RPC GPU Load', sourceGpuUtilSeries, '#a78bfa', null, null, '%', true, true));
-          } else {
-            trendCards.push(trendCard('VRAM Utilization', vramSeries, '#a78bfa', null, null, 'MiB', true, false));
-          }
+          trendCards.push(trendCard('VRAM Loaded', vramSeries, '#a78bfa', null, null, 'MiB', true, false));
         }
         if ((Number(run.ram_mib) || 0) > 0) {
           trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', null, null, 'MiB', false));

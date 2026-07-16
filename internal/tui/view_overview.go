@@ -12,6 +12,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 // viewOverviewPage renders the complete Overview screen as a single outer box
@@ -346,6 +347,10 @@ func (m Model) renderRunningGPUBreakdown(ri statusserver.RunningInfo, contentW i
 	if len(ri.GPUs) == 0 {
 		return ""
 	}
+	totalModelLoad := int64(0)
+	for _, gpu := range ri.GPUs {
+		totalModelLoad += gpu.UsedMiB
+	}
 	var b strings.Builder
 	b.WriteString(detailMutedStyle.Render("     RPC GPU load") + "\n")
 	for _, gpu := range ri.GPUs {
@@ -364,20 +369,14 @@ func (m Model) renderRunningGPUBreakdown(ri statusserver.RunningInfo, contentW i
 		if gpu.UsedMiB < 1024 {
 			used = fmt.Sprintf("%d MiB", gpu.UsedMiB)
 		}
-		total := ""
-		if gpu.TotalMiB > 0 {
-			total = fmt.Sprintf(" / %.1fG", float64(gpu.TotalMiB)/1024)
-			if gpu.TotalMiB < 1024 {
-				total = fmt.Sprintf(" / %d MiB", gpu.TotalMiB)
-			}
+		line := fmt.Sprintf("     %s: %s loaded", label, used)
+		if totalModelLoad > 0 {
+			pct := float64(gpu.UsedMiB) / float64(totalModelLoad) * 100
+			line += fmt.Sprintf(" of %s model", util.FormatBytes(totalModelLoad*1024*1024))
+			line += fmt.Sprintf("  (%.1f%%)", pct)
 		}
-		pct := ""
-		if gpu.TotalMiB > 0 {
-			pct = fmt.Sprintf("  (%.1f%%)", float64(gpu.UsedMiB)/float64(gpu.TotalMiB)*100)
-		}
-		line := fmt.Sprintf("     %s: %s%s%s", label, used, total, pct)
 		if lipgloss.Width(line) > contentW {
-			line = fmt.Sprintf("     %s: %s%s", label, used, pct)
+			line = fmt.Sprintf("     %s: %s loaded", label, used)
 		}
 		b.WriteString(detailMutedStyle.Render(line))
 		b.WriteString("\n")
@@ -474,7 +473,9 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 // overviewSpeeds returns (current, avg, peak) display strings.
 // current: live tok/s rate while generating, else "—"
 // avg:     in-session rolling window average (tokHistory), falling back to
-//          the persisted cross-session average (tokRateHistory) when idle
+//
+//	the persisted cross-session average (tokRateHistory) when idle
+//
 // peak:    all-time high from MaxTokPerSec / session tokPeak
 func (m Model) overviewSpeeds(hkey, modelKey, profileKey string) (current, avg, peak string) {
 	// All-time peak.
