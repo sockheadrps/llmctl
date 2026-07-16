@@ -121,6 +121,18 @@
     .transition.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
     .transition.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
     .transition.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(14, 165, 233, 0.16);
+      color: #d9f3ff;
+    }
     .metrics {
       display: grid;
       gap: 4px 10px;
@@ -649,6 +661,39 @@
       return entries;
     }
 
+    function runSourceGpuInfo(status, run) {
+      if (run.sourceId === 'local') {
+        if (!status.gpu) return null;
+        return {
+          name: status.gpu.name || 'Unknown GPU',
+          used: Number(status.gpu.used_mib) || 0,
+          total: Number(status.gpu.total_mib) || 0,
+        };
+      }
+      const client = (status.clients || []).find(client => client.id === run.sourceId);
+      if (!client || !client.gpu) return null;
+      return {
+        name: client.gpu.name || client.name || client.id || 'Remote GPU',
+        used: Number(client.gpu.used_mib) || 0,
+        total: Number(client.gpu.total_mib) || 0,
+      };
+    }
+
+    function runSourceGpuUtilSeries(history, run) {
+      return filteredSamples(history).map(sample => {
+        const found = sourceRunsForSample(sample).find(item => sourceRunKey(item) === sourceRunKey(run));
+        if (!found) return null;
+        const sourceGpu = run.sourceId === 'local'
+          ? sample.status && sample.status.gpu
+          : ((sample.status && (sample.status.clients || []).find(client => client.id === run.sourceId)) || null);
+        const gpu = sourceGpu && sourceGpu.gpu ? sourceGpu.gpu : sourceGpu;
+        const total = Number(gpu && gpu.total_mib) || 0;
+        const used = Number(found.vram_mib) || 0;
+        if (total <= 0 || used < 0) return null;
+        return (used / total) * 100;
+      });
+    }
+
     function selectedSourceSummary(status) {
       const running = filteredRuns(status);
       const localActive = running.filter(run => run.sourceId === 'local').length;
@@ -667,7 +712,6 @@
     function renderModels(status, history) {
       const list = document.getElementById('models');
       const current = filteredRuns(status);
-      const sourceTotals = sourceTotalVramSeries(history);
       document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
       if (!current.length) {
         list.innerHTML = '<div class="empty">No visible models are running right now.</div>';
@@ -677,12 +721,17 @@
         const series = valuesFor(history, run, 'tok_s');
         const vramSeries = valuesFor(history, run, 'vram_mib');
         const ramSeries = valuesFor(history, run, 'ram_mib');
-        const vramUtilSeries = ratioSeries(vramSeries, sourceTotals);
+        const sourceGpu = runSourceGpuInfo(status, run);
+        const sourceGpuUtilSeries = runSourceGpuUtilSeries(history, run);
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
         const trendCards = [];
         if ((Number(run.vram_mib) || 0) > 0) {
-          trendCards.push(trendCard('VRAM Utilization', vramUtilSeries, '#a78bfa', null, null, '%', true, true));
+          if (run.sourceId !== 'local' && sourceGpu && sourceGpu.total > 0) {
+            trendCards.push(trendCard('RPC GPU Load', sourceGpuUtilSeries, '#a78bfa', null, null, '%', true, true));
+          } else {
+            trendCards.push(trendCard('VRAM Utilization', vramSeries, '#a78bfa', null, null, 'MiB', true, false));
+          }
         }
         if ((Number(run.ram_mib) || 0) > 0) {
           trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', null, null, 'MiB', false));
@@ -716,6 +765,7 @@
                   <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
+                  ${run.sourceId !== 'local' ? '<span class="source-chip">RPC</span>' : ''}
                   ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
                 </div>
               </div>

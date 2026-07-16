@@ -68,6 +68,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - The source trends panel no longer shows a separate source tok/s card or a separate RAM trend chart.
 - RAM is shown as a used-only summary because the status payload does not expose a total.
 - Switching the source filter now resets the trend history window so old chart peaks do not leak into the new source view.
+- Remote RPC-loaded models now show an `RPC` badge and a model-specific GPU load card that uses the matching source GPU total.
 - The dashboard no longer has a separate Remote Clients section.
 - The top status chip reflects connected client activity instead of implying only local runs exist.
 - Remote runs are labeled with their source so the selected view is easier to read.
