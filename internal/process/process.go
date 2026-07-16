@@ -163,7 +163,7 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 
 func buildStartArgs(m models.Model, p models.Profile, rpcEndpoint string) []string {
 	args := BuildArgs(m, p)
-	if rpcEndpoint != "" && !hasArg(args, "-v") && !hasArg(args, "--verbose") {
+	if !hasArg(args, "-v") && !hasArg(args, "--verbose") {
 		args = append(args, "-v")
 	}
 	if rpcEndpoint != "" {

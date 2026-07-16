@@ -223,6 +223,19 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
+func TestBuildStartArgsAddsVerboseAlways(t *testing.T) {
+	model := models.Model{Path: "/m.gguf"}
+	profile := models.Profile{Port: 8080}
+
+	got := buildStartArgs(model, profile, "")
+	if !slices.Contains(got, "-v") {
+		t.Fatalf("expected start args to include -v, got %v", got)
+	}
+	if slices.Contains(got, "--rpc") {
+		t.Fatalf("expected non-RPC start args not to include --rpc, got %v", got)
+	}
+}
+
 func TestBuildStartArgsAddsVerboseForRPC(t *testing.T) {
 	model := models.Model{Path: "/m.gguf"}
 	profile := models.Profile{Port: 8080}

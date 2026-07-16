@@ -11,6 +11,13 @@ If you do need to inspect the file, the important top-level areas are:
 - Status server settings - enable flag, bind settings, dashboard toggle, and history persistence toggle
 - Network settings - saved internet and RPC interface names on Linux
 
+The key split is:
+
+- `rpc_enabled` and `rpc_mode` control distributed GPU transport
+- `status_server_enabled` controls the local JSON/dashboard server
+- `status_history_persist` controls history persistence
+- `status_dashboard_enabled` controls whether `/dashboard` is served
+
 ---
 
 ## Typical Shape
@@ -31,6 +38,13 @@ models:
 status_history_persist: true
 status_dashboard_enabled: false
 ```
+
+Notes:
+
+- `status_server_enabled` is independent from `rpc_enabled`
+- `status_history_persist` defaults to `true`
+- `status_dashboard_enabled` defaults to `false`
+- The dashboard is read-only monitoring only
 
 ---
 

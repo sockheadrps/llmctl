@@ -1043,7 +1043,7 @@
         if ((Number(run.ram_mib) || 0) > 0) {
           trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', null, null, 'MiB', false));
         }
-        trendCards.push(trendCard('Tok/s', series, '#7dd3fc', null));
+        trendCards.push(trendCard('Tok/s', series, '#7dd3fc', null, null, '', true, false));
         const trendSummary = `
           <div class="model-trends">
             ${gpuCards}
@@ -1088,7 +1088,8 @@
 
     function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB', showChart = true, showYAxis = false) {
       const current = series.length ? series[series.length - 1] : 0;
-      const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
+      const lower = String(label || '').toLowerCase();
+      const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : lower.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
       return `
         <article class="trend-card">
           <div class="label">${label}</div>

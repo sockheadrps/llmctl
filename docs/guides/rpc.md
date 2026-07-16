@@ -1,6 +1,8 @@
 # Distributed GPU with RPC
 
-RPC mode lets you pool GPU resources across two machines. One machine contributes its GPU over the network; the other runs the model and offloads some layers to it - effectively running a model larger than either machine could hold alone.
+RPC mode lets you pool GPU resources across two machines. One machine contributes
+its GPU over the network; the other runs the model and offloads some layers to it,
+effectively running a model larger than either machine could hold alone.
 
 ---
 
@@ -21,19 +23,23 @@ RPC mode lets you pool GPU resources across two machines. One machine contribute
 
 llmctl wraps [llama.cpp's RPC backend](https://github.com/ggerganov/llama.cpp/tree/master/examples/rpc). The setup is two roles:
 
-**RPC server machine** - starts a `ggml-rpc-server` process that exposes its GPU over the network. It doesn't run any models itself; it just provides VRAM capacity.
+**RPC server machine** - starts a `ggml-rpc-server` process that exposes its GPU over the network. It doesn't run models itself; it just provides VRAM capacity.
 
 **RPC client machine** - runs `llama-server` with some layers offloaded to the RPC server. From the model's perspective, it has access to both GPUs. This machine also runs llmctl normally.
 
 Only the client machine needs llmctl. The server machine only needs the `ggml-rpc-server` binary (and optionally llmctl to manage it).
+
+RPC mode is separate from the local status server. You can enable the status server
+and dashboard without RPC, or run RPC without turning on the browser dashboard.
 
 ---
 
 ## Prerequisites
 
 Both machines need:
-- The same version of `llama-server` / `ggml-rpc-server` - mismatched versions are the most common source of connection failures, YMMV.
-- Network connectivity between them - they need to reach each other on the RPC port (default `50052`) and the status server port (default `11435`)
+
+- The same version of `llama-server` / `ggml-rpc-server` - mismatched versions are the most common source of connection failures.
+- Network connectivity between them - they need to reach each other on the RPC port (default `50052`).
 
 ---
 
@@ -43,7 +49,7 @@ On the machine that will contribute its GPU:
 
 1. Open llmctl and go to **Settings**
 2. Enable **RPC mode** and set it to **Server**
-3. Optionally configure the bind host and port (defaults work for most setups)
+3. Optionally configure the bind host and port
 4. Go to the **RPC Server** tab
 
 ![RPC Server start modal in server mode](../assets/screenshots/rpcserverstartmodal.png)
@@ -80,6 +86,8 @@ Switch to the **Overview** tab. Under **System Telemetry**, you'll see:
 
 ![Overview tab with local and remote telemetry populated](../assets/screenshots/concepts-overview-populated.png)
 
+If the model is split across GPUs, the Overview and dashboard also show per-GPU model-load slices once the startup log has been parsed.
+
 If GPU 1 doesn't appear, the client hasn't successfully connected yet - see [Troubleshooting](#troubleshooting) below.
 
 ---
@@ -88,9 +96,9 @@ If GPU 1 doesn't appear, the client hasn't successfully connected yet - see [Tro
 
 Create or select a profile on the client machine. With RPC connected, `llama-server` automatically uses the remote GPU for the layers you've allocated.
 
-The number of GPU layers in your profile is split across both GPUs - llama.cpp decides the distribution based on available VRAM. Load time will be slightly longer than local-only because weights are transferred over the network, but generation speed is typically close to having both GPUs locally.
+The number of GPU layers in your profile is split across both GPUs. llama.cpp decides the distribution based on available VRAM. Load time will be slightly longer than local-only because weights are transferred over the network, but generation speed is typically close to having both GPUs locally.
 
-Once running, the **Overview** tab on the server machine (if it's also running llmctl) will show the client's running instances under **Remote** in Active Services.
+Once running, the **Overview** tab on the server machine (if it's also running llmctl) will show the client's running instances under **Remote** in Active Services. The browser dashboard uses the same data.
 
 ---
 
