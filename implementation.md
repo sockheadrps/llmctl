@@ -36,6 +36,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - Running-model entries now include per-GPU VRAM load slices when the runtime can see them.
 - RPC server snapshots now publish their own per-GPU slices so split RPC loads can be shown from the server side too.
 - RPC server startup now reuses an already-running `ggml-rpc-server` that matches the configured binary, host, and port instead of spawning a duplicate.
+- Model VRAM slices on Windows now prefer the startup log lines (`CUDA* model buffer size = ...`, `RPC* model buffer size = ...`) so split RPC loads can be shown from the model log instead of guessing from raw PID GPU usage.
 
 ### Behavior notes
 

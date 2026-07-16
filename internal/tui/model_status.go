@@ -7,6 +7,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
+	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
@@ -225,13 +226,20 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			}
 		}
 		if !cpuOnly {
-			if mb, ok := m.gpuByPID[r.PID]; ok {
-				info.VRAMMiB = mb
-			}
-			if devices := m.gpuByPIDDevices[r.PID]; len(devices) > 0 {
-				info.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
-				for _, device := range devices {
-					info.GPUs = append(info.GPUs, toRunningGPUInfo(device))
+			if slices, err := process.ParseModelLoadSlices(r.LogFile); err == nil && len(slices) > 0 {
+				info.GPUs = slices
+				for _, slice := range slices {
+					info.VRAMMiB += slice.UsedMiB
+				}
+			} else {
+				if mb, ok := m.gpuByPID[r.PID]; ok {
+					info.VRAMMiB = mb
+				}
+				if devices := m.gpuByPIDDevices[r.PID]; len(devices) > 0 {
+					info.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
+					for _, device := range devices {
+						info.GPUs = append(info.GPUs, toRunningGPUInfo(device))
+					}
 				}
 			}
 		} else {
