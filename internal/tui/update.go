@@ -46,7 +46,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.gpuNameScroll++
 			}
 		}
-		return m, scrollTickCmd()
+		if m.shouldContinueScrollTick() {
+			return m, scrollTickCmd()
+		}
+		return m, nil
 
 	case healthMsg:
 		for key, status := range msg {

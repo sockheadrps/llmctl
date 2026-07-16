@@ -7,7 +7,6 @@ import (
 	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
-	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
@@ -135,7 +134,7 @@ func (m *Model) pushStatusServer() {
 
 // shared
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
-func (m Model) buildStatusSnapshot() statusserver.Status {
+func (m *Model) buildStatusSnapshot() statusserver.Status {
 	toGPUDeviceInfo := func(device gpu.DeviceUsage) statusserver.GPUDeviceInfo {
 		info := statusserver.GPUDeviceInfo{
 			Index:    device.Index,
@@ -202,8 +201,8 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 				cpuOnly = p.CPUOnly
 			}
 		}
-		if !cpuOnly {
-			if slices, err := process.ParseModelLoadSlices(r.LogFile); err == nil {
+		if !cpuOnly && h == health.StatusUp {
+			if slices, err := m.modelLoadSlices(r.LogFile); err == nil {
 				info.GPUs = slices
 				for _, slice := range slices {
 					info.VRAMMiB += slice.UsedMiB

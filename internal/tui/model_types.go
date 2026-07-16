@@ -113,6 +113,12 @@ type remoteStatusMsg struct {
 	err    error
 }
 
+type cachedModelLoad struct {
+	modTime time.Time
+	size    int64
+	slices  []statusserver.GPUDeviceInfo
+}
+
 const (
 	scrollTickInterval = 500 * time.Millisecond
 	scrollPauseTicks   = 2

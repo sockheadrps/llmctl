@@ -112,6 +112,8 @@ type Model struct {
 
 	tokHistory map[string][]float64
 
+	modelLoadCache map[string]cachedModelLoad
+
 	dividerDragging      bool
 	leftWidthOverride    int // 0 = auto (avail*2/5); positive = user-dragged override
 	rightDividerDragging bool
@@ -156,6 +158,7 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 		tokRates:         map[string]float64{},
 		tokPeak:          map[string]float64{},
 		tokHistory:       map[string][]float64{},
+		modelLoadCache:   map[string]cachedModelLoad{},
 		gpuAvailable:     gpu.Available(),
 		netSupported:     runtimeos.GOOS == "linux",
 		netInternetConn:  firstNonEmpty(cfg.NetworkInternetConn, netInternetConn),
@@ -381,6 +384,44 @@ func tailOrReason(logPath string) string {
 // Init starts the periodic refresh tick.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(tickCmd(), scrollTickCmd())
+}
+
+func (m Model) shouldContinueScrollTick() bool {
+	switch m.screen {
+	case screenNewProfile, screenMain:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, error) {
+	if strings.TrimSpace(logPath) == "" {
+		return nil, nil
+	}
+	if cached, ok := m.modelLoadCache[logPath]; ok && len(cached.slices) > 0 {
+		out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
+		copy(out, cached.slices)
+		return out, nil
+	}
+
+	slices, err := process.ParseModelLoadSlices(logPath)
+	if err != nil {
+		return nil, err
+	}
+	if m.modelLoadCache == nil {
+		m.modelLoadCache = make(map[string]cachedModelLoad)
+	}
+	if len(slices) == 0 {
+		return nil, nil
+	}
+	cached := cachedModelLoad{
+		slices: append([]statusserver.GPUDeviceInfo(nil), slices...),
+	}
+	m.modelLoadCache[logPath] = cached
+	out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
+	copy(out, cached.slices)
+	return out, nil
 }
 
 func tickCmd() tea.Cmd {
