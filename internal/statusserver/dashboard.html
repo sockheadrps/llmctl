@@ -109,21 +109,17 @@
     .meta { color: var(--muted); font-size: 13px; }
     .model-list { display: grid; gap: 12px; }
     .model {
-      display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap: 12px; align-items: start;
-      padding: 16px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12);
+      display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr); gap: 12px; align-items: start;
+      padding: 14px 16px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12);
     }
     .model-side {
       display: grid;
       gap: 10px;
       align-self: stretch;
     }
-    .model-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .model-top { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .model-title { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
-    .model-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
-    .badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; font-size: 12px; background: rgba(148, 163, 184, 0.12); }
-    .badge.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
-    .badge.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
-    .badge.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
+    .model-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
     .transition {
       display: inline-flex;
       align-items: center;
@@ -139,8 +135,15 @@
     .transition.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
     .transition.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
     .transition.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
-    .metrics { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; color: var(--muted); font-size: 12px; }
-    .metric strong { display: block; margin-top: 2px; color: var(--text); font-size: 15px; font-weight: 700; }
+    .metrics {
+      display: grid;
+      gap: 4px 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .metric strong { display: block; margin-top: 1px; color: var(--text); font-size: 14px; font-weight: 700; }
     .spark { width: 100%; height: 82px; display: block; }
     .gridline { stroke: rgba(148, 163, 184, 0.14); stroke-width: 1; }
     .line { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.18)); }
@@ -156,12 +159,14 @@
     }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
-    .model-trends { display: grid; gap: 12px; }
+    .model-trends { display: grid; gap: 10px; }
     .model-trends .trend-row { margin-bottom: 0; }
+    .model-trends .trend-card .spark { height: 72px; }
     .gpu-list { display: grid; gap: 10px; margin-top: 12px; }
     .gpu-row { display: grid; gap: 6px; }
     .gpu-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; color: var(--muted); font-size: 12px; }
     .gpu-head strong { color: var(--text); font-size: 14px; }
+    .gpu-model { color: var(--muted); font-size: 11px; margin-top: 2px; }
     .gpu-bar {
       position: relative;
       overflow: hidden;
@@ -327,7 +332,6 @@
     };
     const state = {
       selectedSource: 'local',
-      expandedRunKeys: {},
     };
     let currentHistory = { samples: [] };
 
@@ -431,14 +435,6 @@
       return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
     }
 
-    function toggleModelDetails(key) {
-      if (state.expandedRunKeys[key]) {
-        delete state.expandedRunKeys[key];
-      } else {
-        state.expandedRunKeys[key] = true;
-      }
-    }
-
     function aggregateSamples(history, runs, field) {
       const keys = runs.map(sourceRunKey);
       return filteredSamples(history).map(sample => {
@@ -517,12 +513,6 @@
         </svg>`;
     }
 
-    function badgeClass(health) {
-      if (health === 'up') return 'good';
-      if (health === 'down') return 'bad';
-      return 'warn';
-    }
-
     function healthTransition(history, current) {
       const key = sourceRunKey(current);
       const states = filteredSamples(history)
@@ -574,7 +564,6 @@
       if (!resetBtn.dataset.bound) {
         resetBtn.addEventListener('click', () => {
           state.selectedSource = 'local';
-          state.expandedRunKeys = {};
           render(status, history);
         });
         resetBtn.dataset.bound = '1';
@@ -606,6 +595,7 @@
       if (includeLocal && status.gpu) {
         entries.push({
           label: 'Local GPU',
+          model: status.gpu.name || 'Unknown GPU',
           used: Number(status.gpu.used_mib) || 0,
           total: Number(status.gpu.total_mib) || 0,
         });
@@ -616,6 +606,7 @@
           if (!client.gpu) return;
           entries.push({
             label: client.name || client.id || 'Remote client',
+            model: client.gpu.name || 'Unknown GPU',
             used: Number(client.gpu.used_mib) || 0,
             total: Number(client.gpu.total_mib) || 0,
           });
@@ -654,9 +645,7 @@
         const ramSeries = valuesFor(history, run, 'ram_mib');
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
-        const key = sourceRunKey(run);
-        const expanded = !!state.expandedRunKeys[key];
-        const trendSummary = expanded ? `
+        const trendSummary = `
           <div class="model-trends">
             <div class="trend-row">
               ${trendCard(`${run.model} VRAM`, vramSeries, '#a78bfa', 'Per-model VRAM trend')}
@@ -666,7 +655,7 @@
               ${trendCard(`${run.model} tok/s`, series, '#7dd3fc', 'Per-model tok/s trend')}
             </div>
           </div>
-        ` : '';
+        `;
         const meta = [
           run.sourceId && run.sourceId !== 'local' ? `source ${run.sourceName || run.sourceId}` : null,
           run.alias ? `alias ${run.alias}` : null,
@@ -690,9 +679,7 @@
                   <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
-                  <button type="button" class="pill ${expanded ? 'active' : ''}" data-expand="${escapeHtml(key)}">${expanded ? 'Hide trends' : 'Show trends'}</button>
                   ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
-                  <span class="badge ${badgeClass(health)}">${escapeHtml(health)}</span>
                 </div>
               </div>
               <div class="metrics">${metrics}</div>
@@ -703,12 +690,6 @@
             </div>
           </article>`;
       }).join('');
-      list.querySelectorAll('button[data-expand]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          toggleModelDetails(btn.dataset.expand);
-          render(window.lastStatus, currentHistory);
-        });
-      });
     }
 
     function trendCard(label, series, color, subtitle) {
@@ -747,7 +728,10 @@
                     return `
                       <div class="gpu-row">
                         <div class="gpu-head">
-                          <strong>${escapeHtml(entry.label)}</strong>
+                          <div>
+                            <strong>${escapeHtml(entry.label)}</strong>
+                            <div class="gpu-model">${escapeHtml(entry.model)}</div>
+                          </div>
                           <span>${escapeHtml(amount)}</span>
                         </div>
                         <div class="gpu-bar" aria-hidden="true">

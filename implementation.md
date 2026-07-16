@@ -55,12 +55,12 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
   - all
 - The dashboard shows runs from the selected source and connected RPC telemetry.
 - The main control row no longer exposes model, profile, or time-range filters.
-- The active-model cards now own their own expandable trend blocks.
+- The active-model cards now always show their trend blocks inline.
 - The dashboard includes:
   - current running model cards
   - tok/s trends
   - per-model VRAM and RAM trends
-  - health transition badges
+  - health transition badges when a run changes state
 - The source trends panel now shows:
   - a per-GPU VRAM utilization card with stacked horizontal bars
   - a combined VRAM trend chart for the selected source
