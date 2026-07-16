@@ -514,9 +514,9 @@
       return { path, area };
     }
 
-    function sparkline(values, color, label, valueText = null, unit = '') {
+    function sparkline(values, color, label, valueText = null, unit = '', showYAxis = false) {
       const width = 220;
-      const height = 82;
+      const height = 92;
       const pad = 8;
       const data = pointToXY(values, width, height, pad);
       if (!data) return '<div class="empty">No samples yet</div>';
@@ -525,10 +525,14 @@
       return `
         <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
           <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
+          ${showYAxis ? `
+            <text x="${pad}" y="16" fill="rgba(148,163,184,0.8)" font-size="11">100%</text>
+            <text x="${pad}" y="${height - 6}" fill="rgba(148,163,184,0.8)" font-size="11">0%</text>
+          ` : ''}
           <path class="area" d="${data.area}" style="fill:${color}"></path>
           <path class="line" d="${data.path}" style="stroke:${color}"></path>
-          <text x="${pad}" y="18" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
-          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>
+          <text x="${showYAxis ? pad + 28 : pad}" y="${showYAxis ? 16 : 18}" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
+          ${showYAxis ? '' : `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>`}
         </svg>`;
     }
 
@@ -655,7 +659,7 @@
         const transition = healthTransition(history, run);
         const trendCards = [];
         if ((Number(run.vram_mib) || 0) > 0) {
-          trendCards.push(trendCard('VRAM Utilization', vramUtilSeries, '#a78bfa', 'Share of selected source VRAM', null, '%'));
+          trendCards.push(trendCard('VRAM Utilization', vramUtilSeries, '#a78bfa', 'Share of selected source VRAM', null, '%', true, true));
         }
         if ((Number(run.ram_mib) || 0) > 0) {
           trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', 'Current model RAM usage', null, 'MiB', false));
@@ -701,7 +705,7 @@
       }).join('');
     }
 
-    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB', showChart = true) {
+    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB', showChart = true, showYAxis = false) {
       const current = series.length ? series[series.length - 1] : 0;
       const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
       return `
@@ -709,7 +713,7 @@
           <div class="label">${label}</div>
           <div class="value">${escapeHtml(value)}</div>
           <div class="model-meta">${escapeHtml(subtitle)}</div>
-          ${showChart ? `<div style="margin-top: 10px">${sparkline(series, color, label, valueText, unit)}</div>` : ''}
+          ${showChart ? `<div style="margin-top: 10px">${sparkline(series, color, label, valueText, unit, showYAxis)}</div>` : ''}
         </article>`;
     }
 
@@ -759,7 +763,7 @@
             }
           </article>
         `,
-        trendCard('Source VRAM Utilization', vramUtilSeries, '#a78bfa', 'Combined VRAM utilization across the selected source', vramValue, '%'),
+        trendCard('Source VRAM Utilization', vramUtilSeries, '#a78bfa', 'Combined VRAM utilization across the selected source', vramValue, '%', true, true),
       ].join('');
     }
 
