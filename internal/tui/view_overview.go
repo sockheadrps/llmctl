@@ -15,6 +15,11 @@ import (
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
+type gpuLoadSlice struct {
+	label string
+	info  statusserver.GPUDeviceInfo
+}
+
 // viewOverviewPage renders the complete Overview screen as a single outer box
 // (╭ at col 0, ╮ at col totalW-1) with a vertical │ separator between two
 // columns: ACTIVE SERVICES on the left, SYSTEM TELEMETRY on the right.
@@ -337,23 +342,45 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	if spark := tokSparkline(ri.TokHistory); spark != "" {
 		b.WriteString("   " + spark + "\n")
 	}
-	if gpuLines := m.renderRunningGPUBreakdown(ri, contentW); gpuLines != "" {
+	if gpuLines := m.renderRunningGPUBreakdown(m.combinedRemoteGPUSlices(ri), contentW); gpuLines != "" {
 		b.WriteString(gpuLines)
 	}
 	return b.String()
 }
 
-func (m Model) renderRunningGPUBreakdown(ri statusserver.RunningInfo, contentW int) string {
-	if len(ri.GPUs) == 0 {
+func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSlice {
+	slices := make([]gpuLoadSlice, 0, len(ri.GPUs))
+	for _, gpu := range ri.GPUs {
+		slices = append(slices, gpuLoadSlice{label: "Remote", info: gpu})
+	}
+
+	if m.cfg != nil && m.cfg.RPCMode == "server" && m.statusServer != nil {
+		current := m.statusServer.Status()
+		for _, local := range current.Running {
+			if local.Model != ri.Model || local.Profile != ri.Profile {
+				continue
+			}
+			for _, gpu := range local.GPUs {
+				slices = append(slices, gpuLoadSlice{label: "Local", info: gpu})
+			}
+			break
+		}
+	}
+	return slices
+}
+
+func (m Model) renderRunningGPUBreakdown(slices []gpuLoadSlice, contentW int) string {
+	if len(slices) == 0 {
 		return ""
 	}
 	totalModelLoad := int64(0)
-	for _, gpu := range ri.GPUs {
-		totalModelLoad += gpu.UsedMiB
+	for _, slice := range slices {
+		totalModelLoad += slice.info.UsedMiB
 	}
 	var b strings.Builder
 	b.WriteString(detailMutedStyle.Render("     RPC GPU load") + "\n")
-	for _, gpu := range ri.GPUs {
+	for _, slice := range slices {
+		gpu := slice.info
 		label := gpu.Name
 		if label == "" {
 			label = gpu.UUID
@@ -365,6 +392,7 @@ func (m Model) renderRunningGPUBreakdown(ri statusserver.RunningInfo, contentW i
 				label = "GPU"
 			}
 		}
+		label = slice.label + " " + label
 		used := fmt.Sprintf("%.1fG", float64(gpu.UsedMiB)/1024)
 		if gpu.UsedMiB < 1024 {
 			used = fmt.Sprintf("%d MiB", gpu.UsedMiB)

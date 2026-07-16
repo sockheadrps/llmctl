@@ -489,6 +489,43 @@
       return selectedSourceRuns(status);
     }
 
+    function modelGroupKey(run) {
+      return [run.model || '', run.profile || ''].join('::');
+    }
+
+    function groupedRuns(status) {
+      const groups = new Map();
+      const order = [];
+      selectedSourceRuns(status).forEach(run => {
+        const key = modelGroupKey(run);
+        if (!groups.has(key)) {
+          groups.set(key, []);
+          order.push(key);
+        }
+        groups.get(key).push(run);
+      });
+      return order.map(key => {
+        const runs = groups.get(key) || [];
+        return { key, runs, primary: runs[0] || null };
+      });
+    }
+
+    function groupSum(group, field) {
+      return (group.runs || []).reduce((sum, run) => sum + (Number(run[field]) || 0), 0);
+    }
+
+    function groupFirstNonZero(group, field) {
+      for (const run of group.runs || []) {
+        const value = Number(run[field]) || 0;
+        if (value > 0) return value;
+      }
+      return 0;
+    }
+
+    function groupSources(group) {
+      return (group.runs || []).map(run => run.sourceId === 'local' ? 'Local' : (run.sourceName || run.sourceId || 'Remote'));
+    }
+
     function sourceRunsForSample(sample) {
       if (state.selectedSource === 'local') {
         return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
@@ -756,28 +793,42 @@
       });
     }
 
-    function modelGpuCards(history, run) {
-      const gpus = (run.gpus || []).slice().sort((a, b) => {
-        const ai = Number.isFinite(Number(a.index)) ? Number(a.index) : Number.MAX_SAFE_INTEGER;
-        const bi = Number.isFinite(Number(b.index)) ? Number(b.index) : Number.MAX_SAFE_INTEGER;
-        if (ai !== bi) return ai - bi;
-        return String(a.name || '').localeCompare(String(b.name || ''));
+    function modelGpuSlices(status, group) {
+      const slices = [];
+      (group.runs || []).forEach(run => {
+        const sourceLabel = run.sourceId === 'local' ? 'Local' : (run.sourceName || run.sourceId || 'Remote');
+        (run.gpus || []).forEach(gpu => {
+          slices.push({ run, sourceLabel, gpu });
+        });
       });
-      if (!gpus.length) return '';
-      const totalLoad = gpus.reduce((sum, gpu) => sum + (Number(gpu.used_mib) || 0), 0);
-      return gpus.map(gpu => {
+      slices.sort((a, b) => {
+        if (a.sourceLabel !== b.sourceLabel) return a.sourceLabel.localeCompare(b.sourceLabel);
+        const ai = Number.isFinite(Number(a.gpu.index)) ? Number(a.gpu.index) : Number.MAX_SAFE_INTEGER;
+        const bi = Number.isFinite(Number(b.gpu.index)) ? Number(b.gpu.index) : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return String(a.gpu.name || '').localeCompare(String(b.gpu.name || ''));
+      });
+      return slices;
+    }
+
+    function modelGpuCards(history, status, group) {
+      const slices = modelGpuSlices(status, group);
+      if (!slices.length) return '';
+      const totalLoad = slices.reduce((sum, slice) => sum + (Number(slice.gpu.used_mib) || 0), 0);
+      return slices.map(slice => {
+        const gpu = slice.gpu;
         const used = Number(gpu.used_mib) || 0;
         const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
         const modelName = gpu.name || gpu.uuid || 'Unknown GPU';
         const amount = `${fmtMiB(used)} loaded`;
         const pct = totalLoad > 0 ? Math.max(0, Math.min(100, (used / totalLoad) * 100)) : 0;
         const pctText = totalLoad > 0 ? `${pct.toFixed(1)}% of model` : 'model slice';
-        const series = runGpuLoadSeries(history, run, gpu);
+        const series = runGpuLoadSeries(history, slice.run, gpu);
         const current = series.length ? series[series.length - 1] : used;
         return `
           <article class="trend-card gpu-load-card">
             <div class="gpu-load-head">
-              <div class="label">${escapeHtml(gpuLabel)}</div>
+              <div class="label">${escapeHtml(slice.sourceLabel + ' ' + gpuLabel)}</div>
               <div class="gpu-load-badge">${escapeHtml(pctText)}</div>
             </div>
             <div class="value">${escapeHtml(amount)}</div>
@@ -786,7 +837,7 @@
               <span>${escapeHtml(totalLoad > 0 ? `${fmtMiB(totalLoad)} model total` : 'model load')}</span>
               <span>${escapeHtml(totalLoad > 0 ? `${fmtNum(pct)}%` : amount)}</span>
             </div>
-            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
+            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${slice.sourceLabel} ${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
           </article>`;
       }).join('');
     }
@@ -809,18 +860,22 @@
     function renderModels(status, history) {
       const list = document.getElementById('models');
       const current = filteredRuns(status);
+      const groups = groupedRuns(status);
       document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
-      if (!current.length) {
+      if (!groups.length) {
         list.innerHTML = '<div class="empty">No visible models are running right now.</div>';
         return;
       }
-      list.innerHTML = current.map(run => {
+      list.innerHTML = groups.map(group => {
+        const run = group.primary;
         const series = valuesFor(history, run, 'tok_s');
         const vramSeries = valuesFor(history, run, 'vram_mib');
         const ramSeries = valuesFor(history, run, 'ram_mib');
-        const gpuCards = modelGpuCards(history, run);
+        const gpuCards = modelGpuCards(history, status, group);
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
+        const sources = groupSources(group).filter((item, index, arr) => arr.indexOf(item) === index);
+        const sourceMeta = sources.length > 1 ? `sources ${sources.join(' + ')}` : `source ${sources[0] || 'Local'}`;
         const trendCards = [];
         if (!gpuCards && (Number(run.vram_mib) || 0) > 0) {
           trendCards.push(trendCard('VRAM Loaded', vramSeries, '#a78bfa', null, null, 'MiB', true, false));
@@ -836,17 +891,17 @@
           </div>
         `;
         const meta = [
-          run.sourceId && run.sourceId !== 'local' ? `source ${run.sourceName || run.sourceId}` : null,
+          sourceMeta,
           run.alias ? `alias ${run.alias}` : null,
           `port ${run.port}`,
           run.model_size_bytes ? `${fmtMiB(run.model_size_bytes / (1024 * 1024))}` : null,
         ].filter(Boolean).join(' | ');
         const metrics = [
-          metric('tok/s', fmtNum(run.tok_s)),
-          metric('peak', fmtNum(run.tok_peak)),
-          metric('avg', fmtNum(run.tok_avg)),
-          metric('VRAM', fmtMiB(run.vram_mib)),
-          metric('RAM', fmtMiB(run.ram_mib)),
+          metric('tok/s', fmtNum(groupFirstNonZero(group, 'tok_s') || run.tok_s)),
+          metric('peak', fmtNum(groupFirstNonZero(group, 'tok_peak') || run.tok_peak)),
+          metric('avg', fmtNum(groupFirstNonZero(group, 'tok_avg') || run.tok_avg)),
+          metric('VRAM', fmtMiB(groupSum(group, 'vram_mib') || run.vram_mib)),
+          metric('RAM', fmtMiB(groupSum(group, 'ram_mib') || run.ram_mib)),
           metric('size', run.model_size_bytes ? fmtMiB(run.model_size_bytes / (1024 * 1024)) : 'n/a'),
         ].join('');
         return `
@@ -858,7 +913,7 @@
                   <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
-                  ${run.sourceId !== 'local' ? '<span class="source-chip">RPC</span>' : ''}
+                  ${group.runs.some(item => item.sourceId !== 'local') ? '<span class="source-chip">RPC</span>' : ''}
                   ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
                 </div>
               </div>

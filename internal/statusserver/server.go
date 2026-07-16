@@ -112,6 +112,13 @@ func (s *Server) History() []HistorySample {
 	return out
 }
 
+// Status returns the current snapshot served at /status.
+func (s *Server) Status() Status {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.statusLocked()
+}
+
 // ClientStatuses returns recently pushed RPC client snapshots.
 func (s *Server) ClientStatuses(window time.Duration) []ClientInfo {
 	s.mu.RLock()
