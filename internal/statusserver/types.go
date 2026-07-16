@@ -42,10 +42,11 @@ type RunningInfo struct {
 
 // RPCInfo describes the local ggml-rpc-server state.
 type RPCInfo struct {
-	Up      bool   `json:"up"`
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	VRAMMiB int64  `json:"vram_mib,omitempty"`
+	Up      bool            `json:"up"`
+	Host    string          `json:"host"`
+	Port    int             `json:"port"`
+	VRAMMiB int64           `json:"vram_mib,omitempty"`
+	GPUs    []GPUDeviceInfo `json:"gpus,omitempty"`
 }
 
 // GPUInfo describes the local GPU.

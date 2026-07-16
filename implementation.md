@@ -34,6 +34,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - `GET /` redirects to `/dashboard` when enabled, otherwise to `/status`.
 - Status snapshots now include per-GPU device slices alongside aggregate VRAM totals.
 - Running-model entries now include per-GPU VRAM load slices when the runtime can see them.
+- RPC server snapshots now publish their own per-GPU slices so split RPC loads can be shown from the server side too.
 
 ### Behavior notes
 
@@ -68,7 +69,9 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - The per-GPU cards now represent model-slice load distribution, not raw GPU capacity utilization.
 - Split RPC models now merge matching local and remote peers so the UI can show the full model load across all GPUs.
 - The dashboard groups split models across all peers first, then filters the visible group by source so the combined GPU slices stay intact.
+- The dashboard now uses an explicit `allSourceRuns` helper so grouped cards keep working while still merging local and remote peers.
 - The TUI Overview screen now labels remote active services as `RPC` and shows their per-GPU model load slices in the active-services list.
+- The TUI Overview screen now merges the server-side RPC GPU slices with the connected client slices so the split model load is visible on both sides.
 - The source trends panel now shows:
   - a per-GPU VRAM utilization card with stacked horizontal bars
   - a combined VRAM trend chart for the selected source

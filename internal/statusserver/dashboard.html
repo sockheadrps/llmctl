@@ -485,6 +485,10 @@
       return localRuns(status);
     }
 
+    function allSourceRuns(status) {
+      return localRuns(status).concat(clientRuns(status));
+    }
+
     function filteredRuns(status) {
       return selectedSourceRuns(status);
     }
@@ -813,6 +817,18 @@
           slices.push({ run, sourceLabel, gpu });
         });
       });
+      if (status.rpc_server && Array.isArray(status.rpc_server.gpus) && status.rpc_server.gpus.length > 0) {
+        const hasRemote = (group.runs || []).some(run => run.sourceId !== 'local');
+        if (hasRemote) {
+          status.rpc_server.gpus.forEach(gpu => {
+            slices.push({
+              run: group.primary,
+              sourceLabel: 'Local RPC',
+              gpu,
+            });
+          });
+        }
+      }
       slices.sort((a, b) => {
         if (a.sourceLabel !== b.sourceLabel) return a.sourceLabel.localeCompare(b.sourceLabel);
         const ai = Number.isFinite(Number(a.gpu.index)) ? Number(a.gpu.index) : Number.MAX_SAFE_INTEGER;

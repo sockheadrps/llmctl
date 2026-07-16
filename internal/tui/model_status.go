@@ -256,6 +256,12 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 		if mb, ok := m.gpuByPID[m.rpcServerState.PID]; ok {
 			rpcInfo.VRAMMiB = mb
 		}
+		if devices := m.gpuByPIDDevices[m.rpcServerState.PID]; len(devices) > 0 {
+			rpcInfo.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
+			for _, device := range devices {
+				rpcInfo.GPUs = append(rpcInfo.GPUs, toRunningGPUInfo(device))
+			}
+		}
 		st.RPCServer = rpcInfo
 	}
 
