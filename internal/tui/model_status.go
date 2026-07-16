@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sockheadrps/llmctl/internal/build"
+	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
@@ -134,6 +135,43 @@ func (m *Model) pushStatusServer() {
 // shared
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
 func (m Model) buildStatusSnapshot() statusserver.Status {
+	gpuMeta := make(map[string]gpu.DeviceUsage, len(m.gpuDevices))
+	for _, device := range m.gpuDevices {
+		if device.UUID != "" {
+			gpuMeta[device.UUID] = device
+		}
+	}
+
+	toGPUDeviceInfo := func(device gpu.DeviceUsage) statusserver.GPUDeviceInfo {
+		info := statusserver.GPUDeviceInfo{
+			Index:    device.Index,
+			UUID:     device.UUID,
+			Name:     device.Name,
+			UsedMiB:  device.UsedMiB,
+			TotalMiB: device.TotalMiB,
+		}
+		if info.Name == "" {
+			info.Name = "Unknown GPU"
+		}
+		return info
+	}
+
+	toRunningGPUInfo := func(device gpu.ProcessUsage) statusserver.GPUDeviceInfo {
+		info := statusserver.GPUDeviceInfo{
+			UUID:    device.GPUUUID,
+			UsedMiB: device.UsedMiB,
+		}
+		if meta, ok := gpuMeta[device.GPUUUID]; ok {
+			info.Index = meta.Index
+			info.Name = meta.Name
+			info.TotalMiB = meta.TotalMiB
+		}
+		if info.Name == "" {
+			info.Name = device.GPUUUID
+		}
+		return info
+	}
+
 	running := make([]statusserver.RunningInfo, 0, len(m.running))
 	for _, r := range m.running {
 		key := r.ModelKey + "/" + r.ProfileKey
@@ -190,6 +228,12 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			if mb, ok := m.gpuByPID[r.PID]; ok {
 				info.VRAMMiB = mb
 			}
+			if devices := m.gpuByPIDDevices[r.PID]; len(devices) > 0 {
+				info.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
+				for _, device := range devices {
+					info.GPUs = append(info.GPUs, toRunningGPUInfo(device))
+				}
+			}
 		} else {
 			if mb, ok := m.ramByPID[r.PID]; ok {
 				info.RAMMiB = mb
@@ -216,10 +260,15 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 	}
 
 	if m.gpuAvailable && m.gpuUsage.TotalMiB > 0 {
+		devices := make([]statusserver.GPUDeviceInfo, 0, len(m.gpuDevices))
+		for _, device := range m.gpuDevices {
+			devices = append(devices, toGPUDeviceInfo(device))
+		}
 		st.GPU = &statusserver.GPUInfo{
 			Name:     m.gpuName,
 			TotalMiB: m.gpuUsage.TotalMiB,
 			UsedMiB:  m.gpuUsage.UsedMiB,
+			Devices:  devices,
 		}
 	}
 

@@ -96,8 +96,10 @@ type slotsMsg map[string]int
 // vramMsg carries a GPU VRAM snapshot: aggregate usage plus a per-PID
 // breakdown for matching against running instances.
 type vramMsg struct {
-	usage gpu.Usage
-	byPID map[int]int64
+	usage        gpu.Usage
+	byPID        map[int]int64
+	devices      []gpu.DeviceUsage
+	byPIDDevices map[int][]gpu.ProcessUsage
 }
 
 // ramMsg carries RSS MiB per PID for CPU-only model processes.

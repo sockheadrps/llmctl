@@ -32,6 +32,8 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - `GET /history` returns bounded history samples for charting.
 - `GET /dashboard` serves the browser UI when dashboard serving is enabled.
 - `GET /` redirects to `/dashboard` when enabled, otherwise to `/status`.
+- Status snapshots now include per-GPU device slices alongside aggregate VRAM totals.
+- Running-model entries now include per-GPU VRAM load slices when the runtime can see them.
 
 ### Behavior notes
 
@@ -61,6 +63,9 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
   - tok/s trends
   - per-model VRAM and RAM trends
   - health transition badges when a run changes state
+- Active-model cards now render per-GPU VRAM load cards when device slices are available.
+- RPC-loaded models keep the `RPC` badge and can show a GPU-by-GPU load breakdown instead of only a single aggregate chart.
+- The TUI Overview screen now labels remote active services as `RPC` and shows their per-GPU model load slices in the active-services list.
 - The source trends panel now shows:
   - a per-GPU VRAM utilization card with stacked horizontal bars
   - a combined VRAM trend chart for the selected source

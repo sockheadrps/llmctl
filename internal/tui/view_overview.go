@@ -290,7 +290,11 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	case string(health.StatusDown):
 		dot = downStyle.Render("●")
 	}
-	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4))))
+	rpcBadge := ""
+	if len(ri.GPUs) > 0 || ri.VRAMMiB > 0 {
+		rpcBadge = " " + detailMutedStyle.Render("[RPC]")
+	}
+	b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4)), rpcBadge))
 
 	narrow := contentW < 50
 
@@ -331,6 +335,52 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	}
 	if spark := tokSparkline(ri.TokHistory); spark != "" {
 		b.WriteString("   " + spark + "\n")
+	}
+	if gpuLines := m.renderRunningGPUBreakdown(ri, contentW); gpuLines != "" {
+		b.WriteString(gpuLines)
+	}
+	return b.String()
+}
+
+func (m Model) renderRunningGPUBreakdown(ri statusserver.RunningInfo, contentW int) string {
+	if len(ri.GPUs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(detailMutedStyle.Render("     RPC GPU load") + "\n")
+	for _, gpu := range ri.GPUs {
+		label := gpu.Name
+		if label == "" {
+			label = gpu.UUID
+		}
+		if label == "" {
+			if gpu.Index >= 0 {
+				label = fmt.Sprintf("GPU %d", gpu.Index)
+			} else {
+				label = "GPU"
+			}
+		}
+		used := fmt.Sprintf("%.1fG", float64(gpu.UsedMiB)/1024)
+		if gpu.UsedMiB < 1024 {
+			used = fmt.Sprintf("%d MiB", gpu.UsedMiB)
+		}
+		total := ""
+		if gpu.TotalMiB > 0 {
+			total = fmt.Sprintf(" / %.1fG", float64(gpu.TotalMiB)/1024)
+			if gpu.TotalMiB < 1024 {
+				total = fmt.Sprintf(" / %d MiB", gpu.TotalMiB)
+			}
+		}
+		pct := ""
+		if gpu.TotalMiB > 0 {
+			pct = fmt.Sprintf("  (%.1f%%)", float64(gpu.UsedMiB)/float64(gpu.TotalMiB)*100)
+		}
+		line := fmt.Sprintf("     %s: %s%s%s", label, used, total, pct)
+		if lipgloss.Width(line) > contentW {
+			line = fmt.Sprintf("     %s: %s%s", label, used, pct)
+		}
+		b.WriteString(detailMutedStyle.Render(line))
+		b.WriteString("\n")
 	}
 	return b.String()
 }

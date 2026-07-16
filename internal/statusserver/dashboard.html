@@ -172,6 +172,53 @@
     .model-trends .trend-card .spark { height: 54px; }
     .model-trends .trend-card .label { font-size: 10px; line-height: 1.2; }
     .model-trends .trend-card .model-meta { display: none; }
+    .gpu-load-card {
+      padding: 10px 12px;
+      min-height: 0;
+    }
+    .gpu-load-card .gpu-load-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .gpu-load-card .gpu-load-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(125, 211, 252, 0.14);
+      color: #d9f3ff;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      white-space: nowrap;
+    }
+    .gpu-load-card .value {
+      font-size: 24px;
+      margin-top: 8px;
+    }
+    .gpu-load-card .gpu-model {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+      line-height: 1.25;
+      min-height: 30px;
+    }
+    .gpu-load-card .gpu-load-meta {
+      color: rgba(232, 238, 252, 0.82);
+      font-size: 12px;
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .gpu-load-card .gpu-bar {
+      margin-top: 9px;
+      height: 13px;
+    }
     .trend-card .chart-wrap {
       margin-top: 6px;
       flex: 1;
@@ -694,6 +741,41 @@
       });
     }
 
+    function modelGpuCards(run) {
+      const gpus = (run.gpus || []).slice().sort((a, b) => {
+        const ai = Number.isFinite(Number(a.index)) ? Number(a.index) : Number.MAX_SAFE_INTEGER;
+        const bi = Number.isFinite(Number(b.index)) ? Number(b.index) : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      if (!gpus.length) return '';
+      return gpus.map(gpu => {
+        const used = Number(gpu.used_mib) || 0;
+        const total = Number(gpu.total_mib) || 0;
+        const pct = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : (used > 0 ? 100 : 0);
+        const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
+        const amount = total > 0 ? `${fmtMiB(used)} / ${fmtMiB(total)}` : `${fmtMiB(used)} loaded`;
+        const modelName = gpu.name || gpu.uuid || 'Unknown GPU';
+        const pctText = `${pct.toFixed(1)}%`;
+        return `
+          <article class="trend-card gpu-load-card">
+            <div class="gpu-load-head">
+              <div class="label">${escapeHtml(gpuLabel)}</div>
+              <div class="gpu-load-badge">${escapeHtml(pctText)}</div>
+            </div>
+            <div class="value">${escapeHtml(amount)}</div>
+            <div class="gpu-model">${escapeHtml(modelName)}</div>
+            <div class="gpu-load-meta">
+              <span>${escapeHtml(amount)}</span>
+              <span>${escapeHtml(pctText)}</span>
+            </div>
+            <div class="gpu-bar" aria-hidden="true">
+              <div class="gpu-fill" style="width: ${pct.toFixed(1)}%"></div>
+            </div>
+          </article>`;
+      }).join('');
+    }
+
     function selectedSourceSummary(status) {
       const running = filteredRuns(status);
       const localActive = running.filter(run => run.sourceId === 'local').length;
@@ -723,10 +805,11 @@
         const ramSeries = valuesFor(history, run, 'ram_mib');
         const sourceGpu = runSourceGpuInfo(status, run);
         const sourceGpuUtilSeries = runSourceGpuUtilSeries(history, run);
+        const gpuCards = modelGpuCards(run);
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
         const trendCards = [];
-        if ((Number(run.vram_mib) || 0) > 0) {
+        if (!gpuCards && (Number(run.vram_mib) || 0) > 0) {
           if (run.sourceId !== 'local' && sourceGpu && sourceGpu.total > 0) {
             trendCards.push(trendCard('RPC GPU Load', sourceGpuUtilSeries, '#a78bfa', null, null, '%', true, true));
           } else {
@@ -739,6 +822,7 @@
         trendCards.push(trendCard('Tok/s', series, '#7dd3fc', null));
         const trendSummary = `
           <div class="model-trends">
+            ${gpuCards}
             ${trendCards.join('')}
           </div>
         `;
