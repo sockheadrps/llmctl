@@ -29,7 +29,7 @@ models:
         ctx_size: 8192
         gpu_layers: 99
 status_history_persist: true
-status_dashboard_enabled: true
+status_dashboard_enabled: false
 ```
 
 ---

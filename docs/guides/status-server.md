@@ -18,7 +18,7 @@ When history persistence is enabled, llmctl stores those samples in `~/.llmctl/s
 
 The dashboard also includes model and profile filters, a time-range control, and health-change coloring so you can zoom into one run or compare several at once.
 
-You can disable the browser dashboard from the Status Server settings while keeping `/status` and `/history` available for JSON and remote-client use.
+The browser dashboard is off by default for new configs. You can enable or disable it from the Status Server settings while keeping `/status` and `/history` available for JSON and remote-client use.
 
 You can also ask the CLI for the local instance list:
 

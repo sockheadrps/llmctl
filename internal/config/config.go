@@ -50,7 +50,7 @@ func Load(path string) (*Config, error) {
 			LlamaServerBin:               "llama-server",
 			ModelsDirs:                   []string{},
 			StatusServerHistoryPersist:   util.BoolPtr(true),
-			StatusServerDashboardEnabled: util.BoolPtr(true),
+			StatusServerDashboardEnabled: util.BoolPtr(false),
 			Models:                       map[string]models.Model{},
 		}
 		if err := Save(path, cfg); err != nil {
@@ -86,9 +86,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.StatusServerHistoryPersist == nil {
 		cfg.StatusServerHistoryPersist = util.BoolPtr(true)
-	}
-	if cfg.StatusServerDashboardEnabled == nil {
-		cfg.StatusServerDashboardEnabled = util.BoolPtr(true)
 	}
 
 	// Migrate the old single-directory field in, then drop it — the next

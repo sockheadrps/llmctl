@@ -38,6 +38,7 @@ Build a browser-style dashboard for server-enabled `llmctl` processes by extendi
 - [x] Add an all-client summary row.
 - [x] Make the main model chart source-selectable across local and connected clients.
 - [x] Add a setting to disable the browser dashboard while keeping `/status` and `/history`.
+- [x] Default the dashboard to off for new configs.
 
 ## Phase 4: Polish
 
