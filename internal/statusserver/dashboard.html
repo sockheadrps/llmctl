@@ -501,6 +501,7 @@
       let path = '';
       let area = '';
       let started = false;
+      const points = [];
       values.forEach((v, i) => {
         if (!Number.isFinite(v)) {
           started = false;
@@ -518,33 +519,35 @@
           path += ` L ${px} ${py}`;
         }
         area += ` L ${px} ${py}`;
+        points.push({ x: x, y: y, value: v });
       });
       if (!path) return null;
       const lastIndex = values.length - 1;
       const lastX = (pad + (step * lastIndex)).toFixed(1);
       area += ` L ${lastX} ${height - pad} Z`;
-      return { path, area };
+      return { path, area, points };
     }
 
     function sparkline(values, color, label, valueText = null, unit = '', showYAxis = false) {
       const width = 220;
-      const height = 92;
+      const height = showYAxis ? 120 : 92;
       const pad = 8;
       const data = pointToXY(values, width, height, pad, showYAxis ? 'percent' : 'auto');
       if (!data) return '<div class="empty">No samples yet</div>';
       const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
       const topRight = valueText ? escapeHtml(valueText) : `${fmtNum(maxValue)}${unit}`;
+      const lastPoint = data.points.length ? data.points[data.points.length - 1] : null;
+      const markerText = showYAxis && lastPoint ? `${fmtNum(lastPoint.value)}%` : '';
+      const markerX = lastPoint ? Math.min(width - pad - 18, Math.max(pad + 18, lastPoint.x)) : width - pad - 18;
+      const markerY = lastPoint ? Math.max(18, lastPoint.y - 10) : 18;
       return `
         <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
           <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
-          ${showYAxis ? `
-            <text x="${pad}" y="16" fill="rgba(148,163,184,0.8)" font-size="11">100%</text>
-            <text x="${pad}" y="${height - 6}" fill="rgba(148,163,184,0.8)" font-size="11">0%</text>
-          ` : ''}
+          ${showYAxis ? `<line class="gridline" x1="${pad}" x2="${pad}" y1="${pad}" y2="${height - pad}"></line>` : ''}
           <path class="area" d="${data.area}" style="fill:${color}"></path>
           <path class="line" d="${data.path}" style="stroke:${color}"></path>
-          <text x="${showYAxis ? pad + 38 : pad}" y="${showYAxis ? 16 : 18}" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
-          ${showYAxis ? '' : `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>`}
+          ${showYAxis && markerText ? `<text x="${markerX}" y="${markerY}" fill="rgba(232,238,252,0.95)" text-anchor="middle" font-size="12">${markerText}</text>` : ''}
+          ${!showYAxis ? `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>` : ''}
         </svg>`;
     }
 
