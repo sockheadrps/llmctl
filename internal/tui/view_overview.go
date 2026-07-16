@@ -354,8 +354,8 @@ func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSli
 		slices = append(slices, gpuLoadSlice{label: "Remote", info: gpu})
 	}
 
-	if m.cfg != nil && m.cfg.RPCMode == "server" && m.statusServer != nil {
-		current := m.statusServer.Status()
+	if m.cfg != nil && m.cfg.RPCMode == "server" {
+		current := m.buildStatusSnapshot()
 		for _, local := range current.Running {
 			if local.Model != ri.Model || local.Profile != ri.Profile {
 				continue

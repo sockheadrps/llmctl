@@ -496,7 +496,7 @@
     function groupedRuns(status) {
       const groups = new Map();
       const order = [];
-      selectedSourceRuns(status).forEach(run => {
+      allSourceRuns(status).forEach(run => {
         const key = modelGroupKey(run);
         if (!groups.has(key)) {
           groups.set(key, []);
@@ -506,7 +506,12 @@
       });
       return order.map(key => {
         const runs = groups.get(key) || [];
-        return { key, runs, primary: runs[0] || null };
+        const primary = runs.find(run =>
+          state.selectedSource === 'all' ||
+          (state.selectedSource === 'local' && run.sourceId === 'local') ||
+          (state.selectedSource === 'remote' && run.sourceId !== 'local')
+        ) || runs[0] || null;
+        return { key, runs, primary };
       });
     }
 
@@ -524,6 +529,13 @@
 
     function groupSources(group) {
       return (group.runs || []).map(run => run.sourceId === 'local' ? 'Local' : (run.sourceName || run.sourceId || 'Remote'));
+    }
+
+    function groupVisible(group) {
+      if (state.selectedSource === 'all') return true;
+      return (group.runs || []).some(run => state.selectedSource === 'local'
+        ? run.sourceId === 'local'
+        : run.sourceId !== 'local');
     }
 
     function sourceRunsForSample(sample) {
@@ -860,7 +872,7 @@
     function renderModels(status, history) {
       const list = document.getElementById('models');
       const current = filteredRuns(status);
-      const groups = groupedRuns(status);
+      const groups = groupedRuns(status).filter(groupVisible);
       document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
       if (!groups.length) {
         list.innerHTML = '<div class="empty">No visible models are running right now.</div>';

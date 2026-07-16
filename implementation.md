@@ -67,6 +67,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - RPC-loaded models keep the `RPC` badge and can show a GPU-by-GPU load breakdown instead of only a single aggregate chart.
 - The per-GPU cards now represent model-slice load distribution, not raw GPU capacity utilization.
 - Split RPC models now merge matching local and remote peers so the UI can show the full model load across all GPUs.
+- The dashboard groups split models across all peers first, then filters the visible group by source so the combined GPU slices stay intact.
 - The TUI Overview screen now labels remote active services as `RPC` and shows their per-GPU model load slices in the active-services list.
 - The source trends panel now shows:
   - a per-GPU VRAM utilization card with stacked horizontal bars
