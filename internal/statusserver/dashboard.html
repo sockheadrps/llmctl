@@ -860,17 +860,24 @@
     function renderHeader(status) {
       const dot = document.getElementById('server-dot');
       const text = document.getElementById('server-state');
+      const running = status.running || [];
+      const clients = status.clients || [];
       document.getElementById('footer-version').textContent = `Version ${status.version || 'unknown build'}`;
       document.getElementById('footer-source').textContent = `Endpoints: /status, /history, /dashboard | Source: ${sourceLabel(status)}`;
-      if ((status.running || []).length > 0) {
+      if (status.rpc_server && status.rpc_server.up) {
         dot.className = 'status-dot ok';
-        text.textContent = 'Live status connected';
+        text.textContent = `RPC server up on ${status.rpc_server.host || '0.0.0.0'}:${status.rpc_server.port}`;
+      } else if (running.length > 0) {
+        dot.className = 'status-dot ok';
+        text.textContent = clients.length > 0
+          ? `Live status connected with ${clients.length} client${clients.length === 1 ? '' : 's'}`
+          : 'Live status connected';
+      } else if (clients.length > 0) {
+        dot.className = 'status-dot ok';
+        text.textContent = `Connected with ${clients.length} client${clients.length === 1 ? '' : 's'}, waiting on running models`;
       } else {
         dot.className = 'status-dot';
         text.textContent = 'Connected, waiting on running models';
-      }
-      if (status.rpc_server && status.rpc_server.up) {
-        text.textContent = `RPC server up on ${status.rpc_server.host || '0.0.0.0'}:${status.rpc_server.port}`;
       }
     }
 
