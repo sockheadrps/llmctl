@@ -154,9 +154,10 @@
     }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
-    .model-trends { display: grid; gap: 10px; }
-    .model-trends .trend-row { margin-bottom: 0; }
+    .model-trends { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .model-trends .trend-card .spark { height: 72px; }
+    .model-trends .trend-card .label { font-size: 10px; }
+    .model-trends .trend-card .model-meta { font-size: 11px; }
     .gpu-list { display: grid; gap: 10px; margin-top: 12px; }
     .gpu-row { display: grid; gap: 6px; }
     .gpu-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; color: var(--muted); font-size: 12px; }
@@ -626,13 +627,9 @@
         const transition = healthTransition(history, run);
         const trendSummary = `
           <div class="model-trends">
-            <div class="trend-row">
-              ${trendCard(`${run.model} VRAM`, vramSeries, '#a78bfa', 'Per-model VRAM trend')}
-              ${trendCard(`${run.model} RAM`, ramSeries, '#34d399', 'Per-model RAM trend')}
-            </div>
-            <div class="trend-row">
-              ${trendCard(`${run.model} tok/s`, series, '#7dd3fc', 'Per-model tok/s trend')}
-            </div>
+            ${trendCard('VRAM', vramSeries, '#a78bfa', 'Per-model VRAM trend')}
+            ${trendCard('RAM', ramSeries, '#34d399', 'Per-model RAM trend')}
+            ${trendCard('Tok/s', series, '#7dd3fc', 'Per-model tok/s trend')}
           </div>
         `;
         const meta = [
@@ -664,7 +661,6 @@
               <div class="metrics">${metrics}</div>
             </div>
             <div class="model-side">
-              <div>${sparkline(series, '#7dd3fc', `${run.model} tok/s`)}</div>
               ${trendSummary}
             </div>
           </article>`;
