@@ -63,28 +63,19 @@
     .status-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--warn); }
     .status-dot.ok { background: var(--good); }
     .status-dot.bad { background: var(--bad); }
-    .controls {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      margin-bottom: 14px;
-      padding: 16px 18px;
-      border-radius: 22px;
-      border: 1px solid var(--panel-border);
-      background: rgba(10, 18, 32, 0.76);
-      box-shadow: var(--shadow);
-    }
-    .control {
+    .panel-control {
       display: grid;
       gap: 6px;
+      min-width: 220px;
+      justify-items: end;
     }
-    .control label {
+    .panel-control label {
       color: var(--muted);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.14em;
     }
-    .control select, .control button {
+    .panel-control select {
       width: 100%;
       min-height: 38px;
       border-radius: 12px;
@@ -93,10 +84,6 @@
       color: var(--text);
       padding: 0 12px;
       font: inherit;
-    }
-    .control button {
-      cursor: pointer;
-      background: linear-gradient(180deg, rgba(125, 211, 252, 0.16), rgba(125, 211, 252, 0.08));
     }
     .card { padding: 18px; min-height: 122px; }
     .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; }
@@ -261,7 +248,8 @@
     }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
     @media (max-width: 1080px) {
-      .hero, .panels, .trend-row, .controls, .model, .client-grid, .source-trend-layout { grid-template-columns: 1fr; }
+      .hero, .panels, .trend-row, .model, .client-grid, .source-trend-layout { grid-template-columns: 1fr; }
+      .panel-control { min-width: 0; justify-items: start; }
       .statusbar { justify-items: start; text-align: left; }
     }
     @media (max-width: 640px) {
@@ -286,21 +274,16 @@
       </div>
     </section>
 
-    <section class="controls">
-      <div class="control">
-        <label for="source-filter">Source</label>
-        <select id="source-filter"></select>
-      </div>
-      <div class="control">
-        <label>Actions</label>
-        <button id="reset-filters" type="button">Reset filters</button>
-      </div>
-    </section>
-
     <section class="panel" style="margin-top: 14px;">
       <div class="panel-head">
         <h2>Source Trends</h2>
-        <div class="meta" id="history-count">0 samples</div>
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+          <div class="meta" id="history-count">0 samples</div>
+          <div class="panel-control">
+            <label for="source-filter">Source</label>
+            <select id="source-filter"></select>
+          </div>
+        </div>
       </div>
       <div class="source-trend-layout" id="source-trends"></div>
     </section>
@@ -362,7 +345,7 @@
       return history.samples.slice();
     }
 
-    function sourceOptions(status) {
+    function sourceOptions() {
       return [
         { value: 'local', label: 'Local' },
         { value: 'remote', label: 'Remote' },
@@ -538,9 +521,9 @@
         </article>`;
     }
 
-    function renderControls(status) {
+    function renderControls() {
       const sourceSel = document.getElementById('source-filter');
-      const sourceOpts = sourceOptions(status);
+      const sourceOpts = sourceOptions();
       sourceSel.innerHTML = sourceOpts.map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
       if ([...sourceSel.options].some(opt => opt.value === state.selectedSource)) {
         sourceSel.value = state.selectedSource;
@@ -548,25 +531,12 @@
         state.selectedSource = 'local';
         sourceSel.value = 'local';
       }
-    }
-
-    function bindControls(status, history) {
-      const sourceSel = document.getElementById('source-filter');
-      const resetBtn = document.getElementById('reset-filters');
-
       if (!sourceSel.dataset.bound) {
         sourceSel.addEventListener('change', () => {
           state.selectedSource = sourceSel.value;
-          render(status, history);
+          render(window.lastStatus, currentHistory);
         });
         sourceSel.dataset.bound = '1';
-      }
-      if (!resetBtn.dataset.bound) {
-        resetBtn.addEventListener('click', () => {
-          state.selectedSource = 'local';
-          render(status, history);
-        });
-        resetBtn.dataset.bound = '1';
       }
     }
 
@@ -774,8 +744,7 @@
     function render(status, history) {
       currentHistory = history;
       window.lastStatus = status;
-      renderControls(status);
-      bindControls(status, history);
+      renderControls();
       renderHeader(status);
       renderModels(status, history);
       renderSourceTrends(status, history);
