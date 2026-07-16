@@ -314,6 +314,7 @@
     };
     const state = {
       selectedSource: 'local',
+      lastSourceKey: '',
     };
     let currentHistory = { samples: [] };
 
@@ -569,6 +570,10 @@
       }
     }
 
+    function sourceRenderKey(status) {
+      return state.selectedSource;
+    }
+
     function metric(label, value) {
       return `
         <div class="metric">
@@ -783,6 +788,13 @@
     function render(status, history) {
       currentHistory = history;
       window.lastStatus = status;
+      const nextSourceKey = sourceRenderKey(status);
+      const sourceKeyChanged = state.lastSourceKey !== nextSourceKey;
+      state.lastSourceKey = nextSourceKey;
+      if (sourceKeyChanged) {
+        document.getElementById('models').replaceChildren();
+        document.getElementById('source-trends').replaceChildren();
+      }
       renderControls();
       renderHeader(status);
       renderModels(status, history);
