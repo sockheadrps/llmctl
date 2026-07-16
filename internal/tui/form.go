@@ -13,8 +13,6 @@ import (
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
-
-
 func (f *formState) focusedFlag() string {
 	if f.focus == len(formLabels) {
 		return "--flash-attn"
@@ -71,7 +69,6 @@ func buildImportInput() textinput.Model {
 	return ti
 }
 
-
 func copyStringMap(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m))
 	for k, v := range m {
@@ -79,8 +76,6 @@ func copyStringMap(m map[string]string) map[string]string {
 	}
 	return out
 }
-
-
 
 func (f *formState) blurAll() {
 	for i := range f.fields {
@@ -203,7 +198,6 @@ func (f *formState) closeImportModal() {
 	f.importInput.Blur()
 }
 
-
 // openForm switches to the new-profile screen for modelKey, pre-filling a
 // suggested free port. overrides is an optional map of field index → value
 // that overwrites specific defaults (used by template presets).
@@ -270,12 +264,12 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 		initialRPCClientLayers: 0,
 		focus:                  0,
 		navigating:             true,
-		descDir:              1,
-		descPause:            scrollPauseTicks,
-		flagInput:            fi,
-		flagOverrides:        make(map[string]string),
-		initialFlagOverrides: make(map[string]string),
-		importInput:          buildImportInput(),
+		descDir:                1,
+		descPause:              scrollPauseTicks,
+		flagInput:              fi,
+		flagOverrides:          make(map[string]string),
+		initialFlagOverrides:   make(map[string]string),
+		importInput:            buildImportInput(),
 	}
 	m.form.syncFlagInput()
 	m.screen = screenNewProfile
@@ -355,12 +349,12 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 		initialRPCClientLayers: initClientLayers,
 		focus:                  0,
 		navigating:             true,
-		descDir:              1,
-		descPause:            scrollPauseTicks,
-		flagInput:            fi,
-		flagOverrides:        copyStringMap(p.FlagOverrides),
-		initialFlagOverrides: copyStringMap(p.FlagOverrides),
-		importInput:          buildImportInput(),
+		descDir:                1,
+		descPause:              scrollPauseTicks,
+		flagInput:              fi,
+		flagOverrides:          copyStringMap(p.FlagOverrides),
+		initialFlagOverrides:   copyStringMap(p.FlagOverrides),
+		importInput:            buildImportInput(),
 	}
 	m.form.syncFlagInput()
 	m.screen = screenNewProfile
@@ -381,7 +375,6 @@ func intPtrOrEmpty(n *int) string {
 	}
 	return strconv.Itoa(*n)
 }
-
 
 func floatPtrOrEmpty(f *float64) string {
 	if f == nil {
@@ -753,10 +746,10 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		ReasoningFormat:   value(fieldReasoningFormat),
 		CacheTypeK:        value(fieldCacheK),
 		CacheTypeV:        value(fieldCacheV),
-		ExtraArgs:      extraArgs,
-		Notes:          value(fieldNotes),
-		RPCEnabled:     rpcEnabled,
-		TensorSplit:    tensorSplit,
+		ExtraArgs:         extraArgs,
+		Notes:             value(fieldNotes),
+		RPCEnabled:        rpcEnabled,
+		TensorSplit:       tensorSplit,
 		FlagOverrides: func() map[string]string {
 			m.form.commitFlagInput()
 			if len(m.form.flagOverrides) == 0 {
@@ -793,7 +786,6 @@ func (m Model) formPaneHeight() int {
 	// title + blank line + bordered pane + newline + hotkey line
 	return max(8, m.height-6)
 }
-
 
 func indexOfProfileRow(rows []row, modelKey, profileKey string) int {
 	for i, r := range rows {

@@ -812,9 +812,8 @@
     function modelGpuSlices(status, group) {
       const slices = [];
       (group.runs || []).forEach(run => {
-        const sourceLabel = run.sourceId === 'local' ? 'Local' : (run.sourceName || run.sourceId || 'Remote');
         (run.gpus || []).forEach(gpu => {
-          slices.push({ run, sourceLabel, gpu });
+          slices.push({ run, gpu });
         });
       });
       if (status.rpc_server && Array.isArray(status.rpc_server.gpus) && status.rpc_server.gpus.length > 0) {
@@ -823,14 +822,15 @@
           status.rpc_server.gpus.forEach(gpu => {
             slices.push({
               run: group.primary,
-              sourceLabel: 'Local RPC',
               gpu,
             });
           });
         }
       }
       slices.sort((a, b) => {
-        if (a.sourceLabel !== b.sourceLabel) return a.sourceLabel.localeCompare(b.sourceLabel);
+        const aSource = a.run && a.run.sourceId ? a.run.sourceId : '';
+        const bSource = b.run && b.run.sourceId ? b.run.sourceId : '';
+        if (aSource !== bSource) return aSource.localeCompare(bSource);
         const ai = Number.isFinite(Number(a.gpu.index)) ? Number(a.gpu.index) : Number.MAX_SAFE_INTEGER;
         const bi = Number.isFinite(Number(b.gpu.index)) ? Number(b.gpu.index) : Number.MAX_SAFE_INTEGER;
         if (ai !== bi) return ai - bi;
@@ -856,7 +856,7 @@
         return `
           <article class="trend-card gpu-load-card">
             <div class="gpu-load-head">
-              <div class="label">${escapeHtml(slice.sourceLabel + ' ' + gpuLabel)}</div>
+              <div class="label">${escapeHtml(gpuLabel)}</div>
               <div class="gpu-load-badge">${escapeHtml(pctText)}</div>
             </div>
             <div class="value">${escapeHtml(amount)}</div>
@@ -865,7 +865,7 @@
               <span>${escapeHtml(totalLoad > 0 ? `${fmtMiB(totalLoad)} model total` : 'model load')}</span>
               <span>${escapeHtml(totalLoad > 0 ? `${fmtNum(pct)}%` : amount)}</span>
             </div>
-            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${slice.sourceLabel} ${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
+            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
           </article>`;
       }).join('');
     }

@@ -23,10 +23,10 @@ CPU_Mapped model buffer size = 682.00 MiB
 	if len(got) != 2 {
 		t.Fatalf("expected 2 model slices, got %d", len(got))
 	}
-	if got[0].Name != "CUDA 0" || got[0].UsedMiB != 5300 {
+	if got[0].Name != "CUDA0" || got[0].UsedMiB != 5300 {
 		t.Fatalf("unexpected first slice: %+v", got[0])
 	}
-	if got[1].Name != "RPC 0" || got[1].UsedMiB != 12050 {
+	if got[1].Name != "RPC0" || got[1].UsedMiB != 12050 {
 		t.Fatalf("unexpected second slice: %+v", got[1])
 	}
 }

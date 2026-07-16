@@ -295,4 +295,3 @@ func sanitizePreviewText(s string) string {
 		return r
 	}, s)
 }
-

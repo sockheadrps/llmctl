@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	psapiDLL                    = windows.NewLazySystemDLL("psapi.dll")
-	procGetProcessMemoryInfo    = psapiDLL.NewProc("GetProcessMemoryInfo")
+	psapiDLL                 = windows.NewLazySystemDLL("psapi.dll")
+	procGetProcessMemoryInfo = psapiDLL.NewProc("GetProcessMemoryInfo")
 )
 
 type processMemoryCounters struct {
