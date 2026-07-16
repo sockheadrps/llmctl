@@ -85,9 +85,9 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "status_server":
-		maxStatusSrvCursor := 2
+		maxStatusSrvCursor := 3
 		if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
-			maxStatusSrvCursor = 3
+			maxStatusSrvCursor = 4
 		}
 		next := m.settings.statusSrv.cursor + delta
 		switch {
@@ -123,6 +123,13 @@ func (m Model) activateStatusServerRow() (tea.Model, tea.Cmd) {
 	case 2:
 		return m.openStatusServerPortForm()
 	case 3:
+		m.cfg.SetStatusHistoryPersistEnabled(!m.cfg.StatusHistoryPersistEnabled())
+		if err := m.saveConfig(); err != nil {
+			m.settings.statusSrv.err = err.Error()
+		} else if err := m.reconcileStatusServer(); err != nil {
+			m.settings.statusSrv.err = err.Error()
+		}
+	case 4:
 		if runtime.GOOS == "windows" {
 			return m.copyFirewallRule()
 		}

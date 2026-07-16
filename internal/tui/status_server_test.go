@@ -15,6 +15,7 @@ import (
 )
 
 func TestRPCServerModeOwnsStatusServer(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
@@ -40,6 +41,7 @@ func TestRPCServerModeOwnsStatusServer(t *testing.T) {
 }
 
 func TestStatusServerRequiresRPCServerMode(t *testing.T) {
+	withTempHome(t)
 	cases := []struct {
 		name string
 		cfg  *config.Config
@@ -60,6 +62,7 @@ func TestStatusServerRequiresRPCServerMode(t *testing.T) {
 }
 
 func TestSelectingRPCServerStartsStatusServer(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
@@ -90,6 +93,7 @@ func TestSelectingRPCServerStartsStatusServer(t *testing.T) {
 }
 
 func TestTickPublishesStatusOutsideMainScreen(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
@@ -127,6 +131,7 @@ func TestTickPublishesStatusOutsideMainScreen(t *testing.T) {
 }
 
 func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	modelPath := filepath.Join(t.TempDir(), "client-model.gguf")
 	if err := os.WriteFile(modelPath, make([]byte, 4096), 0o600); err != nil {
@@ -210,4 +215,11 @@ func pollStatusEventually(t *testing.T, addr string, ready func(statusserver.Sta
 	}
 	t.Fatalf("status server did not reach expected state: %v", lastErr)
 	return statusserver.Status{}
+}
+
+func withTempHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 }

@@ -12,6 +12,17 @@ type Status struct {
 	Clients   []ClientInfo  `json:"clients,omitempty"`
 }
 
+// HistorySample is one timestamped snapshot of the status payload.
+type HistorySample struct {
+	SampledAtMs int64  `json:"sampled_at_ms"`
+	Status      Status `json:"status"`
+}
+
+// History is the JSON payload served at GET /history.
+type History struct {
+	Samples []HistorySample `json:"samples"`
+}
+
 // RunningInfo describes one active llama-server instance.
 type RunningInfo struct {
 	Model          string    `json:"model"`

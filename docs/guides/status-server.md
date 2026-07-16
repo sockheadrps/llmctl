@@ -1,12 +1,22 @@
 # Status Server
 
-The status server is llmctl's lightweight JSON endpoint for runtime visibility. It exposes the current running instances, health state, VRAM usage, tok/s, and RPC client snapshots.
+The status server is llmctl's lightweight runtime surface for browser and JSON access. It exposes the current running instances, health state, VRAM usage, tok/s, RPC client snapshots, and a small bounded history for charting.
 
 ---
 
 ## What It Exposes
 
-The server serves a `GET /status` endpoint that returns JSON with the current snapshot.
+The server serves:
+
+- `GET /status` for the current snapshot
+- `GET /history` for recent snapshots
+- `GET /dashboard` for the browser view
+
+`/status` remains the source of truth for the live state. `/history` is what the dashboard uses to draw charts.
+
+When history persistence is enabled, llmctl stores those samples in `~/.llmctl/status_history.json` and restores them on restart.
+
+The dashboard also includes model and profile filters, a time-range control, and health-change coloring so you can zoom into one run or compare several at once.
 
 You can also ask the CLI for the local instance list:
 
@@ -26,6 +36,8 @@ The status server is mainly used for two things:
 - RPC client discovery
 - External monitoring or automation
 
+The browser dashboard is the built-in monitoring view for this same server.
+
 In RPC mode, a client polls the server's status address, discovers the RPC endpoint, and shows the remote GPU telemetry in its own Overview tab.
 
 ---
@@ -40,6 +52,8 @@ The Overview tab is the human-friendly view of the status server snapshot:
 - GPU 1 shows remote telemetry when RPC is connected
 
 That means you usually do not need to hit `/status` by hand unless you're integrating llmctl with another tool.
+
+If you want a browser view, open the same host and port at `/dashboard`. The page reads `/status` and `/history` from the same server.
 
 ---
 

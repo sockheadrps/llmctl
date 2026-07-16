@@ -7,6 +7,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 // server-mode only
@@ -47,6 +48,13 @@ func (m *Model) reconcileStatusServer() error {
 
 	host, port := m.statusServerBindAddr()
 	if m.statusServer != nil && m.statusServerHost == host && m.statusServerPort == port {
+		historyPath, err := util.StatusHistoryFile()
+		if err != nil {
+			return err
+		}
+		if err := m.statusServer.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+			return err
+		}
 		return nil
 	}
 	if m.statusServer != nil {
@@ -58,6 +66,15 @@ func (m *Model) reconcileStatusServer() error {
 
 	srv := statusserver.NewServer()
 	if err := srv.Start(host, port); err != nil {
+		return err
+	}
+	historyPath, err := util.StatusHistoryFile()
+	if err != nil {
+		srv.Stop()
+		return err
+	}
+	if err := srv.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+		srv.Stop()
 		return err
 	}
 	m.statusServer = srv

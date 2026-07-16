@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>llmctl dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111c;
+      --panel: rgba(10, 18, 32, 0.88);
+      --panel-border: rgba(148, 163, 184, 0.16);
+      --text: #e8eefc;
+      --muted: #94a3b8;
+      --accent: #7dd3fc;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+      --shadow: 0 24px 60px rgba(2, 8, 23, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.14), transparent 30%),
+        radial-gradient(circle at top right, rgba(167, 139, 250, 0.14), transparent 32%),
+        linear-gradient(180deg, #06101b 0%, var(--bg) 100%);
+    }
+    .shell { max-width: 1440px; margin: 0 auto; padding: 24px 18px 36px; }
+    .hero, .card, .panel {
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(260px, 0.9fr);
+      gap: 16px;
+      align-items: end;
+      padding: 26px;
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    h1 { margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.04; letter-spacing: -0.04em; }
+    .lede { margin: 12px 0 0; max-width: 70ch; color: var(--muted); }
+    .statusbar { display: grid; gap: 10px; justify-items: end; text-align: right; }
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border: 1px solid var(--panel-border); border-radius: 999px;
+      background: rgba(13, 26, 42, 0.8); color: var(--muted); font-size: 13px;
+    }
+    .status-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--warn); }
+    .status-dot.ok { background: var(--good); }
+    .status-dot.bad { background: var(--bad); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .controls {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 14px;
+      padding: 16px 18px;
+      border-radius: 22px;
+      border: 1px solid var(--panel-border);
+      background: rgba(10, 18, 32, 0.76);
+      box-shadow: var(--shadow);
+    }
+    .control {
+      display: grid;
+      gap: 6px;
+    }
+    .control label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+    .control select, .control button {
+      width: 100%;
+      min-height: 38px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(7, 13, 23, 0.92);
+      color: var(--text);
+      padding: 0 12px;
+      font: inherit;
+    }
+    .control button {
+      cursor: pointer;
+      background: linear-gradient(180deg, rgba(125, 211, 252, 0.16), rgba(125, 211, 252, 0.08));
+    }
+    .card { padding: 18px; min-height: 122px; }
+    .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; }
+    .value { margin-top: 10px; font-size: clamp(24px, 3vw, 38px); line-height: 1; letter-spacing: -0.04em; }
+    .subvalue { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .panels { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 14px; }
+    .panel { padding: 18px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+    .panel-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.03em; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .model-list { display: grid; gap: 12px; }
+    .model {
+      display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: center;
+      padding: 16px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .model-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .model-title { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+    .model-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; font-size: 12px; background: rgba(148, 163, 184, 0.12); }
+    .badge.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
+    .badge.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
+    .badge.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
+    .transition {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--muted);
+    }
+    .transition.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
+    .transition.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
+    .transition.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
+    .metrics { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .metric strong { display: block; margin-top: 2px; color: var(--text); font-size: 15px; font-weight: 700; }
+    .spark { width: 100%; height: 82px; display: block; }
+    .gridline { stroke: rgba(148, 163, 184, 0.14); stroke-width: 1; }
+    .line { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.18)); }
+    .area { fill-opacity: 0.18; }
+    .empty { padding: 20px; border-radius: 16px; border: 1px dashed rgba(148, 163, 184, 0.22); color: var(--muted); text-align: center; }
+    .trend-row { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
+    .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
+    .trend-card .value { font-size: 26px; margin-top: 6px; }
+    .clients { display: grid; gap: 12px; }
+    .client {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(8, 15, 25, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .client-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .client-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .client-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    .client-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 10px;
+    }
+    .client-run {
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(10, 18, 32, 0.7);
+    }
+    .client-run-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .client-run-metrics {
+      display: grid;
+      gap: 4px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 1080px) {
+      .hero, .panels, .stats, .trend-row, .controls, .client-grid { grid-template-columns: 1fr; }
+      .statusbar { justify-items: start; text-align: left; }
+      .model { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .shell { padding: 14px 10px 24px; }
+      .hero, .card, .panel { border-radius: 18px; }
+      .metrics { grid-template-columns: 1fr; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">llmctl live dashboard</p>
+        <h1>Browser view for running models, health, and trends</h1>
+        <p class="lede">This page reads the same status server that powers RPC discovery and remote monitoring. It adds a small in-memory history so you can spot tok/s and memory changes over time.</p>
+      </div>
+      <div class="statusbar">
+        <div class="status-chip"><span class="status-dot" id="server-dot"></span><span id="server-state">Loading status...</span></div>
+        <div class="status-chip"><span id="server-updated">Waiting for first sample</span></div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="control">
+        <label for="model-filter">Model</label>
+        <select id="model-filter"></select>
+      </div>
+      <div class="control">
+        <label for="profile-filter">Profile</label>
+        <select id="profile-filter"></select>
+      </div>
+      <div class="control">
+        <label for="range-filter">Time Range</label>
+        <select id="range-filter">
+          <option value="all">All time</option>
+          <option value="5m">Last 5 minutes</option>
+          <option value="15m">Last 15 minutes</option>
+          <option value="1h">Last 1 hour</option>
+          <option value="6h">Last 6 hours</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Actions</label>
+        <button id="reset-filters" type="button">Reset filters</button>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="panels">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Active Models</h2>
+          <div class="meta" id="active-count">0 running</div>
+        </div>
+        <div class="model-list" id="models"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Trends</h2>
+          <div class="meta" id="history-count">0 samples</div>
+        </div>
+        <div class="trend-row" id="trends"></div>
+        <div class="empty" id="trend-empty">Waiting for enough samples to chart.</div>
+      </section>
+    </section>
+
+    <section class="panel" style="margin-top: 14px;">
+      <div class="panel-head">
+        <h2>Remote Clients</h2>
+        <div class="meta" id="client-count">0 connected</div>
+      </div>
+      <div class="clients" id="clients"></div>
+    </section>
+
+    <div class="footer">
+      <div id="footer-version"></div>
+      <div id="footer-source"></div>
+    </div>
+  </main>
+
+  <script>
+    const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const intFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const timeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+    const rangeMinutes = {
+      all: null,
+      '5m': 5,
+      '15m': 15,
+      '1h': 60,
+      '6h': 360,
+    };
+    const state = {
+      selectedModel: 'all',
+      selectedProfile: 'all',
+      selectedRange: 'all',
+    };
+
+    function fmtNum(value, suffix = '') {
+      if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+      return `${fmt.format(value)}${suffix}`;
+    }
+
+    function fmtInt(value, suffix = '') {
+      if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+      return `${intFmt.format(value)}${suffix}`;
+    }
+
+    function fmtMiB(value) {
+      return fmtInt(value, ' MiB');
+    }
+
+    function keyOf(run) {
+      return [run.model || '', run.profile || '', run.port || 0].join('::');
+    }
+
+    function sampleAgeMinutes(sample) {
+      const ms = Number(sample.sampled_at_ms) || 0;
+      return (Date.now() - ms) / 60000;
+    }
+
+    function filteredSamples(history) {
+      const limit = rangeMinutes[state.selectedRange];
+      if (!limit) return history.samples.slice();
+      return history.samples.filter(sample => sampleAgeMinutes(sample) <= limit);
+    }
+
+    function filteredRuns(status) {
+      return (status.running || []).filter(run => {
+        if (state.selectedModel !== 'all' && run.model !== state.selectedModel) return false;
+        if (state.selectedProfile !== 'all' && run.profile !== state.selectedProfile) return false;
+        return true;
+      });
+    }
+
+    function filteredClients(status) {
+      return (status.clients || []).filter(client => {
+        const runs = client.running || [];
+        if (state.selectedModel !== 'all' && !runs.some(run => run.model === state.selectedModel)) return false;
+        if (state.selectedProfile !== 'all' && !runs.some(run => run.profile === state.selectedProfile)) return false;
+        return true;
+      });
+    }
+
+    function aggregateSamples(history, runs, field) {
+      const keys = runs.map(keyOf);
+      return filteredSamples(history).map(sample => {
+        return (sample.status.running || []).reduce((sum, run) => {
+          if (!keys.includes(keyOf(run))) return sum;
+          return sum + (Number(run[field]) || 0);
+        }, 0);
+      });
+    }
+
+    function valuesFor(history, current, field) {
+      const currentKey = keyOf(current);
+      return filteredSamples(history).map(sample => {
+        const found = (sample.status.running || []).find(run => keyOf(run) === currentKey);
+        return found ? Number(found[field]) || 0 : null;
+      });
+    }
+
+    function latestSample(history) {
+      const samples = filteredSamples(history);
+      if (!samples.length) return null;
+      return samples[samples.length - 1];
+    }
+
+    function pointToXY(values, width, height, pad) {
+      const finite = values.filter(v => Number.isFinite(v));
+      if (!finite.length) return null;
+      const min = Math.min(...finite);
+      const max = Math.max(...finite);
+      const span = max - min || 1;
+      const usableW = width - pad * 2;
+      const usableH = height - pad * 2;
+      const step = values.length > 1 ? usableW / (values.length - 1) : 0;
+      let path = '';
+      let area = '';
+      let started = false;
+      values.forEach((v, i) => {
+        if (!Number.isFinite(v)) {
+          started = false;
+          return;
+        }
+        const x = pad + (step * i);
+        const y = pad + usableH - (((v - min) / span) * usableH);
+        const px = x.toFixed(1);
+        const py = y.toFixed(1);
+        if (!started) {
+          path += `M ${px} ${py}`;
+          area += `M ${px} ${height - pad}`;
+          started = true;
+        } else {
+          path += ` L ${px} ${py}`;
+        }
+        area += ` L ${px} ${py}`;
+      });
+      if (!path) return null;
+      const lastIndex = values.length - 1;
+      const lastX = (pad + (step * lastIndex)).toFixed(1);
+      area += ` L ${lastX} ${height - pad} Z`;
+      return { path, area };
+    }
+
+    function sparkline(values, color, label) {
+      const width = 220;
+      const height = 82;
+      const pad = 8;
+      const data = pointToXY(values, width, height, pad);
+      if (!data) return '<div class="empty">No samples yet</div>';
+      const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
+      return `
+        <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
+          <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
+          <path class="area" d="${data.area}" style="fill:${color}"></path>
+          <path class="line" d="${data.path}" style="stroke:${color}"></path>
+          <text x="${pad}" y="18" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
+          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${fmtNum(maxValue)}</text>
+        </svg>`;
+    }
+
+    function badgeClass(health) {
+      if (health === 'up') return 'good';
+      if (health === 'down') return 'bad';
+      return 'warn';
+    }
+
+    function healthTransition(history, current) {
+      const key = keyOf(current);
+      const states = filteredSamples(history)
+        .map(sample => {
+          const found = (sample.status.running || []).find(run => keyOf(run) === key);
+          return found ? (found.health || 'loading') : null;
+        })
+        .filter(Boolean);
+      if (states.length < 2) return null;
+      const prev = states[states.length - 2];
+      const next = states[states.length - 1];
+      if (prev === next) return null;
+      const cls = next === 'up' ? 'good' : next === 'down' ? 'bad' : 'warn';
+      return { cls, text: `${prev} -> ${next}` };
+    }
+
+    function card(label, value, subvalue) {
+      return `
+        <article class="card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+          <div class="subvalue">${subvalue}</div>
+        </article>`;
+    }
+
+    function updateSelectOptions(select, values, selected, includeAllLabel) {
+      const current = selected;
+      const options = [];
+      if (includeAllLabel) {
+        options.push({ value: 'all', label: includeAllLabel });
+      }
+      values.forEach(v => options.push({ value: v, label: v }));
+      select.innerHTML = options.map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+      if ([...select.options].some(opt => opt.value === current)) {
+        select.value = current;
+      } else {
+        select.value = 'all';
+      }
+    }
+
+    function renderControls(status) {
+      const running = status.running || [];
+      const modelSel = document.getElementById('model-filter');
+      const profileSel = document.getElementById('profile-filter');
+      const rangeSel = document.getElementById('range-filter');
+      const models = [...new Set(running.map(run => run.model).filter(Boolean))].sort();
+      const profiles = [...new Set(
+        running
+          .filter(run => state.selectedModel === 'all' || run.model === state.selectedModel)
+          .map(run => run.profile)
+          .filter(Boolean)
+      )].sort();
+      updateSelectOptions(modelSel, models, state.selectedModel, 'All models');
+      updateSelectOptions(profileSel, profiles, state.selectedProfile, 'All profiles');
+      rangeSel.value = state.selectedRange;
+    }
+
+    function bindControls(status, history) {
+      const modelSel = document.getElementById('model-filter');
+      const profileSel = document.getElementById('profile-filter');
+      const rangeSel = document.getElementById('range-filter');
+      const resetBtn = document.getElementById('reset-filters');
+
+      if (!modelSel.dataset.bound) {
+        modelSel.addEventListener('change', () => {
+          state.selectedModel = modelSel.value;
+          state.selectedProfile = 'all';
+          render(status, history);
+        });
+        modelSel.dataset.bound = '1';
+      }
+      if (!profileSel.dataset.bound) {
+        profileSel.addEventListener('change', () => {
+          state.selectedProfile = profileSel.value;
+          render(status, history);
+        });
+        profileSel.dataset.bound = '1';
+      }
+      if (!rangeSel.dataset.bound) {
+        rangeSel.addEventListener('change', () => {
+          state.selectedRange = rangeSel.value;
+          render(status, history);
+        });
+        rangeSel.dataset.bound = '1';
+      }
+      if (!resetBtn.dataset.bound) {
+        resetBtn.addEventListener('click', () => {
+          state.selectedModel = 'all';
+          state.selectedProfile = 'all';
+          state.selectedRange = 'all';
+          render(status, history);
+        });
+        resetBtn.dataset.bound = '1';
+      }
+    }
+
+    function metric(label, value) {
+      return `
+        <div class="metric">
+          ${label}
+          <strong>${escapeHtml(value)}</strong>
+        </div>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderStats(status) {
+      const stats = document.getElementById('stats');
+      const running = filteredRuns(status);
+      const totalTok = running.reduce((sum, run) => sum + (Number(run.tok_s) || 0), 0);
+      const totalVram = running.reduce((sum, run) => sum + (Number(run.vram_mib) || 0), 0);
+      const totalRam = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
+      const clients = status.clients || [];
+      stats.innerHTML = [
+        card('Running', fmtInt(running.length), 'Local active instances'),
+        card('Tok/s', fmtNum(totalTok), 'Sum across active models'),
+        card('Memory', fmtMiB(totalVram || totalRam), totalVram > 0 ? 'Tracked VRAM' : 'Tracked RAM'),
+        card('Clients', fmtInt(clients.length), status.rpc_server ? 'Remote status peers' : 'No remote peers'),
+      ].join('');
+    }
+
+    function renderModels(status, history) {
+      const list = document.getElementById('models');
+      const current = filteredRuns(status);
+      document.getElementById('active-count').textContent = `${current.length} running`;
+      if (!current.length) {
+        list.innerHTML = '<div class="empty">No models are running right now.</div>';
+        return;
+      }
+      list.innerHTML = current.map(run => {
+        const series = valuesFor(history, run, 'tok_s');
+        const health = run.health || 'loading';
+        const transition = healthTransition(history, run);
+        const meta = [
+          run.alias ? `alias ${run.alias}` : null,
+          `port ${run.port}`,
+          run.model_size_bytes ? `${fmtMiB(run.model_size_bytes / (1024 * 1024))}` : null,
+        ].filter(Boolean).join(' | ');
+        const metrics = [
+          metric('tok/s', fmtNum(run.tok_s)),
+          metric('peak', fmtNum(run.tok_peak)),
+          metric('avg', fmtNum(run.tok_avg)),
+          metric('VRAM', fmtMiB(run.vram_mib)),
+          metric('RAM', fmtMiB(run.ram_mib)),
+          metric('size', run.model_size_bytes ? fmtMiB(run.model_size_bytes / (1024 * 1024)) : 'n/a'),
+        ].join('');
+        return `
+          <article class="model">
+            <div>
+              <div class="model-top">
+                <div>
+                  <h3 class="model-title">${escapeHtml(run.model)} / ${escapeHtml(run.profile)}</h3>
+                  <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
+                  ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
+                  <span class="badge ${badgeClass(health)}">${escapeHtml(health)}</span>
+                </div>
+              </div>
+              <div class="metrics">${metrics}</div>
+            </div>
+            <div>${sparkline(series, '#7dd3fc', `${run.model} tok/s`)}</div>
+          </article>`;
+      }).join('');
+    }
+
+    function trendCard(label, series, color, subtitle) {
+      const current = series.length ? series[series.length - 1] : 0;
+      return `
+        <article class="trend-card">
+          <div class="label">${label}</div>
+          <div class="value">${escapeHtml(label.includes('tok/s') ? fmtNum(current) : fmtMiB(current))}</div>
+          <div class="model-meta">${escapeHtml(subtitle)}</div>
+          <div style="margin-top: 10px">${sparkline(series, color, label)}</div>
+        </article>`;
+    }
+
+    function renderTrends(status, history) {
+      const container = document.getElementById('trends');
+      const empty = document.getElementById('trend-empty');
+      const runs = filteredRuns(status);
+      const samples = filteredSamples(history);
+      document.getElementById('history-count').textContent = `${samples.length} samples`;
+      const latest = latestSample(history);
+      if (latest) {
+        document.getElementById('server-updated').textContent = `Updated ${timeFmt.format(new Date(latest.sampled_at_ms))}`;
+      }
+      if (samples.length < 2) {
+        empty.style.display = 'block';
+        container.innerHTML = '';
+        return;
+      }
+      empty.style.display = 'none';
+      const tokSeries = aggregateSamples(history, runs, 'tok_s');
+      const vramSeries = aggregateSamples(history, runs, 'vram_mib');
+      const ramSeries = aggregateSamples(history, runs, 'ram_mib');
+      container.innerHTML = [
+        trendCard('Filtered tok/s', tokSeries, '#7dd3fc', 'Across the selected models'),
+        trendCard('Filtered VRAM', vramSeries, '#a78bfa', 'Sum of tracked VRAM'),
+        trendCard('Filtered RAM', ramSeries, '#34d399', 'Sum of tracked RAM'),
+      ].join('');
+    }
+
+    function clientLastSeen(client) {
+      if (!client.last_seen) return 'unknown';
+      return timeFmt.format(new Date(client.last_seen * 1000));
+    }
+
+    function renderClients(status) {
+      const container = document.getElementById('clients');
+      const clients = filteredClients(status);
+      document.getElementById('client-count').textContent = `${clients.length} connected`;
+      if (!clients.length) {
+        container.innerHTML = '<div class="empty">No connected llmctl clients are publishing to this status server.</div>';
+        return;
+      }
+      container.innerHTML = clients.map(client => {
+        const runs = client.running || [];
+        const tokTotal = runs.reduce((sum, run) => sum + (Number(run.tok_s) || 0), 0);
+        const vramTotal = runs.reduce((sum, run) => sum + (Number(run.vram_mib) || 0), 0);
+        const ramTotal = runs.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
+        const gpuLabel = client.gpu ? `${client.gpu.name} · ${fmtMiB(client.gpu.used_mib)} / ${fmtMiB(client.gpu.total_mib)}` : 'GPU telemetry unavailable';
+        const runCards = runs.length ? runs.map(run => `
+          <div class="client-run">
+            <div class="client-run-title">
+              <span>${escapeHtml(run.model)} / ${escapeHtml(run.profile)}</span>
+              <span class="badge ${badgeClass(run.health || 'loading')}">${escapeHtml(run.health || 'loading')}</span>
+            </div>
+            <div class="client-run-metrics">
+              <div>tok/s<strong>${escapeHtml(fmtNum(run.tok_s))}</strong></div>
+              <div>VRAM<strong>${escapeHtml(fmtMiB(run.vram_mib))}</strong></div>
+              <div>RAM<strong>${escapeHtml(fmtMiB(run.ram_mib))}</strong></div>
+            </div>
+          </div>`).join('') : '<div class="empty">This client is connected but not reporting running models.</div>';
+        return `
+          <article class="client">
+            <div class="client-head">
+              <div>
+                <div class="client-name">${escapeHtml(client.name || client.id || 'Unnamed client')}</div>
+                <div class="client-meta">Last seen ${escapeHtml(clientLastSeen(client))} · ${escapeHtml(client.addr || 'no address')}</div>
+              </div>
+              <div class="transition warn">connected</div>
+            </div>
+            <div class="metrics">
+              ${metric('models', fmtInt(runs.length))}
+              ${metric('tok/s', fmtNum(tokTotal))}
+              ${metric('memory', fmtMiB(vramTotal || ramTotal))}
+            </div>
+            <div class="model-meta" style="margin-top: 10px;">${escapeHtml(gpuLabel)}</div>
+            <div class="client-grid">${runCards}</div>
+          </article>`;
+      }).join('');
+    }
+
+    function renderHeader(status) {
+      const dot = document.getElementById('server-dot');
+      const text = document.getElementById('server-state');
+      document.getElementById('footer-version').textContent = `Version ${status.version || 'unknown build'}`;
+      document.getElementById('footer-source').textContent = 'Endpoints: /status, /history, /dashboard';
+      if ((status.running || []).length > 0) {
+        dot.className = 'status-dot ok';
+        text.textContent = 'Live status connected';
+      } else {
+        dot.className = 'status-dot';
+        text.textContent = 'Connected, waiting on running models';
+      }
+      if (status.rpc_server && status.rpc_server.up) {
+        text.textContent = `RPC server up on ${status.rpc_server.host || '0.0.0.0'}:${status.rpc_server.port}`;
+      }
+    }
+
+    function render(status, history) {
+      renderControls(status);
+      bindControls(status, history);
+      renderHeader(status);
+      renderStats(status);
+      renderModels(status, history);
+      renderTrends(status, history);
+      renderClients(status);
+    }
+
+    async function fetchJSON(path) {
+      const res = await fetch(path, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error(`${path} returned ${res.status}`);
+      }
+      return await res.json();
+    }
+
+    async function refresh() {
+      try {
+        const [status, history] = await Promise.all([fetchJSON('/status'), fetchJSON('/history')]);
+        render(status, history);
+      } catch (err) {
+        document.getElementById('server-dot').className = 'status-dot bad';
+        document.getElementById('server-state').textContent = `Dashboard error: ${err.message}`;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

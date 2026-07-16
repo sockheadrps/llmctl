@@ -340,6 +340,11 @@ func (m Model) renderStatusServerContent() string {
 	if m.settings.statusSrv.portEditing {
 		fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.statusSrv.portInput.View())
 	}
+	historyLabel := "Persist History (Enabled)"
+	if !m.cfg.StatusHistoryPersistEnabled() {
+		historyLabel = "Persist History (Disabled)"
+	}
+	row(3, historyLabel, profileStyle)
 
 	if runtime.GOOS == "windows" && m.cfg.StatusServerEnabled {
 		copyLabel := "Copy Windows Firewall Rule"
@@ -348,13 +353,15 @@ func (m Model) renderStatusServerContent() string {
 			copyLabel = "✓ Copied to clipboard"
 			copyStyle = runningStyle
 		}
-		row(3, copyLabel, copyStyle)
+		row(4, copyLabel, copyStyle)
 	}
 
 	b.WriteString("\n")
 	b.WriteString(detailMutedStyle.Render(
 		"Serves GET /status as JSON so other llmctl instances\n" +
 			"on the same LAN can poll model name, VRAM and tok/s.\n" +
+			"GET /history feeds the browser dashboard, and persistence\n" +
+			"keeps that history across restarts when enabled.\n" +
 			"Default: 0.0.0.0:11435 (accessible from other machines)."))
 	b.WriteString("\n")
 
