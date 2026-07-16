@@ -20,7 +20,7 @@ import (
 // Manager coordinates starting/stopping llama-server processes and
 // persisting their state to disk.
 type Manager struct {
-	statePath   string
+	statePath    string
 	rpcStatePath string
 }
 
@@ -258,6 +258,23 @@ func (mgr *Manager) Find(modelKey, profileKey string) (models.Running, bool, err
 func (mgr *Manager) StartRPCServer(cfg *config.Config) error {
 	host := cfg.RPCServerHost
 	port := cfg.RPCServerPort
+	bin := cfg.RPCServerBin
+
+	if pid, found, err := process.FindRPCServerPID(bin, host, port); err == nil && found {
+		logDir, err := util.LogDir()
+		if err != nil {
+			return err
+		}
+		logPath := filepath.Join(logDir, "rpc-server.log")
+		state := &RPCServerState{
+			PID:       pid,
+			Host:      host,
+			Port:      port,
+			LogFile:   logPath,
+			StartedAt: time.Now(),
+		}
+		return SaveRPCState(mgr.rpcStatePath, state)
+	}
 
 	if !portAvailable(host, port) {
 		return fmt.Errorf("port %d is already in use", port)
@@ -268,8 +285,6 @@ func (mgr *Manager) StartRPCServer(cfg *config.Config) error {
 		return err
 	}
 	logPath := filepath.Join(logDir, "rpc-server.log")
-
-	bin := cfg.RPCServerBin
 
 	pid, err := process.StartRPC(bin, host, port, logPath)
 	if err != nil {

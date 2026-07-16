@@ -35,6 +35,7 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - Status snapshots now include per-GPU device slices alongside aggregate VRAM totals.
 - Running-model entries now include per-GPU VRAM load slices when the runtime can see them.
 - RPC server snapshots now publish their own per-GPU slices so split RPC loads can be shown from the server side too.
+- RPC server startup now reuses an already-running `ggml-rpc-server` that matches the configured binary, host, and port instead of spawning a duplicate.
 
 ### Behavior notes
 
