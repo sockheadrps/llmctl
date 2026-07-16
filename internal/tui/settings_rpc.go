@@ -22,7 +22,6 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 		if !m.cfg.RPCEnabled {
 			// clear mode when disabling so next enable starts fresh
 			m.cfg.RPCMode = ""
-			m.cfg.StatusServerEnabled = false
 			m.settings.rpc.cursor = 0
 		}
 		if m.cfg.RPCEnabled && !wasEnabled {
@@ -43,7 +42,6 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 	case 1:
 		// Select Client mode
 		m.cfg.RPCMode = "client"
-		m.cfg.StatusServerEnabled = false
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {
@@ -55,7 +53,6 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 	case 2:
 		// Select Server mode
 		m.cfg.RPCMode = "server"
-		m.cfg.StatusServerEnabled = true
 		if err := m.saveConfig(); err != nil {
 			m.settings.rpc.err = err.Error()
 		} else if err := m.reconcileStatusServer(); err != nil {

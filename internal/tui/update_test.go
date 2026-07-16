@@ -190,15 +190,15 @@ func TestRenderSettingsListDoesNotShowFocusedRowOnTabs(t *testing.T) {
 	}
 }
 
-func TestBuildSettingsRowsShowsStatusServerOnlyForRPCServerMode(t *testing.T) {
+func TestBuildSettingsRowsShowsStatusServerWhenConfigExists(t *testing.T) {
 	cases := []struct {
 		name string
 		cfg  *config.Config
 		want bool
 	}{
 		{name: "nil config", cfg: nil, want: false},
-		{name: "rpc disabled", cfg: &config.Config{}, want: false},
-		{name: "rpc client", cfg: &config.Config{RPCEnabled: true, RPCMode: "client"}, want: false},
+		{name: "rpc disabled", cfg: &config.Config{}, want: true},
+		{name: "rpc client", cfg: &config.Config{RPCEnabled: true, RPCMode: "client"}, want: true},
 		{name: "rpc server", cfg: &config.Config{RPCEnabled: true, RPCMode: "server"}, want: true},
 	}
 

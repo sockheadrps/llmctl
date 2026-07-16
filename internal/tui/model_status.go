@@ -11,15 +11,15 @@ import (
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
-// server-mode only
+// status-server only
 func (m Model) shouldRunStatusServer() bool {
 	if m.cfg == nil {
 		return false
 	}
-	return m.cfg.RPCEnabled && m.cfg.RPCMode == "server"
+	return m.cfg.StatusServerEnabled
 }
 
-// server-mode only
+// status-server only
 func (m Model) statusServerBindAddr() (string, int) {
 	if m.cfg == nil {
 		return "0.0.0.0", 11435
@@ -35,7 +35,7 @@ func (m Model) statusServerBindAddr() (string, int) {
 	return host, port
 }
 
-// server-mode only
+// status-server only
 func (m *Model) reconcileStatusServer() error {
 	if !m.shouldRunStatusServer() {
 		if m.statusServer != nil {

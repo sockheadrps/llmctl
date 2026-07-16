@@ -363,11 +363,10 @@ func (m Model) renderStatusServerContent() string {
 
 	b.WriteString("\n")
 	b.WriteString(detailMutedStyle.Render(
-		"Serves GET /status as JSON so other llmctl instances\n" +
-			"on the same LAN can poll model name, VRAM and tok/s.\n" +
-			"GET /history feeds the browser dashboard, and persistence\n" +
-			"keeps that history across restarts when enabled.\n" +
-			"GET /dashboard is optional and can be disabled here.\n" +
+		"Serves GET /status as JSON for the local browser dashboard\n" +
+			"and optional history persistence.\n" +
+			"GET /dashboard can be disabled here, and the whole server\n" +
+			"can run without RPC being enabled.\n" +
 			"Default: 0.0.0.0:11435 (accessible from other machines)."))
 	b.WriteString("\n")
 
