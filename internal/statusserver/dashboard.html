@@ -315,6 +315,7 @@
     const state = {
       selectedSource: 'local',
       lastSourceKey: '',
+      sourceHistoryCutoffMs: 0,
     };
     let currentHistory = { samples: [] };
 
@@ -342,7 +343,9 @@
     }
 
     function filteredSamples(history) {
-      return history.samples.slice();
+      return history.samples.filter(sample => {
+        return !state.sourceHistoryCutoffMs || Number(sample.sampled_at_ms) >= state.sourceHistoryCutoffMs;
+      });
     }
 
     function sourceOptions() {
@@ -563,6 +566,8 @@
       }
       if (!sourceSel.dataset.bound) {
         sourceSel.addEventListener('change', () => {
+          const latest = latestSample(currentHistory);
+          state.sourceHistoryCutoffMs = latest ? Number(latest.sampled_at_ms) || Date.now() : Date.now();
           state.selectedSource = sourceSel.value;
           render(window.lastStatus, currentHistory);
         });
