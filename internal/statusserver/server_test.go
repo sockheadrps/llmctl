@@ -94,7 +94,7 @@ func TestHandlersServeDashboardAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := string(body)
-	for _, want := range []string{"Browser view for running models, health, and trends", "/history", "/status"} {
+	for _, want := range []string{"llmctl dashboard", "/history", "/status"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("dashboard HTML missing %q", want)
 		}
