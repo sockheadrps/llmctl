@@ -422,6 +422,11 @@
       return fmtInt(value, ' MiB');
     }
 
+    function fmtGiB(valueMiB) {
+      if (valueMiB === null || valueMiB === undefined || Number.isNaN(valueMiB)) return 'n/a';
+      return `${fmt.format(valueMiB / 1024)} GiB`;
+    }
+
     function sourceRunKey(run) {
       return [run.sourceId || 'local', run.model || '', run.profile || '', run.port || 0].join('::');
     }
@@ -680,7 +685,15 @@
       const width = 220;
       const height = 120;
       const pad = 8;
-      const modelData = pointToXY(modelValues, width, height, pad, 'percent');
+      const modelStackedValues = modelValues.map((value, index) => {
+        const model = Number(value);
+        const other = Number(otherValues[index]);
+        if (!Number.isFinite(model) && !Number.isFinite(other)) return null;
+        const base = Number.isFinite(other) ? other : 0;
+        if (!Number.isFinite(model)) return base;
+        return base + model;
+      });
+      const modelData = pointToXY(modelStackedValues, width, height, pad, 'percent');
       const otherData = pointToXY(otherValues, width, height, pad, 'percent');
       const totalData = pointToXY(totalValues, width, height, pad, 'percent');
       if (!modelData && !otherData && !totalData) return '<div class="empty">No samples yet</div>';
@@ -697,7 +710,6 @@
           ${otherData ? `<path class="line" d="${otherData.path}" style="stroke:${otherColor};opacity:0.8"></path>` : ''}
           ${modelData ? `<path class="area" d="${modelData.area}" style="fill:${modelColor};opacity:0.5"></path>` : ''}
           ${modelData ? `<path class="line" d="${modelData.path}" style="stroke:${modelColor}"></path>` : ''}
-          ${totalData ? `<path class="line" d="${totalData.path}" style="stroke:rgba(255,255,255,0.9);stroke-width:1.5"></path>` : ''}
           <text x="${pad + 2}" y="${pad + 12}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">100%</text>
           <text x="${pad + 2}" y="${height - pad - 2}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">0%</text>
           ${markerText ? `<text x="${markerX}" y="${markerY}" fill="rgba(232,238,252,0.95)" text-anchor="middle" font-size="12">${markerText}</text>` : ''}
@@ -937,7 +949,7 @@
         const used = Number(gpu.used_mib) || 0;
         const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
         const modelName = gpuModelNameForSlice(status, slice);
-        const amount = `${fmtMiB(used)} loaded`;
+        const amount = `${fmtGiB(used)} loaded`;
         const modelSeries = runGpuLoadSeries(history, slice.run, gpu);
         const telemetrySeries = runGpuTelemetrySeries(history, slice);
         const currentTelemetry = telemetrySeries.length ? telemetrySeries[telemetrySeries.length - 1] : null;
@@ -974,15 +986,15 @@
             <div class="value">${escapeHtml(amount)}</div>
             <div class="gpu-model">${escapeHtml(modelName)}</div>
             <div class="gpu-load-meta">
-              <span>${escapeHtml(currentGpuTotal > 0 ? `model ${fmtMiB(used)} (${fmtNum(currentGpuModelPct)}%)` : 'model load')}</span>
-              <span>${escapeHtml(currentGpuTotal > 0 ? `other ${fmtMiB(currentOtherUsed)} (${fmtNum(currentOtherPct)}%)` : amount)}</span>
+              <span>${escapeHtml(currentGpuTotal > 0 ? `model ${fmtGiB(used)} (${fmtNum(currentGpuModelPct)}%)` : 'model load')}</span>
+              <span>${escapeHtml(currentGpuTotal > 0 ? `other ${fmtGiB(currentOtherUsed)} (${fmtNum(currentOtherPct)}%)` : amount)}</span>
             </div>
             <div class="chart-wrap">${stackedGpuSparkline(
               (modelGpuPctSeries.length ? modelGpuPctSeries : [currentGpuModelPct]),
               (otherPctSeries.length ? otherPctSeries : [currentOtherPct]),
               (totalPctSeries.length ? totalPctSeries : [currentTotalPct]),
               `${gpuLabel} ${modelName} GPU utilization`,
-              currentGpuTotal > 0 ? `${fmtMiB(currentGpuUsed)} / ${fmtMiB(currentGpuTotal)}` : fmtMiB(used),
+              currentGpuTotal > 0 ? `${fmtGiB(currentGpuUsed)} / ${fmtGiB(currentGpuTotal)}` : fmtGiB(used),
               '#a78bfa',
               '#94a3b8'
             )}</div>
