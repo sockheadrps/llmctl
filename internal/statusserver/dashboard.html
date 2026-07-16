@@ -145,7 +145,29 @@
     .trend-row { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
-    .clients { display: grid; gap: 12px; }
+    .pill {
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: rgba(10, 18, 32, 0.7);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+    .pill:hover {
+      border-color: rgba(125, 211, 252, 0.45);
+      color: var(--text);
+    }
+    .pill.active {
+      background: rgba(14, 165, 233, 0.18);
+      color: var(--text);
+      border-color: rgba(125, 211, 252, 0.55);
+      box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.08) inset;
+    }
+    .pill.all {
+      border-style: dashed;
+    }
     .client {
       padding: 16px;
       border-radius: 18px;
@@ -196,33 +218,9 @@
       color: var(--muted);
       font-size: 11px;
     }
-    .client-summary {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin-bottom: 12px;
-    }
-    .summary-card {
-      padding: 14px;
-      border-radius: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      background: rgba(10, 18, 32, 0.7);
-    }
-    .summary-card .summary-label {
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-    }
-    .summary-card .summary-value {
-      margin-top: 8px;
-      font-size: 22px;
-      line-height: 1;
-      letter-spacing: -0.04em;
-    }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
     @media (max-width: 1080px) {
-      .hero, .panels, .stats, .trend-row, .controls, .client-grid, .client-summary { grid-template-columns: 1fr; }
+      .hero, .panels, .stats, .trend-row, .controls, .client-grid { grid-template-columns: 1fr; }
       .statusbar { justify-items: start; text-align: left; }
       .model { grid-template-columns: 1fr; }
     }
@@ -254,24 +252,6 @@
         <select id="source-filter"></select>
       </div>
       <div class="control">
-        <label for="model-filter">Model</label>
-        <select id="model-filter"></select>
-      </div>
-      <div class="control">
-        <label for="profile-filter">Profile</label>
-        <select id="profile-filter"></select>
-      </div>
-      <div class="control">
-        <label for="range-filter">Time Range</label>
-        <select id="range-filter">
-          <option value="all">All time</option>
-          <option value="5m">Last 5 minutes</option>
-          <option value="15m">Last 15 minutes</option>
-          <option value="1h">Last 1 hour</option>
-          <option value="6h">Last 6 hours</option>
-        </select>
-      </div>
-      <div class="control">
         <label>Actions</label>
         <button id="reset-filters" type="button">Reset filters</button>
       </div>
@@ -290,21 +270,12 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Trends</h2>
+          <h2>Source Trends</h2>
           <div class="meta" id="history-count">0 samples</div>
         </div>
-        <div class="trend-row" id="trends"></div>
-        <div class="empty" id="trend-empty">Waiting for enough samples to chart.</div>
+        <div class="trend-row" id="source-trends"></div>
+        <div class="empty" id="source-trends-empty">Waiting for enough samples to chart.</div>
       </section>
-    </section>
-
-    <section class="panel" style="margin-top: 14px;">
-      <div class="panel-head">
-        <h2>Remote Clients</h2>
-        <div class="meta" id="client-count">0 connected</div>
-      </div>
-      <div class="client-summary" id="client-summary"></div>
-      <div class="clients" id="clients"></div>
     </section>
 
     <div class="footer">
@@ -326,10 +297,9 @@
     };
     const state = {
       selectedSource: 'local',
-      selectedModel: 'all',
-      selectedProfile: 'all',
-      selectedRange: 'all',
+      expandedRunKeys: {},
     };
+    let currentHistory = { samples: [] };
 
     function fmtNum(value, suffix = '') {
       if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
@@ -355,33 +325,21 @@
     }
 
     function filteredSamples(history) {
-      const limit = rangeMinutes[state.selectedRange];
-      if (!limit) return history.samples.slice();
-      return history.samples.filter(sample => sampleAgeMinutes(sample) <= limit);
+      return history.samples.slice();
     }
 
     function sourceOptions(status) {
-      const options = [{ value: 'local', label: 'Local' }];
-      const clients = status.clients || [];
-      if (clients.length > 0) {
-        options.push({ value: 'all-clients', label: `All clients (${clients.length})` });
-        clients.forEach(client => {
-          const name = client.name || client.id || 'Unnamed client';
-          const count = (client.running || []).length;
-          options.push({ value: `client:${client.id}`, label: `${name} (${count} models)` });
-        });
-      }
-      return options;
+      return [
+        { value: 'local', label: 'Local' },
+        { value: 'remote', label: 'Remote' },
+        { value: 'all', label: 'All' },
+      ];
     }
 
     function sourceLabel(status) {
       if (state.selectedSource === 'local') return 'Local';
-      if (state.selectedSource === 'all-clients') return 'All clients';
-      if (state.selectedSource.startsWith('client:')) {
-        const clientId = state.selectedSource.slice('client:'.length);
-        const client = (status.clients || []).find(entry => entry.id === clientId);
-        return client ? (client.name || client.id || 'Client') : 'Client';
-      }
+      if (state.selectedSource === 'remote') return 'Remote';
+      if (state.selectedSource === 'all') return 'All';
       return 'Local';
     }
 
@@ -407,53 +365,48 @@
       if (state.selectedSource === 'local') {
         return localRuns(status);
       }
-      if (state.selectedSource === 'all-clients') {
+      if (state.selectedSource === 'remote') {
         return clientRuns(status);
       }
-      if (state.selectedSource.startsWith('client:')) {
-        const clientId = state.selectedSource.slice('client:'.length);
-        return clientRuns(status, clientId);
+      if (state.selectedSource === 'all') {
+        return localRuns(status).concat(clientRuns(status));
       }
       return localRuns(status);
     }
 
     function filteredRuns(status) {
-      return selectedSourceRuns(status).filter(run => {
-        if (state.selectedModel !== 'all' && run.model !== state.selectedModel) return false;
-        if (state.selectedProfile !== 'all' && run.profile !== state.selectedProfile) return false;
-        return true;
-      });
-    }
-
-    function filteredClients(status) {
-      return (status.clients || []).filter(client => {
-        const runs = client.running || [];
-        if (state.selectedModel !== 'all' && !runs.some(run => run.model === state.selectedModel)) return false;
-        if (state.selectedProfile !== 'all' && !runs.some(run => run.profile === state.selectedProfile)) return false;
-        return true;
-      });
+      return selectedSourceRuns(status);
     }
 
     function sourceRunsForSample(sample) {
       if (state.selectedSource === 'local') {
         return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
       }
-      if (state.selectedSource === 'all-clients') {
+      if (state.selectedSource === 'remote') {
         return (sample.status.clients || []).flatMap(client => {
           const sourceId = client.id || 'client';
           const sourceName = client.name || client.id || 'Unnamed client';
           return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
         });
       }
-      if (state.selectedSource.startsWith('client:')) {
-        const clientId = state.selectedSource.slice('client:'.length);
-        const client = (sample.status.clients || []).find(entry => entry.id === clientId);
-        if (!client) return [];
-        const sourceId = client.id || 'client';
-        const sourceName = client.name || client.id || 'Unnamed client';
-        return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
+      if (state.selectedSource === 'all') {
+        return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local')).concat(
+          (sample.status.clients || []).flatMap(client => {
+            const sourceId = client.id || 'client';
+            const sourceName = client.name || client.id || 'Unnamed client';
+            return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
+          })
+        );
       }
       return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
+    }
+
+    function toggleModelDetails(key) {
+      if (state.expandedRunKeys[key]) {
+        delete state.expandedRunKeys[key];
+      } else {
+        state.expandedRunKeys[key] = true;
+      }
     }
 
     function aggregateSamples(history, runs, field) {
@@ -565,99 +518,33 @@
         </article>`;
     }
 
-    function updateSelectOptions(select, values, selected, includeAllLabel) {
-      const current = selected;
-      const options = [];
-      if (includeAllLabel) {
-        options.push({ value: 'all', label: includeAllLabel });
-      }
-      values.forEach(v => options.push({ value: v, label: v }));
-      select.innerHTML = options.map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
-      if ([...select.options].some(opt => opt.value === current)) {
-        select.value = current;
-      } else {
-        select.value = 'all';
-      }
-    }
-
     function renderControls(status) {
       const sourceSel = document.getElementById('source-filter');
-      const running = status.running || [];
-      const modelSel = document.getElementById('model-filter');
-      const profileSel = document.getElementById('profile-filter');
-      const rangeSel = document.getElementById('range-filter');
       const sourceOpts = sourceOptions(status);
       sourceSel.innerHTML = sourceOpts.map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
       if ([...sourceSel.options].some(opt => opt.value === state.selectedSource)) {
         sourceSel.value = state.selectedSource;
       } else {
         state.selectedSource = 'local';
-        state.selectedModel = 'all';
-        state.selectedProfile = 'all';
         sourceSel.value = 'local';
       }
-
-      const sourceRuns = selectedSourceRuns(status);
-      const models = [...new Set(sourceRuns.map(run => run.model).filter(Boolean))].sort();
-      const profiles = [...new Set(
-        sourceRuns
-          .filter(run => state.selectedModel === 'all' || run.model === state.selectedModel)
-          .map(run => run.profile)
-          .filter(Boolean)
-      )].sort();
-      if (state.selectedSource !== sourceSel.value) {
-        state.selectedModel = 'all';
-        state.selectedProfile = 'all';
-      }
-      updateSelectOptions(modelSel, models, state.selectedModel, 'All models');
-      updateSelectOptions(profileSel, profiles, state.selectedProfile, 'All profiles');
-      rangeSel.value = state.selectedRange;
     }
 
     function bindControls(status, history) {
       const sourceSel = document.getElementById('source-filter');
-      const modelSel = document.getElementById('model-filter');
-      const profileSel = document.getElementById('profile-filter');
-      const rangeSel = document.getElementById('range-filter');
       const resetBtn = document.getElementById('reset-filters');
 
       if (!sourceSel.dataset.bound) {
         sourceSel.addEventListener('change', () => {
           state.selectedSource = sourceSel.value;
-          state.selectedModel = 'all';
-          state.selectedProfile = 'all';
           render(status, history);
         });
         sourceSel.dataset.bound = '1';
       }
-      if (!modelSel.dataset.bound) {
-        modelSel.addEventListener('change', () => {
-          state.selectedModel = modelSel.value;
-          state.selectedProfile = 'all';
-          render(status, history);
-        });
-        modelSel.dataset.bound = '1';
-      }
-      if (!profileSel.dataset.bound) {
-        profileSel.addEventListener('change', () => {
-          state.selectedProfile = profileSel.value;
-          render(status, history);
-        });
-        profileSel.dataset.bound = '1';
-      }
-      if (!rangeSel.dataset.bound) {
-        rangeSel.addEventListener('change', () => {
-          state.selectedRange = rangeSel.value;
-          render(status, history);
-        });
-        rangeSel.dataset.bound = '1';
-      }
       if (!resetBtn.dataset.bound) {
         resetBtn.addEventListener('click', () => {
           state.selectedSource = 'local';
-          state.selectedModel = 'all';
-          state.selectedProfile = 'all';
-          state.selectedRange = 'all';
+          state.expandedRunKeys = {};
           render(status, history);
         });
         resetBtn.dataset.bound = '1';
@@ -689,10 +576,9 @@
       const totalRam = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
       const clients = status.clients || [];
       stats.innerHTML = [
-        card('Running', fmtInt(running.length), `${sourceLabel(status)} active instances`),
+        card('Activity', fmtInt(running.length), `${sourceLabel(status)} runs · ${clients.length} peers`),
         card('Tok/s', fmtNum(totalTok), 'Sum across active models'),
         card('Memory', fmtMiB(totalVram || totalRam), totalVram > 0 ? 'Tracked VRAM' : 'Tracked RAM'),
-        card('Clients', fmtInt(clients.length), status.rpc_server ? 'Remote status peers' : 'No remote peers'),
       ].join('');
     }
 
@@ -701,13 +587,17 @@
       const current = filteredRuns(status);
       document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
       if (!current.length) {
-        list.innerHTML = '<div class="empty">No models are running right now.</div>';
+        list.innerHTML = '<div class="empty">No visible models are running right now.</div>';
         return;
       }
       list.innerHTML = current.map(run => {
         const series = valuesFor(history, run, 'tok_s');
+        const vramSeries = valuesFor(history, run, 'vram_mib');
+        const ramSeries = valuesFor(history, run, 'ram_mib');
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
+        const key = sourceRunKey(run);
+        const expanded = !!state.expandedRunKeys[key];
         const meta = [
           run.sourceId && run.sourceId !== 'local' ? `source ${run.sourceName || run.sourceId}` : null,
           run.alias ? `alias ${run.alias}` : null,
@@ -731,6 +621,7 @@
                   <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
+                  <button type="button" class="pill ${expanded ? 'active' : ''}" data-expand="${escapeHtml(key)}">${expanded ? 'Hide trends' : 'Show trends'}</button>
                   ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
                   <span class="badge ${badgeClass(health)}">${escapeHtml(health)}</span>
                 </div>
@@ -738,8 +629,21 @@
               <div class="metrics">${metrics}</div>
             </div>
             <div>${sparkline(series, '#7dd3fc', `${run.model} tok/s`)}</div>
+            ${expanded ? `
+              <div class="trend-row" style="margin-top: 12px;">
+                ${trendCard(`${run.model} tok/s`, series, '#7dd3fc', 'Per-model tok/s trend')}
+                ${trendCard(`${run.model} VRAM`, vramSeries, '#a78bfa', 'Per-model VRAM trend')}
+                ${trendCard(`${run.model} RAM`, ramSeries, '#34d399', 'Per-model RAM trend')}
+              </div>
+            ` : ''}
           </article>`;
       }).join('');
+      list.querySelectorAll('button[data-expand]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          toggleModelDetails(btn.dataset.expand);
+          render(window.lastStatus, currentHistory);
+        });
+      });
     }
 
     function trendCard(label, series, color, subtitle) {
@@ -753,9 +657,9 @@
         </article>`;
     }
 
-    function renderTrends(status, history) {
-      const container = document.getElementById('trends');
-      const empty = document.getElementById('trend-empty');
+    function renderSourceTrends(status, history) {
+      const container = document.getElementById('source-trends');
+      const empty = document.getElementById('source-trends-empty');
       const runs = filteredRuns(status);
       const samples = filteredSamples(history);
       document.getElementById('history-count').textContent = `${samples.length} samples from ${sourceLabel(status)}`;
@@ -773,88 +677,10 @@
       const vramSeries = aggregateSamples(history, runs, 'vram_mib');
       const ramSeries = aggregateSamples(history, runs, 'ram_mib');
       container.innerHTML = [
-        trendCard('Filtered tok/s', tokSeries, '#7dd3fc', 'Across the selected models'),
-        trendCard('Filtered VRAM', vramSeries, '#a78bfa', 'Sum of tracked VRAM'),
-        trendCard('Filtered RAM', ramSeries, '#34d399', 'Sum of tracked RAM'),
+        trendCard('Source tok/s', tokSeries, '#7dd3fc', 'Across the selected source'),
+        trendCard('Source VRAM', vramSeries, '#a78bfa', 'Sum of tracked VRAM'),
+        trendCard('Source RAM', ramSeries, '#34d399', 'Sum of tracked RAM'),
       ].join('');
-    }
-
-    function renderClientSummary(status) {
-      const container = document.getElementById('client-summary');
-      const clients = filteredClients(status);
-      if (!clients.length) {
-        container.innerHTML = '';
-        return;
-      }
-      const running = clients.flatMap(client => client.running || []);
-      const tokTotal = running.reduce((sum, run) => sum + (Number(run.tok_s) || 0), 0);
-      const vramTotal = running.reduce((sum, run) => sum + (Number(run.vram_mib) || 0), 0);
-      const ramTotal = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
-      container.innerHTML = [
-        summaryCard('Clients', fmtInt(clients.length), 'Connected nodes'),
-        summaryCard('Tok/s', fmtNum(tokTotal), 'All client models'),
-        summaryCard('Memory', fmtMiB(vramTotal || ramTotal), vramTotal > 0 ? 'Tracked VRAM' : 'Tracked RAM'),
-      ].join('');
-    }
-
-    function clientLastSeen(client) {
-      if (!client.last_seen) return 'unknown';
-      return timeFmt.format(new Date(client.last_seen * 1000));
-    }
-
-    function renderClients(status) {
-      const container = document.getElementById('clients');
-      const clients = filteredClients(status);
-      document.getElementById('client-count').textContent = `${clients.length} connected`;
-      if (!clients.length) {
-        container.innerHTML = '<div class="empty">No connected llmctl clients are publishing to this status server.</div>';
-        return;
-      }
-      container.innerHTML = clients.map(client => {
-        const runs = client.running || [];
-        const tokTotal = runs.reduce((sum, run) => sum + (Number(run.tok_s) || 0), 0);
-        const vramTotal = runs.reduce((sum, run) => sum + (Number(run.vram_mib) || 0), 0);
-        const ramTotal = runs.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
-        const gpuLabel = client.gpu ? `${client.gpu.name} · ${fmtMiB(client.gpu.used_mib)} / ${fmtMiB(client.gpu.total_mib)}` : 'GPU telemetry unavailable';
-        const runCards = runs.length ? runs.map(run => `
-          <div class="client-run">
-            <div class="client-run-title">
-              <span>${escapeHtml(run.model)} / ${escapeHtml(run.profile)}</span>
-              <span class="badge ${badgeClass(run.health || 'loading')}">${escapeHtml(run.health || 'loading')}</span>
-            </div>
-            <div class="client-run-metrics">
-              <div>tok/s<strong>${escapeHtml(fmtNum(run.tok_s))}</strong></div>
-              <div>VRAM<strong>${escapeHtml(fmtMiB(run.vram_mib))}</strong></div>
-              <div>RAM<strong>${escapeHtml(fmtMiB(run.ram_mib))}</strong></div>
-            </div>
-          </div>`).join('') : '<div class="empty">This client is connected but not reporting running models.</div>';
-        return `
-          <article class="client">
-            <div class="client-head">
-              <div>
-                <div class="client-name">${escapeHtml(client.name || client.id || 'Unnamed client')}</div>
-                <div class="client-meta">Last seen ${escapeHtml(clientLastSeen(client))} · ${escapeHtml(client.addr || 'no address')}</div>
-              </div>
-              <div class="transition warn">connected</div>
-            </div>
-            <div class="metrics">
-              ${metric('models', fmtInt(runs.length))}
-              ${metric('tok/s', fmtNum(tokTotal))}
-              ${metric('memory', fmtMiB(vramTotal || ramTotal))}
-            </div>
-            <div class="model-meta" style="margin-top: 10px;">${escapeHtml(gpuLabel)}</div>
-            <div class="client-grid">${runCards}</div>
-          </article>`;
-      }).join('');
-    }
-
-    function summaryCard(label, value, subtitle) {
-      return `
-        <article class="summary-card">
-          <div class="summary-label">${label}</div>
-          <div class="summary-value">${escapeHtml(value)}</div>
-          <div class="model-meta">${escapeHtml(subtitle)}</div>
-        </article>`;
     }
 
     function renderHeader(status) {
@@ -882,14 +708,14 @@
     }
 
     function render(status, history) {
+      currentHistory = history;
+      window.lastStatus = status;
       renderControls(status);
       bindControls(status, history);
       renderHeader(status);
       renderStats(status);
       renderModels(status, history);
-      renderTrends(status, history);
-      renderClientSummary(status);
-      renderClients(status);
+      renderSourceTrends(status, history);
     }
 
     async function fetchJSON(path) {

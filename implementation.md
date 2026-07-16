@@ -1,68 +1,111 @@
-# llmctl browser dashboard checklist
+# dev branch notes
 
-## Goal
+## Overview
 
-Build a browser-style dashboard for server-enabled `llmctl` processes by extending the existing HTTP status surface with history and a simple web UI.
+`dev` now combines two related sets of changes:
 
-## Current recommendation
+- the dashboard and status-server work
+- the profile form and model-edit UX improvements merged in from `main`
 
-- [x] Add a bounded history layer and a `/history` endpoint.
-- [x] Add a lightweight `/dashboard` page that reads `/status` and `/history`.
-- [x] Keep `/status` as the live snapshot source of truth.
+This note is meant to be a docs source-of-truth reference, not a task tracker.
 
-## Phase 1: Data capture
+## Profile Editing
 
-- [x] Decide what gets sampled.
-- [x] Define the history JSON shape.
-- [x] Add a bounded in-memory store.
-- [x] Write tests around sample retention.
-- [x] Write tests around serialization and schema stability.
+### What changed
 
-## Phase 2: API surface
+- The profile form has a clearer layer-splitting control.
+- The layer split slider is easier to reach with keyboard navigation.
+- Imported CLI args clear stale fields before applying parsed values.
+- The helper text for the split control now explains local vs remote GPU layers more clearly.
 
-- [x] Expose `/history`.
-- [x] Keep `/status` unchanged.
-- [x] Decide whether `/history` should be per-process, per-host, or both. (Per status-server instance.)
-- [x] Add basic error handling. (The dashboard surfaces fetch failures cleanly.)
-- [x] Decide whether CORS or origin restrictions are needed. (Same-origin dashboard; no extra CORS layer needed.)
+### Good doc angles later
 
-## Phase 3: Browser dashboard
+- How to edit a profile in the TUI
+- How layer splitting works when RPC is enabled
+- What happens when pasting CLI args into an existing form
 
-- [x] Add `/dashboard`.
-- [x] Render the current state.
-- [x] Draw charts from history.
-- [x] Show health transitions clearly.
-- [x] Make the layout work on desktop.
-- [x] Make the layout work on smaller windows.
-- [x] Show connected RPC client snapshots.
-- [x] Add an all-client summary row.
-- [x] Make the main model chart source-selectable across local and connected clients.
-- [x] Add a setting to disable the browser dashboard while keeping `/status` and `/history`.
-- [x] Default the dashboard to off for new configs.
+## Status Server API
 
-## Phase 4: Polish
+### What changed
 
-- [x] Add filters by model.
-- [x] Add filters by profile.
-- [x] Add time-range controls.
-- [x] Add color coding for health changes.
-- [x] Add a persistence toggle for history.
+- `GET /status` remains the live JSON snapshot.
+- `GET /history` returns bounded history samples for charting.
+- `GET /dashboard` serves the browser UI when dashboard serving is enabled.
+- `GET /` redirects to `/dashboard` when enabled, otherwise to `/status`.
 
-## Open questions
+### Behavior notes
 
-- [x] Should history persist across restarts? Yes, with a toggle.
-- [x] Should the browser view stay read-only? Yes, keep it read-only.
+- The browser dashboard is read-only.
+- History can be persisted across restarts.
+- Dashboard serving can be disabled independently from JSON status access.
 
-## Risks
+### Good doc angles later
 
-- [ ] Extra HTTP exposure may reveal workload details that some users do not want shared.
-- [ ] A charting UI can easily grow into a mini web app if we are not strict about scope.
-- [ ] High-frequency sampling could add noise or overhead if we try to track too much.
+- Status server overview
+- What each endpoint is for
+- When to use `/status` versus `/history`
 
-## First milestone
+## Browser Dashboard
 
-- [x] Show current running models.
-- [x] Show health.
-- [x] Show tok/s trend.
-- [x] Show VRAM trend.
-- [x] Confirm the page feels useful before expanding scope.
+### What changed
+
+- The dashboard focuses on a single source selector:
+  - local
+  - remote
+  - all
+- The dashboard shows runs from the selected source and connected RPC telemetry.
+- The main control row no longer exposes model, profile, or time-range filters.
+- The active-model cards now own their own expandable trend blocks.
+- The dashboard includes:
+  - current running model cards
+  - tok/s trends
+  - VRAM and RAM trends
+  - health transition badges
+- The source trends panel now shows correlated source-level VRAM and RAM charts.
+- The dashboard no longer has a separate Remote Clients section.
+- The top status chip reflects connected client activity instead of implying only local runs exist.
+- Remote runs are labeled with their source so the selected view is easier to read.
+
+### Good doc angles later
+
+- Dashboard overview and screenshots
+- How to interpret the source selector
+- How the expandable per-model trends work
+- How to read the trend panels
+- How remote clients appear in the browser view
+
+## Config And Persistence
+
+### What changed
+
+- History persistence is toggleable in settings.
+- Dashboard serving is toggleable in settings.
+- New configs default the dashboard toggle to off.
+- Existing configs without the field keep working through the helper fallback.
+- Status samples are stored in a bounded in-memory history.
+- Persistent history is written to `~/.llmctl/status_history.json`.
+
+### Good doc angles later
+
+- Status server settings
+- Which toggles affect the browser dashboard
+- What persists across restarts
+
+## Relevant Files
+
+- [`internal/tui/form.go`](/C:/Users/rpski/code25/llmctl/internal/tui/form.go)
+- [`internal/tui/form_view.go`](/C:/Users/rpski/code25/llmctl/internal/tui/form_view.go)
+- [`internal/tui/form_parse.go`](/C:/Users/rpski/code25/llmctl/internal/tui/form_parse.go)
+- [`internal/statusserver/server.go`](/C:/Users/rpski/code25/llmctl/internal/statusserver/server.go)
+- [`internal/statusserver/dashboard.html`](/C:/Users/rpski/code25/llmctl/internal/statusserver/dashboard.html)
+- [`internal/config/config.go`](/C:/Users/rpski/code25/llmctl/internal/config/config.go)
+- [`docs/guides/status-server.md`](/C:/Users/rpski/code25/llmctl/docs/guides/status-server.md)
+
+## Notes For Future Docs
+
+- Keep the dashboard documentation read-only and focused on monitoring.
+- Treat the status server as the shared runtime surface for JSON, remote client snapshots, and the browser dashboard.
+- Use the dashboard source selector language consistently:
+  - local
+  - all connected clients
+  - one connected client
