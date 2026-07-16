@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/build"
+	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
@@ -355,63 +355,25 @@ func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSli
 		slices = append(slices, gpuLoadSlice{label: "Remote", info: gpu})
 	}
 
-	if m.cfg != nil && m.cfg.RPCMode == "server" && m.statusServer != nil {
-		current := m.statusServer.Status()
-		matchedLocal := false
-		for _, local := range current.Running {
-			if !sameRunningIdentity(local, ri) {
-				continue
+	if m.cfg != nil && m.cfg.RPCMode == "server" && m.rpcServerAlive && m.rpcServerState.PID > 0 {
+		if devices := m.gpuByPIDDevices[m.rpcServerState.PID]; len(devices) > 0 {
+			for _, device := range devices {
+				slices = append(slices, gpuLoadSlice{label: "Local", info: deviceToGPUInfo(device)})
 			}
-			matchedLocal = true
-			for _, gpu := range local.GPUs {
-				slices = append(slices, gpuLoadSlice{label: "Local", info: gpu})
-			}
-		}
-		if !matchedLocal && len(current.Running) == 1 && len(current.Running[0].GPUs) > 0 {
-			for _, gpu := range current.Running[0].GPUs {
-				slices = append(slices, gpuLoadSlice{label: "Local", info: gpu})
-			}
-		}
-		for _, gpu := range current.RPCServer.GPUs {
-			slices = append(slices, gpuLoadSlice{label: "Local", info: gpu})
 		}
 	}
 	return slices
 }
 
-func sameRunningIdentity(a, b statusserver.RunningInfo) bool {
-	modelA := normalizeIdentity(a.Model)
-	modelB := normalizeIdentity(b.Model)
-	profileA := normalizeIdentity(a.Profile)
-	profileB := normalizeIdentity(b.Profile)
-	aliasA := normalizeIdentity(a.Alias)
-	aliasB := normalizeIdentity(b.Alias)
-
-	switch {
-	case modelA != "" && modelB != "" && modelA == modelB && profileA == profileB:
-		return true
-	case modelA != "" && modelB != "" && modelA == modelB:
-		return true
-	case aliasA != "" && aliasA == modelB:
-		return true
-	case aliasB != "" && aliasB == modelA:
-		return true
-	default:
-		return false
+func deviceToGPUInfo(device gpu.ProcessUsage) statusserver.GPUDeviceInfo {
+	info := statusserver.GPUDeviceInfo{
+		UUID:    device.GPUUUID,
+		UsedMiB: device.UsedMiB,
 	}
-}
-
-func normalizeIdentity(v string) string {
-	v = strings.TrimSpace(strings.ToLower(v))
-	if v == "" {
-		return ""
+	if info.Name == "" {
+		info.Name = device.GPUUUID
 	}
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
-			return r
-		}
-		return -1
-	}, v)
+	return info
 }
 
 func (m Model) renderRunningGPUBreakdown(slices []gpuLoadSlice, contentW int) string {
