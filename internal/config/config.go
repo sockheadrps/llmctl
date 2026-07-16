@@ -16,19 +16,21 @@ type Config struct {
 	LlamaServerBin string `yaml:"llama_server_bin,omitempty"`
 	// ModelsDir is the deprecated single-directory predecessor of
 	// ModelsDirs. Load migrates it in and Save never writes it back out.
-	ModelsDir   string                  `yaml:"models_dir,omitempty"`
-	ModelsDirs  []string                `yaml:"models_dirs,omitempty"`
-	RPCEnabled       bool   `yaml:"rpc_enabled,omitempty"`
-	RPCMode          string `yaml:"rpc_mode,omitempty"` // "client" or "server"
-	RPCEndpoint      string `yaml:"rpc_endpoint,omitempty"`
-	RPCServerBin     string `yaml:"rpc_server_bin,omitempty"`
-	RPCServerHost    string `yaml:"rpc_server_host,omitempty"`
-	RPCServerPort    int    `yaml:"rpc_server_port,omitempty"`
-	RemoteStatusAddr string `yaml:"remote_status_addr,omitempty"`
+	ModelsDir        string   `yaml:"models_dir,omitempty"`
+	ModelsDirs       []string `yaml:"models_dirs,omitempty"`
+	RPCEnabled       bool     `yaml:"rpc_enabled,omitempty"`
+	RPCMode          string   `yaml:"rpc_mode,omitempty"` // "client" or "server"
+	RPCEndpoint      string   `yaml:"rpc_endpoint,omitempty"`
+	RPCServerBin     string   `yaml:"rpc_server_bin,omitempty"`
+	RPCServerHost    string   `yaml:"rpc_server_host,omitempty"`
+	RPCServerPort    int      `yaml:"rpc_server_port,omitempty"`
+	RemoteStatusAddr string   `yaml:"remote_status_addr,omitempty"`
 
-	StatusServerEnabled bool   `yaml:"status_server_enabled,omitempty"`
-	StatusServerHost    string `yaml:"status_server_host,omitempty"`
-	StatusServerPort    int    `yaml:"status_server_port,omitempty"`
+	StatusServerEnabled          bool   `yaml:"status_server_enabled,omitempty"`
+	StatusServerHistoryPersist   *bool  `yaml:"status_history_persist,omitempty"`
+	StatusServerDashboardEnabled *bool  `yaml:"status_dashboard_enabled,omitempty"`
+	StatusServerHost             string `yaml:"status_server_host,omitempty"`
+	StatusServerPort             int    `yaml:"status_server_port,omitempty"`
 
 	NetworkTabEnabled   bool   `yaml:"network_tab_enabled,omitempty"`
 	NetworkInternetConn string `yaml:"network_internet_conn,omitempty"`
@@ -45,9 +47,11 @@ func Load(path string) (*Config, error) {
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		cfg := &Config{
-			LlamaServerBin: "llama-server",
-			ModelsDirs:     []string{},
-			Models:         map[string]models.Model{},
+			LlamaServerBin:               "llama-server",
+			ModelsDirs:                   []string{},
+			StatusServerHistoryPersist:   util.BoolPtr(true),
+			StatusServerDashboardEnabled: util.BoolPtr(false),
+			Models:                       map[string]models.Model{},
 		}
 		if err := Save(path, cfg); err != nil {
 			return nil, fmt.Errorf("create config %s: %w", path, err)
@@ -80,6 +84,9 @@ func Load(path string) (*Config, error) {
 	if cfg.StatusServerPort == 0 {
 		cfg.StatusServerPort = 11435
 	}
+	if cfg.StatusServerHistoryPersist == nil {
+		cfg.StatusServerHistoryPersist = util.BoolPtr(true)
+	}
 
 	// Migrate the old single-directory field in, then drop it — the next
 	// Save writes only models_dirs (omitempty leaves ModelsDir out once
@@ -107,6 +114,28 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// StatusHistoryPersistEnabled reports whether status history should be saved
+// to disk across restarts. The default is true when the field is unset.
+func (c *Config) StatusHistoryPersistEnabled() bool {
+	return c.StatusServerHistoryPersist == nil || *c.StatusServerHistoryPersist
+}
+
+// SetStatusHistoryPersistEnabled updates the persistence toggle.
+func (c *Config) SetStatusHistoryPersistEnabled(enabled bool) {
+	c.StatusServerHistoryPersist = util.BoolPtr(enabled)
+}
+
+// StatusDashboardEnabled reports whether the browser dashboard should be
+// served from the status server. The default is true when the field is unset.
+func (c *Config) StatusDashboardEnabled() bool {
+	return c.StatusServerDashboardEnabled == nil || *c.StatusServerDashboardEnabled
+}
+
+// SetStatusDashboardEnabled updates the dashboard toggle.
+func (c *Config) SetStatusDashboardEnabled(enabled bool) {
+	c.StatusServerDashboardEnabled = util.BoolPtr(enabled)
 }
 
 // ResolvedModelsDirs expands ~ in each ModelsDirs entry, returning the

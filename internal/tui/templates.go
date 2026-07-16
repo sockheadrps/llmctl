@@ -40,12 +40,12 @@ var profileTemplates = []profileTemplate{
 		name: "Coding",
 		desc: "16k context, quantized KV cache — fast generation without maxing VRAM",
 		overrides: map[int]string{
-			fieldCtxSize:   "16384",
-			fieldCacheK:    "q8_0",
-			fieldCacheV:    "q8_0",
-			fieldTemp:      "0.3",
-			fieldTopP:      "0.9",
-			fieldTopK:      "20",
+			fieldCtxSize: "16384",
+			fieldCacheK:  "q8_0",
+			fieldCacheV:  "q8_0",
+			fieldTemp:    "0.3",
+			fieldTopP:    "0.9",
+			fieldTopK:    "20",
 		},
 	},
 	{

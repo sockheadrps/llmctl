@@ -14,20 +14,19 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
-func TestRPCServerModeOwnsStatusServer(t *testing.T) {
+func TestStatusServerRunsWithoutRPC(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
-			RPCEnabled:          true,
-			RPCMode:             "server",
-			StatusServerEnabled: false,
+			StatusServerEnabled: true,
 			StatusServerHost:    "127.0.0.1",
 			StatusServerPort:    port,
 		},
 	}
 
 	if !m.shouldRunStatusServer() {
-		t.Fatal("expected RPC server mode to own the status server")
+		t.Fatal("expected status server toggle to control the server")
 	}
 	if err := m.reconcileStatusServer(); err != nil {
 		t.Fatal(err)
@@ -35,19 +34,21 @@ func TestRPCServerModeOwnsStatusServer(t *testing.T) {
 	t.Cleanup(m.statusServer.Stop)
 
 	if _, err := statusserver.PollAddr(fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
-		t.Fatalf("expected server-mode status server to respond: %v", err)
+		t.Fatalf("expected enabled status server to respond: %v", err)
 	}
 }
 
-func TestStatusServerRequiresRPCServerMode(t *testing.T) {
+func TestStatusServerVisibilityDoesNotDependOnRPC(t *testing.T) {
+	withTempHome(t)
 	cases := []struct {
 		name string
 		cfg  *config.Config
 		want bool
 	}{
-		{name: "rpc disabled with stale flag", cfg: &config.Config{StatusServerEnabled: true}, want: false},
-		{name: "rpc client with stale flag", cfg: &config.Config{RPCEnabled: true, RPCMode: "client", StatusServerEnabled: true}, want: false},
-		{name: "rpc server", cfg: &config.Config{RPCEnabled: true, RPCMode: "server"}, want: true},
+		{name: "rpc disabled and status server off", cfg: &config.Config{StatusServerEnabled: false}, want: false},
+		{name: "rpc disabled and status server on", cfg: &config.Config{StatusServerEnabled: true}, want: true},
+		{name: "rpc client and status server on", cfg: &config.Config{RPCEnabled: true, RPCMode: "client", StatusServerEnabled: true}, want: true},
+		{name: "rpc server and status server on", cfg: &config.Config{RPCEnabled: true, RPCMode: "server", StatusServerEnabled: true}, want: true},
 	}
 
 	for _, tc := range cases {
@@ -59,14 +60,16 @@ func TestStatusServerRequiresRPCServerMode(t *testing.T) {
 	}
 }
 
-func TestSelectingRPCServerStartsStatusServer(t *testing.T) {
+func TestSelectingRPCServerDoesNotForceStatusServer(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
-			RPCEnabled:       true,
-			StatusServerHost: "127.0.0.1",
-			StatusServerPort: port,
-			Models:           map[string]models.Model{},
+			RPCEnabled:          true,
+			StatusServerEnabled: false,
+			StatusServerHost:    "127.0.0.1",
+			StatusServerPort:    port,
+			Models:              map[string]models.Model{},
 		},
 		cfgPath: filepath.Join(t.TempDir(), "config.yaml"),
 		settings: settingsState{rpc: rpcContentState{
@@ -77,27 +80,25 @@ func TestSelectingRPCServerStartsStatusServer(t *testing.T) {
 
 	next, _ := m.activateRPCRow()
 	got := next.(Model)
-	if got.statusServer == nil {
-		t.Fatal("expected selecting RPC server mode to start the status server")
+	if got.cfg.StatusServerEnabled {
+		t.Fatal("expected selecting RPC server mode to leave status server disabled")
 	}
-	t.Cleanup(got.statusServer.Stop)
-	if !got.cfg.StatusServerEnabled {
-		t.Fatal("expected selecting RPC server mode to mark status server enabled")
-	}
-	if _, err := statusserver.PollAddr(fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
-		t.Fatalf("expected selected server-mode status server to respond: %v", err)
+	if got.statusServer != nil {
+		t.Fatal("expected selecting RPC server mode to avoid starting the status server")
 	}
 }
 
 func TestTickPublishesStatusOutsideMainScreen(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	m := Model{
 		cfg: &config.Config{
-			RPCEnabled:       true,
-			RPCMode:          "server",
-			StatusServerHost: "127.0.0.1",
-			StatusServerPort: port,
-			Models:           map[string]models.Model{},
+			RPCEnabled:          true,
+			RPCMode:             "server",
+			StatusServerEnabled: true,
+			StatusServerHost:    "127.0.0.1",
+			StatusServerPort:    port,
+			Models:              map[string]models.Model{},
 		},
 		screen: screenLogs,
 		running: []models.Running{{
@@ -127,6 +128,7 @@ func TestTickPublishesStatusOutsideMainScreen(t *testing.T) {
 }
 
 func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
+	withTempHome(t)
 	port := freeTCPPort(t)
 	modelPath := filepath.Join(t.TempDir(), "client-model.gguf")
 	if err := os.WriteFile(modelPath, make([]byte, 4096), 0o600); err != nil {
@@ -134,10 +136,11 @@ func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
 	}
 	server := Model{
 		cfg: &config.Config{
-			RPCEnabled:       true,
-			RPCMode:          "server",
-			StatusServerHost: "127.0.0.1",
-			StatusServerPort: port,
+			RPCEnabled:          true,
+			RPCMode:             "server",
+			StatusServerEnabled: true,
+			StatusServerHost:    "127.0.0.1",
+			StatusServerPort:    port,
 		},
 	}
 	if err := server.reconcileStatusServer(); err != nil {
@@ -169,8 +172,14 @@ func TestRPCClientModePublishesToRemoteStatusServer(t *testing.T) {
 			},
 		},
 	}
-	if client.shouldRunStatusServer() {
-		t.Fatal("expected RPC client mode not to run its own status server")
+	if !client.shouldRunStatusServer() {
+		t.Fatal("expected enabled status server to run alongside RPC client mode")
+	}
+	if err := client.reconcileStatusServer(); err != nil {
+		t.Fatal(err)
+	}
+	if client.statusServer != nil {
+		t.Cleanup(client.statusServer.Stop)
 	}
 	client.reconcileStatusPublisher()
 	t.Cleanup(client.statusPublisher.Stop)
@@ -210,4 +219,11 @@ func pollStatusEventually(t *testing.T, addr string, ready func(statusserver.Sta
 	}
 	t.Fatalf("status server did not reach expected state: %v", lastErr)
 	return statusserver.Status{}
+}
+
+func withTempHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 }

@@ -3,16 +3,24 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/build"
+	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
+
+type gpuLoadSlice struct {
+	label string
+	info  statusserver.GPUDeviceInfo
+}
 
 // viewOverviewPage renders the complete Overview screen as a single outer box
 // (╭ at col 0, ╮ at col totalW-1) with a vertical │ separator between two
@@ -238,8 +246,12 @@ func (m Model) renderActiveServices(contentW, contentH int) string {
 		b.WriteString(detailMutedStyle.Render("    → Models tab to start one"))
 		b.WriteString("\n")
 	} else {
+		var localStatus statusserver.Status
+		if m.statusServer != nil {
+			localStatus = m.statusServer.Status()
+		}
 		for _, r := range m.running {
-			b.WriteString(m.renderServiceEntry(r, contentW))
+			b.WriteString(m.renderServiceEntry(r, m.overviewRunningInfo(localStatus, r), m.overviewRemoteGPUDevices(), contentW))
 		}
 	}
 
@@ -262,7 +274,11 @@ func (m Model) renderActiveServices(contentW, contentH int) string {
 			for _, c := range activeClients {
 				for _, ri := range c.Running {
 					if ri.Health == string(health.StatusUp) || ri.Health == string(health.StatusLoading) {
-						b.WriteString(m.renderRemoteServiceEntry(ri, contentW))
+						var remoteDevices []statusserver.GPUDeviceInfo
+						if c.GPU != nil {
+							remoteDevices = c.GPU.Devices
+						}
+						b.WriteString(m.renderRemoteServiceEntry(ri, remoteDevices, contentW))
 					}
 				}
 			}
@@ -272,7 +288,7 @@ func (m Model) renderActiveServices(contentW, contentH int) string {
 	return b.String()
 }
 
-func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW int) string {
+func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, remoteDevices []statusserver.GPUDeviceInfo, contentW int) string {
 	var b strings.Builder
 
 	// Line 1: alias → profile key → model name + health dot.
@@ -290,7 +306,11 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	case string(health.StatusDown):
 		dot = downStyle.Render("●")
 	}
-	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4))))
+	rpcBadge := ""
+	if len(ri.GPUs) > 0 || ri.VRAMMiB > 0 {
+		rpcBadge = " " + detailMutedStyle.Render("[RPC]")
+	}
+	b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4)), rpcBadge))
 
 	narrow := contentW < 50
 
@@ -300,8 +320,8 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 		modeBadge = detailMutedStyle.Render("[CPU]")
 	}
 	detail := "  └─ "
-	if ri.ModelSizeBytes > 0 {
-		detail += fmt.Sprintf("(%.1fG) ", float64(ri.ModelSizeBytes)/(1024*1024*1024))
+	if size := m.overviewRunningSize(&ri, ""); size != "" {
+		detail += "(" + size + ") "
 	}
 	detail += modeBadge + detailMutedStyle.Render(" (—)")
 	if !narrow {
@@ -332,10 +352,174 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 	if spark := tokSparkline(ri.TokHistory); spark != "" {
 		b.WriteString("   " + spark + "\n")
 	}
+	if gpuLines := m.renderRunningGPUBreakdown(m.combinedRemoteGPUSlices(ri), m.gpuDevices, remoteDevices, contentW); gpuLines != "" {
+		b.WriteString(gpuLines)
+	}
 	return b.String()
 }
 
-func (m Model) renderServiceEntry(r models.Running, contentW int) string {
+func (m Model) overviewRemoteGPUDevices() []statusserver.GPUDeviceInfo {
+	if m.remoteStatus != nil && m.remoteStatus.GPU != nil && len(m.remoteStatus.GPU.Devices) > 0 {
+		return m.remoteStatus.GPU.Devices
+	}
+	return nil
+}
+
+func (m Model) overviewRunningInfo(st statusserver.Status, r models.Running) *statusserver.RunningInfo {
+	for i := range st.Running {
+		ri := &st.Running[i]
+		if ri.Port == r.Port && ri.Model == r.ModelName && ri.Profile == r.ProfileName {
+			return ri
+		}
+	}
+	for i := range st.Running {
+		ri := &st.Running[i]
+		if ri.Port == r.Port {
+			return ri
+		}
+	}
+	return nil
+}
+
+func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSlice {
+	slices := make([]gpuLoadSlice, 0, len(ri.GPUs))
+	for _, gpu := range ri.GPUs {
+		slices = append(slices, gpuLoadSlice{label: gpu.Name, info: gpu})
+	}
+	return slices
+}
+
+func (m Model) overviewRunningSize(ri *statusserver.RunningInfo, modelKey string) string {
+	if ri != nil {
+		switch {
+		case ri.VRAMMiB > 0:
+			return util.FormatBytes(ri.VRAMMiB * 1024 * 1024)
+		case ri.RAMMiB > 0:
+			return util.FormatBytes(ri.RAMMiB * 1024 * 1024)
+		case ri.ModelSizeBytes > 0:
+			return util.FormatBytes(ri.ModelSizeBytes)
+		}
+	}
+	return m.overviewModelSize(modelKey)
+}
+
+func (m Model) renderRunningGPUBreakdown(slices []gpuLoadSlice, localDevices []gpu.DeviceUsage, remoteDevices []statusserver.GPUDeviceInfo, contentW int) string {
+	if len(slices) == 0 {
+		return ""
+	}
+	totalModelLoad := int64(0)
+	for _, slice := range slices {
+		totalModelLoad += slice.info.UsedMiB
+	}
+	var b strings.Builder
+	b.WriteString(detailMutedStyle.Render("     RPC GPU load") + "\n")
+	for _, slice := range slices {
+		gpu := slice.info
+		modelName := m.overviewGPULabelName(gpu.Name, localDevices, remoteDevices)
+		label := slice.label
+		if modelName != "" {
+			label += " " + modelName
+		}
+		used := util.FormatBytes(gpu.UsedMiB * 1024 * 1024)
+		line := fmt.Sprintf("     %s: %s", label, used)
+		if totalModelLoad > 0 {
+			totalText := util.FormatBytes(totalModelLoad * 1024 * 1024)
+			pct := float64(gpu.UsedMiB) / float64(totalModelLoad) * 100
+			line += fmt.Sprintf(" / %s (%.1f%%)", totalText, pct)
+		}
+		if lipgloss.Width(line) > contentW {
+			line = fmt.Sprintf("     %s: %s", label, used)
+			if totalModelLoad > 0 {
+				line += fmt.Sprintf(" / %s", util.FormatBytes(totalModelLoad*1024*1024))
+			}
+		}
+		b.WriteString(detailMutedStyle.Render(line))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func (m Model) overviewGPULabelName(label string, localDevices []gpu.DeviceUsage, remoteDevices []statusserver.GPUDeviceInfo) string {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(strings.ToUpper(label), "RPC"):
+		if name := overviewDeviceNameFromStatus(label, remoteDevices); name != "" {
+			return name
+		}
+		return label
+	case strings.HasPrefix(strings.ToUpper(label), "CUDA"):
+		if name := overviewDeviceNameFromUsage(label, localDevices); name != "" {
+			return name
+		}
+		return label
+	default:
+		return label
+	}
+}
+
+func overviewDeviceNameFromUsage(label string, devices []gpu.DeviceUsage) string {
+	index, ok := overviewDeviceIndex(label)
+	if !ok {
+		return label
+	}
+	for _, device := range devices {
+		if device.Index == index {
+			if name := strings.TrimSpace(device.Name); name != "" {
+				return name
+			}
+		}
+	}
+	return label
+}
+
+func overviewDeviceNameFromStatus(label string, devices []statusserver.GPUDeviceInfo) string {
+	index, ok := overviewDeviceIndex(label)
+	if !ok {
+		return label
+	}
+	for _, device := range devices {
+		if device.Index == index {
+			if name := strings.TrimSpace(device.Name); name != "" {
+				return name
+			}
+		}
+	}
+	return label
+}
+
+func overviewDeviceIndex(label string) (int, bool) {
+	label = strings.TrimSpace(strings.ToUpper(label))
+	if strings.HasPrefix(label, "GPU ") {
+		if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(label, "GPU "))); err == nil {
+			return n, true
+		}
+	}
+	var digits strings.Builder
+	for i := len(label) - 1; i >= 0; i-- {
+		ch := label[i]
+		if ch < '0' || ch > '9' {
+			break
+		}
+		digits.WriteByte(ch)
+	}
+	if digits.Len() == 0 {
+		return 0, false
+	}
+	rev := []byte(digits.String())
+	for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+		rev[i], rev[j] = rev[j], rev[i]
+	}
+	n, err := strconv.Atoi(string(rev))
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func (m Model) renderServiceEntry(r models.Running, ri *statusserver.RunningInfo, remoteDevices []statusserver.GPUDeviceInfo, contentW int) string {
 	var b strings.Builder
 	hkey := r.ModelKey + "/" + r.ProfileKey
 
@@ -387,7 +571,7 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		}
 	}
 	detail := "  └─ "
-	if size := m.overviewModelSize(r.ModelKey); size != "" {
+	if size := m.overviewRunningSize(ri, r.ModelKey); size != "" {
 		detail += "(" + size + ") "
 	}
 	detail += modeBadge
@@ -418,13 +602,28 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	if spark != "" {
 		b.WriteString("   " + spark + "\n")
 	}
+	if ri != nil && len(ri.GPUs) > 0 {
+		if gpuLines := m.renderRunningGPUBreakdown(m.combinedLocalGPUSlices(ri.GPUs), m.gpuDevices, remoteDevices, contentW); gpuLines != "" {
+			b.WriteString(gpuLines)
+		}
+	}
 	return b.String()
+}
+
+func (m Model) combinedLocalGPUSlices(gpus []statusserver.GPUDeviceInfo) []gpuLoadSlice {
+	slices := make([]gpuLoadSlice, 0, len(gpus))
+	for _, gpu := range gpus {
+		slices = append(slices, gpuLoadSlice{label: gpu.Name, info: gpu})
+	}
+	return slices
 }
 
 // overviewSpeeds returns (current, avg, peak) display strings.
 // current: live tok/s rate while generating, else "—"
 // avg:     in-session rolling window average (tokHistory), falling back to
-//          the persisted cross-session average (tokRateHistory) when idle
+//
+//	the persisted cross-session average (tokRateHistory) when idle
+//
 // peak:    all-time high from MaxTokPerSec / session tokPeak
 func (m Model) overviewSpeeds(hkey, modelKey, profileKey string) (current, avg, peak string) {
 	// All-time peak.

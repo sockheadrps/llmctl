@@ -69,11 +69,13 @@ Tabs cycle left-to-right. Overview is the leftmost tab and the default on launch
 
 The at-a-glance dashboard. Read-only — no cursor navigation within it.
 
-![Overview tab with Active Services and System Telemetry boxes](../assets/screenshots/overview-tab.png)
+![Overview tab with Active Services and System Telemetry boxes](../assets/screenshots/concepts-overview-populated.png)
 
 ### Active Services box (left)
 
 Lists every running inference instance on this machine under **Local**, and any running instances on connected RPC client machines under **Remote** (only shown when clients have active models).
+
+RPC-backed runs can also show per-GPU model-load slices so the Overview screen reflects how the model is split across local and remote GPUs.
 
 Each entry is three lines (or five lines on narrow terminals):
 
@@ -118,6 +120,8 @@ On **narrow terminals** (active services box width below 50 chars), port is hidd
 | RPC BACKEND | Status (ONLINE / OFFLINE / not started), address, client count |
 
 VRAM labels wrap to the next line if the box is too narrow to fit on one line.
+
+The browser dashboard uses the same source and per-GPU telemetry model as the Overview tab, so both views should tell the same story.
 
 ---
 
@@ -209,6 +213,8 @@ Shown when RPC is enabled. Fields differ by mode:
 **Client mode:**
 - Remote status server address (`host:port`) — the server machine's status server URL
 - RPC endpoint (auto-discovered, or set manually)
+
+The Status Server section is separate from RPC, so local monitoring and the browser dashboard can run without distributed GPU mode.
 
 ### Network Interface (Linux only)
 

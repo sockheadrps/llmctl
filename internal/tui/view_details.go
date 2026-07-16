@@ -20,26 +20,12 @@ func (m Model) renderVRAMHeader() string {
 	total := float64(m.gpuUsage.TotalMiB)
 	frac := float64(m.gpuUsage.UsedMiB) / total
 
-	// RPC server VRAM segment shown at the start of the bar in amber.
-	var rpcBlocks int
-	if m.cfg.RPCEnabled && m.rpcServerAlive && m.rpcServerState.PID > 0 {
-		if rpcMiB, ok := m.gpuByPID[m.rpcServerState.PID]; ok && rpcMiB > 0 {
-			rpcBlocks = int(float64(rpcMiB) / total * barWidth)
-			if rpcBlocks > barWidth {
-				rpcBlocks = barWidth
-			}
-		}
-	}
-
 	filled := int(frac * barWidth)
 	if filled > barWidth {
 		filled = barWidth
 	}
-	llamaBlocks := filled - rpcBlocks
-	if llamaBlocks < 0 {
-		llamaBlocks = 0
-	}
-	emptyBlocks := barWidth - rpcBlocks - llamaBlocks
+	llamaBlocks := filled
+	emptyBlocks := barWidth - llamaBlocks
 
 	llamaStyle := runningStyle
 	switch {
@@ -49,8 +35,7 @@ func (m Model) renderVRAMHeader() string {
 		llamaStyle = loadingStyle
 	}
 
-	bar := loadingStyle.Render(strings.Repeat("█", rpcBlocks)) +
-		llamaStyle.Render(strings.Repeat("█", llamaBlocks)) +
+	bar := llamaStyle.Render(strings.Repeat("█", llamaBlocks)) +
 		strings.Repeat("░", emptyBlocks)
 
 	usedGB := float64(m.gpuUsage.UsedMiB) / 1024

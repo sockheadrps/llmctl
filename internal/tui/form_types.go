@@ -17,33 +17,33 @@ type formField struct {
 // activates a field for editing). navigating=false is edit mode (keystrokes
 // go to the focused textinput; Enter commits and returns to navigate mode).
 type formState struct {
-	modelKey             string
-	editing              bool
-	originalKey          string
-	fields               []formField
-	initial              []string
-	initialFlash         bool
-	flash                bool
-	initialCPUOnly       bool
-	cpuOnly              bool
-	initialMLock         bool
-	mlock                bool
+	modelKey               string
+	editing                bool
+	originalKey            string
+	fields                 []formField
+	initial                []string
+	initialFlash           bool
+	flash                  bool
+	initialCPUOnly         bool
+	cpuOnly                bool
+	initialMLock           bool
+	mlock                  bool
 	rpcClientLayers        int
 	initialRPCClientLayers int
-	focus                int
-	scroll               int
-	descScroll           int
-	descDir              int
-	descPause            int
-	err                  string
-	navigating           bool
-	flagFocus            bool
-	flagInput            textinput.Model
-	flagOverrides        map[string]string
-	initialFlagOverrides map[string]string
-	importEditing        bool
-	importInput          textinput.Model
-	importErr            string
+	focus                  int
+	scroll                 int
+	descScroll             int
+	descDir                int
+	descPause              int
+	err                    string
+	navigating             bool
+	flagFocus              bool
+	flagInput              textinput.Model
+	flagOverrides          map[string]string
+	initialFlagOverrides   map[string]string
+	importEditing          bool
+	importInput            textinput.Model
+	importErr              string
 }
 
 // Field indices into formState.fields, matching the order of formLabels.

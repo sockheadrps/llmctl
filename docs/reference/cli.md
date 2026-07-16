@@ -50,10 +50,3 @@ llmctl is primarily a TUI application, but it also ships a small command-line su
 | `llmctl network --rpc-conn <name>` | Override the saved RPC connection name |
 | `llmctl network --iface <name>` | Override the interface used by `status` |
 
----
-
-## Notes
-
-- `llmctl` prints friendly text output by default.
-- Use `--json` only where the command supports it.
-- If you just want to use the app normally, start with the TUI.

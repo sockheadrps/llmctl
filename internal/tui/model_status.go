@@ -5,19 +5,21 @@ import (
 	"strings"
 
 	"github.com/sockheadrps/llmctl/internal/build"
+	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	"github.com/sockheadrps/llmctl/internal/util"
 )
 
-// server-mode only
+// status-server only
 func (m Model) shouldRunStatusServer() bool {
 	if m.cfg == nil {
 		return false
 	}
-	return m.cfg.RPCEnabled && m.cfg.RPCMode == "server"
+	return m.cfg.StatusServerEnabled
 }
 
-// server-mode only
+// status-server only
 func (m Model) statusServerBindAddr() (string, int) {
 	if m.cfg == nil {
 		return "0.0.0.0", 11435
@@ -33,7 +35,7 @@ func (m Model) statusServerBindAddr() (string, int) {
 	return host, port
 }
 
-// server-mode only
+// status-server only
 func (m *Model) reconcileStatusServer() error {
 	if !m.shouldRunStatusServer() {
 		if m.statusServer != nil {
@@ -47,6 +49,14 @@ func (m *Model) reconcileStatusServer() error {
 
 	host, port := m.statusServerBindAddr()
 	if m.statusServer != nil && m.statusServerHost == host && m.statusServerPort == port {
+		historyPath, err := util.StatusHistoryFile()
+		if err != nil {
+			return err
+		}
+		if err := m.statusServer.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+			return err
+		}
+		m.statusServer.ConfigureDashboard(m.cfg.StatusDashboardEnabled())
 		return nil
 	}
 	if m.statusServer != nil {
@@ -60,6 +70,16 @@ func (m *Model) reconcileStatusServer() error {
 	if err := srv.Start(host, port); err != nil {
 		return err
 	}
+	historyPath, err := util.StatusHistoryFile()
+	if err != nil {
+		srv.Stop()
+		return err
+	}
+	if err := srv.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+		srv.Stop()
+		return err
+	}
+	srv.ConfigureDashboard(m.cfg.StatusDashboardEnabled())
 	m.statusServer = srv
 	m.statusServerHost = host
 	m.statusServerPort = port
@@ -114,7 +134,21 @@ func (m *Model) pushStatusServer() {
 
 // shared
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
-func (m Model) buildStatusSnapshot() statusserver.Status {
+func (m *Model) buildStatusSnapshot() statusserver.Status {
+	toGPUDeviceInfo := func(device gpu.DeviceUsage) statusserver.GPUDeviceInfo {
+		info := statusserver.GPUDeviceInfo{
+			Index:    device.Index,
+			UUID:     device.UUID,
+			Name:     device.Name,
+			UsedMiB:  device.UsedMiB,
+			TotalMiB: device.TotalMiB,
+		}
+		if info.Name == "" {
+			info.Name = "Unknown GPU"
+		}
+		return info
+	}
+
 	running := make([]statusserver.RunningInfo, 0, len(m.running))
 	for _, r := range m.running {
 		key := r.ModelKey + "/" + r.ProfileKey
@@ -167,9 +201,12 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 				cpuOnly = p.CPUOnly
 			}
 		}
-		if !cpuOnly {
-			if mb, ok := m.gpuByPID[r.PID]; ok {
-				info.VRAMMiB = mb
+		if !cpuOnly && h == health.StatusUp {
+			if slices, err := m.modelLoadSlices(r.LogFile); err == nil {
+				info.GPUs = slices
+				for _, slice := range slices {
+					info.VRAMMiB += slice.UsedMiB
+				}
 			}
 		} else {
 			if mb, ok := m.ramByPID[r.PID]; ok {
@@ -190,17 +227,19 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			Host: m.cfg.RPCServerHost,
 			Port: m.cfg.RPCServerPort,
 		}
-		if mb, ok := m.gpuByPID[m.rpcServerState.PID]; ok {
-			rpcInfo.VRAMMiB = mb
-		}
 		st.RPCServer = rpcInfo
 	}
 
 	if m.gpuAvailable && m.gpuUsage.TotalMiB > 0 {
+		devices := make([]statusserver.GPUDeviceInfo, 0, len(m.gpuDevices))
+		for _, device := range m.gpuDevices {
+			devices = append(devices, toGPUDeviceInfo(device))
+		}
 		st.GPU = &statusserver.GPUInfo{
 			Name:     m.gpuName,
 			TotalMiB: m.gpuUsage.TotalMiB,
 			UsedMiB:  m.gpuUsage.UsedMiB,
+			Devices:  devices,
 		}
 	}
 

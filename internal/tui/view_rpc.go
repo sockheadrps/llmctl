@@ -39,18 +39,7 @@ func (m Model) clientModelSizeMeta(ri statusserver.RunningInfo) string {
 	if ri.ModelSizeBytes <= 0 {
 		return ""
 	}
-	loaded := m.rpcServerLoadedVRAMMiB()
-	if loaded <= 0 {
-		return "  " + util.FormatBytes(ri.ModelSizeBytes)
-	}
-	return fmt.Sprintf("  %s / %s server GPU", util.FormatBytes(ri.ModelSizeBytes), util.FormatBytes(loaded*1024*1024))
-}
-
-func (m Model) rpcServerLoadedVRAMMiB() int64 {
-	if !m.rpcServerAlive || m.rpcServerState.PID == 0 {
-		return 0
-	}
-	return m.gpuByPID[m.rpcServerState.PID]
+	return "  " + util.FormatBytes(ri.ModelSizeBytes)
 }
 
 // renderRPCServerTab renders the RPC tab's left pane. Branches on RPCMode:
@@ -397,4 +386,3 @@ func tailFittingHeightRPC(logPath string, boxWidth, maxLines int) string {
 	}
 	return strings.Join(lines, "\n")
 }
-

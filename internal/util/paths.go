@@ -87,3 +87,13 @@ func TokRatesFile() (string, error) {
 	}
 	return filepath.Join(home, "tok_rates.json"), nil
 }
+
+// StatusHistoryFile returns the path to the JSON file tracking status server
+// history samples used by the browser dashboard.
+func StatusHistoryFile() (string, error) {
+	home, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "status_history.json"), nil
+}

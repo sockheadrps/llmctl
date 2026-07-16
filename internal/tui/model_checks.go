@@ -125,15 +125,16 @@ func checkSlotsCmd(running []models.Running) tea.Cmd {
 // every tick on a machine without nvidia-smi.
 func checkVRAMCmd() tea.Cmd {
 	return func() tea.Msg {
-		usage, err := gpu.Total()
+		devices, err := gpu.Devices()
 		if err != nil {
 			return vramMsg{}
 		}
-		byPID, err := gpu.ByPID()
-		if err != nil {
-			byPID = nil
+		var usage gpu.Usage
+		for _, device := range devices {
+			usage.UsedMiB += device.UsedMiB
+			usage.TotalMiB += device.TotalMiB
 		}
-		return vramMsg{usage: usage, byPID: byPID}
+		return vramMsg{usage: usage, devices: devices}
 	}
 }
 

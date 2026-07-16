@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>llmctl dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111c;
+      --panel: rgba(10, 18, 32, 0.88);
+      --panel-border: rgba(148, 163, 184, 0.16);
+      --text: #e8eefc;
+      --muted: #94a3b8;
+      --accent: #7dd3fc;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+      --shadow: 0 24px 60px rgba(2, 8, 23, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.14), transparent 30%),
+        radial-gradient(circle at top right, rgba(167, 139, 250, 0.14), transparent 32%),
+        linear-gradient(180deg, #06101b 0%, var(--bg) 100%);
+    }
+    .shell { max-width: 1440px; margin: 0 auto; padding: 24px 18px 36px; }
+    .hero, .card, .panel {
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(260px, 0.9fr);
+      gap: 16px;
+      align-items: center;
+      padding: 24px 26px;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.04; letter-spacing: -0.04em; }
+    .statusbar { display: grid; gap: 10px; justify-items: end; text-align: right; }
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border: 1px solid var(--panel-border); border-radius: 999px;
+      background: rgba(13, 26, 42, 0.8); color: var(--muted); font-size: 13px;
+    }
+    .status-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--warn); }
+    .status-dot.ok { background: var(--good); }
+    .status-dot.bad { background: var(--bad); }
+    .panel-head-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .panel-control-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .panel-control-inline label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      white-space: nowrap;
+    }
+    .panel-control-inline select {
+      min-height: 38px;
+      min-width: 160px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(7, 13, 23, 0.92);
+      color: var(--text);
+      padding: 0 12px;
+      font: inherit;
+    }
+    .card { padding: 18px; min-height: 122px; }
+    .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; }
+    .value { margin-top: 10px; font-size: clamp(24px, 3vw, 38px); line-height: 1; letter-spacing: -0.04em; }
+    .subvalue { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .panels { display: grid; gap: 14px; }
+    .panel { padding: 18px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+    .panel-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.03em; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .model-list { display: grid; gap: 12px; }
+    .model {
+      display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr); gap: 12px; align-items: start;
+      padding: 14px 16px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .model-side {
+      display: grid;
+      gap: 10px;
+      align-self: stretch;
+    }
+    .model-top { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .model-title { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+    .model-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .transition {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--muted);
+    }
+    .transition.good { background: rgba(52, 211, 153, 0.14); color: #c7f9e4; }
+    .transition.warn { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
+    .transition.bad { background: rgba(251, 113, 133, 0.14); color: #fecdd3; }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(14, 165, 233, 0.16);
+      color: #d9f3ff;
+    }
+    .metrics {
+      display: grid;
+      gap: 4px 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .metric strong { display: block; margin-top: 1px; color: var(--text); font-size: 14px; font-weight: 700; }
+    .spark { width: 100%; height: 82px; display: block; }
+    .gridline { stroke: rgba(148, 163, 184, 0.14); stroke-width: 1; }
+    .line { fill: none; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.18)); }
+    .area { fill-opacity: 0.18; }
+    .empty { padding: 20px; border-radius: 16px; border: 1px dashed rgba(148, 163, 184, 0.22); color: var(--muted); text-align: center; }
+    .trend-row { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
+    .source-trend-row { grid-template-columns: minmax(0, 1fr); }
+    .source-trend-layout {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      align-items: stretch;
+    }
+    .trend-card {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(8, 15, 25, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .trend-card .value { font-size: 26px; margin-top: 6px; }
+    .model-trends { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+    .model-trends .trend-card {
+      padding: 10px 12px;
+    }
+    .model-trends .trend-card .spark { height: 54px; }
+    .model-trends .trend-card .label { font-size: 10px; line-height: 1.2; }
+    .model-trends .trend-card .model-meta { display: none; }
+    .gpu-load-card {
+      padding: 10px 12px;
+      min-height: 0;
+    }
+    .gpu-load-card .gpu-load-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .gpu-load-card .gpu-load-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(125, 211, 252, 0.14);
+      color: #d9f3ff;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      white-space: nowrap;
+    }
+    .gpu-load-card .value {
+      font-size: 24px;
+      margin-top: 8px;
+    }
+    .gpu-load-card .gpu-model {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+      line-height: 1.25;
+      min-height: 30px;
+    }
+    .gpu-load-card .gpu-load-meta {
+      color: rgba(232, 238, 252, 0.82);
+      font-size: 12px;
+      margin-top: 4px;
+      display: grid;
+      gap: 2px;
+    }
+    .gpu-load-card .chart-wrap {
+      margin-top: 8px;
+      min-height: 118px;
+      flex: 1;
+      display: flex;
+    }
+    .gpu-load-card .chart-wrap .spark {
+      min-height: 118px;
+      height: 118px;
+    }
+    .gpu-load-card .gpu-bar {
+      margin-top: 9px;
+      height: 13px;
+    }
+    .trend-card .chart-wrap {
+      margin-top: 6px;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+    }
+    .trend-card .chart-wrap .spark {
+      width: 100%;
+      height: 100%;
+      min-height: 140px;
+    }
+    .gpu-list { display: grid; gap: 10px; margin-top: 12px; }
+    .gpu-row { display: grid; gap: 6px; }
+    .gpu-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; color: var(--muted); font-size: 12px; }
+    .gpu-head strong { color: var(--text); font-size: 14px; }
+    .gpu-model { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .gpu-bar {
+      position: relative;
+      overflow: hidden;
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.12);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .gpu-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(125, 211, 252, 0.95), rgba(167, 139, 250, 0.95));
+    }
+    .gpu-empty {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    .pill {
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: rgba(10, 18, 32, 0.7);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+    .pill:hover {
+      border-color: rgba(125, 211, 252, 0.45);
+      color: var(--text);
+    }
+    .pill.active {
+      background: rgba(14, 165, 233, 0.18);
+      color: var(--text);
+      border-color: rgba(125, 211, 252, 0.55);
+      box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.08) inset;
+    }
+    .pill.all {
+      border-style: dashed;
+    }
+    .client {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(8, 15, 25, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .client-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .client-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .client-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    .client-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 10px;
+    }
+    .client-run {
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(10, 18, 32, 0.7);
+    }
+    .client-run-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .client-run-metrics {
+      display: grid;
+      gap: 4px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 1080px) {
+      .hero, .panels, .trend-row, .model, .client-grid, .source-trend-layout { grid-template-columns: 1fr; }
+      .panel-head-tools { justify-content: flex-start; }
+      .panel-control-inline select { min-width: 0; width: 100%; }
+      .statusbar { justify-items: start; text-align: left; }
+    }
+    @media (max-width: 640px) {
+      .shell { padding: 14px 10px 24px; }
+      .hero, .card, .panel { border-radius: 18px; }
+      .metrics { grid-template-columns: 1fr; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <h1>llmctl dashboard</h1>
+      </div>
+      <div class="statusbar">
+        <div class="status-chip"><span class="status-dot" id="server-dot"></span><span id="server-state">Loading status...</span></div>
+        <div class="status-chip"><span id="server-updated">Waiting for first sample</span></div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top: 14px;">
+      <div class="panel-head">
+        <h2>Source Trends</h2>
+        <div class="panel-head-tools">
+          <div class="meta" id="history-count">0 samples</div>
+          <div class="panel-control-inline">
+            <label for="source-filter">Source</label>
+            <select id="source-filter"></select>
+          </div>
+        </div>
+      </div>
+      <div class="source-trend-layout" id="source-trends"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 14px;">
+      <div class="panel-head">
+        <h2>Active Models</h2>
+        <div class="meta" id="active-count">0 running</div>
+      </div>
+      <div class="model-list" id="models"></div>
+    </section>
+
+    <div class="footer">
+      <div id="footer-version"></div>
+      <div id="footer-source"></div>
+    </div>
+  </main>
+
+  <script>
+    const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const intFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const timeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+    const rangeMinutes = {
+      all: null,
+      '5m': 5,
+      '15m': 15,
+      '1h': 60,
+      '6h': 360,
+    };
+    const state = {
+      selectedSource: 'local',
+      lastSourceKey: '',
+      sourceHistoryCutoffMs: 0,
+    };
+    let currentHistory = { samples: [] };
+
+    function fmtNum(value, suffix = '') {
+      if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+      return `${fmt.format(value)}${suffix}`;
+    }
+
+    function fmtInt(value, suffix = '') {
+      if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+      return `${intFmt.format(value)}${suffix}`;
+    }
+
+    function fmtMiB(value) {
+      return fmtInt(value, ' MiB');
+    }
+
+    function fmtGiB(valueMiB) {
+      if (valueMiB === null || valueMiB === undefined || Number.isNaN(valueMiB)) return 'n/a';
+      return `${fmt.format(valueMiB / 1024)} GiB`;
+    }
+
+    function sourceRunKey(run) {
+      return [run.sourceId || 'local', run.model || '', run.profile || '', run.port || 0].join('::');
+    }
+
+    function sampleAgeMinutes(sample) {
+      const ms = Number(sample.sampled_at_ms) || 0;
+      return (Date.now() - ms) / 60000;
+    }
+
+    function filteredSamples(history) {
+      return history.samples.filter(sample => {
+        return !state.sourceHistoryCutoffMs || Number(sample.sampled_at_ms) >= state.sourceHistoryCutoffMs;
+      });
+    }
+
+    function sourceOptions() {
+      return [
+        { value: 'local', label: 'Local' },
+        { value: 'remote', label: 'Remote' },
+        { value: 'all', label: 'All' },
+      ];
+    }
+
+    function sourceLabel(status) {
+      if (state.selectedSource === 'local') return 'Local';
+      if (state.selectedSource === 'remote') return 'Remote';
+      if (state.selectedSource === 'all') return 'All';
+      return 'Local';
+    }
+
+    function localRuns(status) {
+      return (status.running || []).map(run => decorateRun(run, 'local', 'Local'));
+    }
+
+    function clientRuns(status, clientId = null) {
+      const clients = status.clients || [];
+      const wanted = clientId ? clients.filter(client => client.id === clientId) : clients;
+      return wanted.flatMap(client => {
+        const sourceId = client.id || 'client';
+        const sourceName = client.name || client.id || 'Unnamed client';
+        return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
+      });
+    }
+
+    function decorateRun(run, sourceId, sourceName) {
+      return Object.assign({ sourceId, sourceName }, run);
+    }
+
+    function selectedSourceRuns(status) {
+      if (state.selectedSource === 'local') {
+        return localRuns(status);
+      }
+      if (state.selectedSource === 'remote') {
+        return clientRuns(status);
+      }
+      if (state.selectedSource === 'all') {
+        return localRuns(status).concat(clientRuns(status));
+      }
+      return localRuns(status);
+    }
+
+    function allSourceRuns(status) {
+      return localRuns(status).concat(clientRuns(status));
+    }
+
+    function filteredRuns(status) {
+      return selectedSourceRuns(status);
+    }
+
+    function modelGroupKey(run) {
+      return [run.model || '', run.profile || ''].join('::');
+    }
+
+    function groupedRuns(status) {
+      const groups = new Map();
+      const order = [];
+      allSourceRuns(status).forEach(run => {
+        const key = modelGroupKey(run);
+        if (!groups.has(key)) {
+          groups.set(key, []);
+          order.push(key);
+        }
+        groups.get(key).push(run);
+      });
+      return order.map(key => {
+        const runs = groups.get(key) || [];
+        const primary = runs.find(run =>
+          state.selectedSource === 'all' ||
+          (state.selectedSource === 'local' && run.sourceId === 'local') ||
+          (state.selectedSource === 'remote' && run.sourceId !== 'local')
+        ) || runs[0] || null;
+        return { key, runs, primary };
+      });
+    }
+
+    function groupSum(group, field) {
+      return (group.runs || []).reduce((sum, run) => sum + (Number(run[field]) || 0), 0);
+    }
+
+    function groupFirstNonZero(group, field) {
+      for (const run of group.runs || []) {
+        const value = Number(run[field]) || 0;
+        if (value > 0) return value;
+      }
+      return 0;
+    }
+
+    function groupSources(group) {
+      return (group.runs || []).map(run => run.sourceId === 'local' ? 'Local' : (run.sourceName || run.sourceId || 'Remote'));
+    }
+
+    function groupVisible(group) {
+      if (state.selectedSource === 'all') return true;
+      return (group.runs || []).some(run => state.selectedSource === 'local'
+        ? run.sourceId === 'local'
+        : run.sourceId !== 'local');
+    }
+
+    function sourceRunsForSample(sample) {
+      if (state.selectedSource === 'local') {
+        return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
+      }
+      if (state.selectedSource === 'remote') {
+        return (sample.status.clients || []).flatMap(client => {
+          const sourceId = client.id || 'client';
+          const sourceName = client.name || client.id || 'Unnamed client';
+          return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
+        });
+      }
+      if (state.selectedSource === 'all') {
+        return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local')).concat(
+          (sample.status.clients || []).flatMap(client => {
+            const sourceId = client.id || 'client';
+            const sourceName = client.name || client.id || 'Unnamed client';
+            return (client.running || []).map(run => decorateRun(run, sourceId, sourceName));
+          })
+        );
+      }
+      return (sample.status.running || []).map(run => decorateRun(run, 'local', 'Local'));
+    }
+
+    function aggregateSamples(history, runs, field) {
+      const keys = runs.map(sourceRunKey);
+      return filteredSamples(history).map(sample => {
+        return sourceRunsForSample(sample).reduce((sum, run) => {
+          if (!keys.includes(sourceRunKey(run))) return sum;
+          return sum + (Number(run[field]) || 0);
+        }, 0);
+      });
+    }
+
+    function sourceTotalVramSeries(history) {
+      return filteredSamples(history).map(sample => {
+        const status = sample.status || {};
+        let total = 0;
+        if (state.selectedSource === 'local' || state.selectedSource === 'all') {
+          total += Number(status.gpu && status.gpu.total_mib) || 0;
+        }
+        if (state.selectedSource === 'remote' || state.selectedSource === 'all') {
+          (status.clients || []).forEach(client => {
+            total += Number(client.gpu && client.gpu.total_mib) || 0;
+          });
+        }
+        return total;
+      });
+    }
+
+    function valuesFor(history, current, field) {
+      const currentKey = sourceRunKey(current);
+      return filteredSamples(history).map(sample => {
+        const found = sourceRunsForSample(sample).find(run => sourceRunKey(run) === currentKey);
+        return found ? Number(found[field]) || 0 : null;
+      });
+    }
+
+    function ratioSeries(values, totals) {
+      return values.map((value, index) => {
+        const total = Number(totals[index]) || 0;
+        const used = Number(value);
+        if (!Number.isFinite(used) || total <= 0) return null;
+        return (used / total) * 100;
+      });
+    }
+
+    function latestSample(history) {
+      const samples = filteredSamples(history);
+      if (!samples.length) return null;
+      return samples[samples.length - 1];
+    }
+
+    function pointToXY(values, width, height, pad, scaleMode = 'auto') {
+      const finite = values.filter(v => Number.isFinite(v));
+      if (!finite.length) return null;
+      const min = scaleMode === 'percent' ? 0 : Math.min(...finite);
+      const max = scaleMode === 'percent' ? 100 : Math.max(...finite);
+      const span = max - min || 1;
+      const usableW = width - pad * 2;
+      const usableH = height - pad * 2;
+      const step = values.length > 1 ? usableW / (values.length - 1) : 0;
+      let path = '';
+      let area = '';
+      let started = false;
+      const points = [];
+      values.forEach((v, i) => {
+        if (!Number.isFinite(v)) {
+          started = false;
+          return;
+        }
+        const x = pad + (step * i);
+        const y = pad + usableH - (((v - min) / span) * usableH);
+        const px = x.toFixed(1);
+        const py = y.toFixed(1);
+        if (!started) {
+          path += `M ${px} ${py}`;
+          area += `M ${px} ${height - pad}`;
+          started = true;
+        } else {
+          path += ` L ${px} ${py}`;
+        }
+        area += ` L ${px} ${py}`;
+        points.push({ x: x, y: y, value: v });
+      });
+      if (!path) return null;
+      const lastIndex = values.length - 1;
+      const lastX = (pad + (step * lastIndex)).toFixed(1);
+      area += ` L ${lastX} ${height - pad} Z`;
+      return { path, area, points };
+    }
+
+    function sparkline(values, color, label, valueText = null, unit = '', showYAxis = false) {
+      const width = 220;
+      const height = showYAxis ? 120 : 92;
+      const pad = 8;
+      const data = pointToXY(values, width, height, pad, showYAxis ? 'percent' : 'auto');
+      if (!data) return '<div class="empty">No samples yet</div>';
+      const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
+      const topRight = valueText ? escapeHtml(valueText) : `${fmtNum(maxValue)}${unit}`;
+      const lastPoint = data.points.length ? data.points[data.points.length - 1] : null;
+      const markerText = showYAxis && lastPoint ? `${fmtNum(lastPoint.value)}%` : '';
+      const markerX = lastPoint ? Math.min(width - pad - 18, Math.max(pad + 18, lastPoint.x)) : width - pad - 18;
+      const markerY = lastPoint ? Math.max(18, lastPoint.y - 10) : 18;
+      return `
+        <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
+          <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
+          ${showYAxis ? `<line class="gridline" x1="${pad}" x2="${pad}" y1="${pad}" y2="${height - pad}"></line>` : ''}
+          <path class="area" d="${data.area}" style="fill:${color}"></path>
+          <path class="line" d="${data.path}" style="stroke:${color}"></path>
+          ${showYAxis ? `<text x="${pad + 2}" y="${pad + 12}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">100%</text>` : ''}
+          ${showYAxis ? `<text x="${pad + 2}" y="${height - pad - 2}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">0%</text>` : ''}
+          ${showYAxis && markerText ? `<text x="${markerX}" y="${markerY}" fill="rgba(232,238,252,0.95)" text-anchor="middle" font-size="12">${markerText}</text>` : ''}
+          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>
+        </svg>`;
+    }
+
+    function stackedGpuSparkline(modelValues, otherValues, totalValues, label, valueText, modelColor, otherColor) {
+      const width = 220;
+      const height = 120;
+      const pad = 8;
+      const modelStackedValues = modelValues.map((value, index) => {
+        const model = Number(value);
+        const other = Number(otherValues[index]);
+        if (!Number.isFinite(model) && !Number.isFinite(other)) return null;
+        const base = Number.isFinite(other) ? other : 0;
+        if (!Number.isFinite(model)) return base;
+        return base + model;
+      });
+      const modelData = pointToXY(modelStackedValues, width, height, pad, 'percent');
+      const otherData = pointToXY(otherValues, width, height, pad, 'percent');
+      const totalData = pointToXY(totalValues, width, height, pad, 'percent');
+      if (!modelData && !otherData && !totalData) return '<div class="empty">No samples yet</div>';
+      const lastTotal = totalData && totalData.points.length ? totalData.points[totalData.points.length - 1] : null;
+      const markerText = lastTotal ? `${fmtNum(lastTotal.value)}%` : '';
+      const markerX = lastTotal ? Math.min(width - pad - 18, Math.max(pad + 18, lastTotal.x)) : width - pad - 18;
+      const markerY = lastTotal ? Math.max(18, lastTotal.y - 10) : 18;
+      const totalTopRight = valueText ? escapeHtml(valueText) : '';
+      return `
+        <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
+          <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
+          <line class="gridline" x1="${pad}" x2="${pad}" y1="${pad}" y2="${height - pad}"></line>
+          ${otherData ? `<path class="area" d="${otherData.area}" style="fill:${otherColor};opacity:0.32"></path>` : ''}
+          ${otherData ? `<path class="line" d="${otherData.path}" style="stroke:${otherColor};opacity:0.8"></path>` : ''}
+          ${modelData ? `<path class="area" d="${modelData.area}" style="fill:${modelColor};opacity:0.5"></path>` : ''}
+          ${modelData ? `<path class="line" d="${modelData.path}" style="stroke:${modelColor}"></path>` : ''}
+          <text x="${pad + 2}" y="${pad + 12}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">100%</text>
+          <text x="${pad + 2}" y="${height - pad - 2}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">0%</text>
+          ${markerText ? `<text x="${markerX}" y="${markerY}" fill="rgba(232,238,252,0.95)" text-anchor="middle" font-size="12">${markerText}</text>` : ''}
+          ${totalTopRight ? `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${totalTopRight}</text>` : ''}
+        </svg>`;
+    }
+
+    function healthTransition(history, current) {
+      const key = sourceRunKey(current);
+      const states = filteredSamples(history)
+        .map(sample => {
+          const found = sourceRunsForSample(sample).find(run => sourceRunKey(run) === key);
+          return found ? (found.health || 'loading') : null;
+        })
+        .filter(Boolean);
+      if (states.length < 2) return null;
+      const prev = states[states.length - 2];
+      const next = states[states.length - 1];
+      if (prev === next) return null;
+      const cls = next === 'up' ? 'good' : next === 'down' ? 'bad' : 'warn';
+      return { cls, text: `${prev} -> ${next}` };
+    }
+
+    function card(label, value, subvalue) {
+      return `
+        <article class="card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+          <div class="subvalue">${subvalue}</div>
+        </article>`;
+    }
+
+    function renderControls() {
+      const sourceSel = document.getElementById('source-filter');
+      const sourceOpts = sourceOptions();
+      sourceSel.innerHTML = sourceOpts.map(opt => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+      if ([...sourceSel.options].some(opt => opt.value === state.selectedSource)) {
+        sourceSel.value = state.selectedSource;
+      } else {
+        state.selectedSource = 'local';
+        sourceSel.value = 'local';
+      }
+      if (!sourceSel.dataset.bound) {
+        sourceSel.addEventListener('change', () => {
+          state.sourceHistoryCutoffMs = Date.now() + 1;
+          state.selectedSource = sourceSel.value;
+          render(window.lastStatus, currentHistory);
+        });
+        sourceSel.dataset.bound = '1';
+      }
+    }
+
+    function sourceRenderKey(status) {
+      return state.selectedSource;
+    }
+
+    function metric(label, value) {
+      return `
+        <div class="metric">
+          ${label}
+          <strong>${escapeHtml(value)}</strong>
+        </div>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function deviceIndexFromLabel(label) {
+      const match = String(label || '').match(/(\d+)/);
+      if (!match) return null;
+      const idx = Number(match[1]);
+      return Number.isFinite(idx) ? idx : null;
+    }
+
+    function deviceModelName(devices, index) {
+      if (!Array.isArray(devices) || index === null) return '';
+      const found = devices.find(device => Number(device.index) === index && String(device.name || '').trim());
+      return found ? String(found.name || '').trim() : '';
+    }
+
+    function gpuDevicesForSlice(status, slice) {
+      const label = String((slice.gpu && slice.gpu.name) || '');
+      const upper = label.toUpperCase();
+      if (upper.startsWith('CUDA')) {
+        return (status.gpu && Array.isArray(status.gpu.devices)) ? status.gpu.devices : [];
+      }
+      if (upper.startsWith('RPC')) {
+        if (status.rpc_server && Array.isArray(status.rpc_server.gpus) && status.rpc_server.gpus.length > 0) {
+          return status.rpc_server.gpus;
+        }
+        if (slice.run && slice.run.sourceId && slice.run.sourceId !== 'local') {
+          const client = (status.clients || []).find(client => client.id === slice.run.sourceId);
+          if (client && client.gpu && Array.isArray(client.gpu.devices) && client.gpu.devices.length > 0) {
+            return client.gpu.devices;
+          }
+        }
+      }
+      return [];
+    }
+
+    function gpuModelNameForSlice(status, slice) {
+      const label = String((slice.gpu && slice.gpu.name) || '');
+      const index = deviceIndexFromLabel(label);
+      const model = deviceModelName(gpuDevicesForSlice(status, slice), index);
+      if (model) return model;
+      if (slice.gpu && slice.gpu.name) return slice.gpu.name;
+      if (slice.gpu && slice.gpu.uuid) return slice.gpu.uuid;
+      return 'Unknown GPU';
+    }
+
+    function sourceGpuEntries(status) {
+      const entries = [];
+      const includeLocal = state.selectedSource === 'local' || state.selectedSource === 'all';
+      const includeRemote = state.selectedSource === 'remote' || state.selectedSource === 'all';
+
+      if (includeLocal && status.gpu) {
+        entries.push({
+          label: 'Local GPU',
+          model: status.gpu.name || 'Unknown GPU',
+          used: Number(status.gpu.used_mib) || 0,
+          total: Number(status.gpu.total_mib) || 0,
+        });
+      }
+
+      if (includeRemote) {
+        (status.clients || []).forEach(client => {
+          if (!client.gpu) return;
+          entries.push({
+            label: client.name || client.id || 'Remote client',
+            model: client.gpu.name || 'Unknown GPU',
+            used: Number(client.gpu.used_mib) || 0,
+            total: Number(client.gpu.total_mib) || 0,
+          });
+        });
+      }
+
+      return entries;
+    }
+
+    function runSourceGpuInfo(status, run) {
+      if (run.sourceId === 'local') {
+        if (!status.gpu) return null;
+        return {
+          name: status.gpu.name || 'Unknown GPU',
+          used: Number(status.gpu.used_mib) || 0,
+          total: Number(status.gpu.total_mib) || 0,
+        };
+      }
+      const client = (status.clients || []).find(client => client.id === run.sourceId);
+      if (!client || !client.gpu) return null;
+      return {
+        name: client.gpu.name || client.name || client.id || 'Remote GPU',
+        used: Number(client.gpu.used_mib) || 0,
+        total: Number(client.gpu.total_mib) || 0,
+      };
+    }
+
+    function gpuKey(gpu) {
+      if (!gpu) return '';
+      if (gpu.uuid) return `uuid:${gpu.uuid}`;
+      if (Number.isFinite(Number(gpu.index))) return `index:${Number(gpu.index)}`;
+      if (gpu.name) return `name:${gpu.name}`;
+      return '';
+    }
+
+    function runGpuLoadSeries(history, run, gpu) {
+      const targetKey = gpuKey(gpu);
+      if (!targetKey) return [];
+      return filteredSamples(history).map(sample => {
+        const found = sourceRunsForSample(sample).find(item => sourceRunKey(item) === sourceRunKey(run));
+        if (!found) return null;
+        const match = (found.gpus || []).find(entry => gpuKey(entry) === targetKey);
+        if (!match) return null;
+        return Number(match.used_mib) || 0;
+      });
+    }
+
+    function runGpuTelemetrySeries(history, slice) {
+      const targetKey = gpuKey(slice.gpu);
+      if (!targetKey) return [];
+      const targetIndex = deviceIndexFromLabel(slice.gpu && slice.gpu.name);
+      return filteredSamples(history).map(sample => {
+        const found = sourceRunsForSample(sample).find(item => sourceRunKey(item) === sourceRunKey(slice.run));
+        if (!found) return null;
+        const devices = gpuDevicesForSlice(sample.status || {}, slice) || [];
+        const match = devices.find(entry => Number.isFinite(targetIndex) && Number(entry.index) === targetIndex)
+          || devices.find(entry => gpuKey(entry) === targetKey);
+        if (!match) return null;
+        return {
+          used: Number(match.used_mib) || 0,
+          total: Number(match.total_mib) || 0,
+        };
+      });
+    }
+
+    function modelGpuSlices(status, group) {
+      const slices = [];
+      (group.runs || []).forEach(run => {
+        (run.gpus || []).forEach(gpu => {
+          slices.push({ run, gpu });
+        });
+      });
+      if (status.rpc_server && Array.isArray(status.rpc_server.gpus) && status.rpc_server.gpus.length > 0) {
+        const hasRemote = (group.runs || []).some(run => run.sourceId !== 'local');
+        if (hasRemote) {
+          status.rpc_server.gpus.forEach(gpu => {
+            slices.push({
+              run: group.primary,
+              gpu,
+            });
+          });
+        }
+      }
+      slices.sort((a, b) => {
+        const aSource = a.run && a.run.sourceId ? a.run.sourceId : '';
+        const bSource = b.run && b.run.sourceId ? b.run.sourceId : '';
+        if (aSource !== bSource) return aSource.localeCompare(bSource);
+        const ai = Number.isFinite(Number(a.gpu.index)) ? Number(a.gpu.index) : Number.MAX_SAFE_INTEGER;
+        const bi = Number.isFinite(Number(b.gpu.index)) ? Number(b.gpu.index) : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return String(a.gpu.name || '').localeCompare(String(b.gpu.name || ''));
+      });
+      return slices;
+    }
+
+    function modelGpuCards(history, status, group) {
+      const slices = modelGpuSlices(status, group);
+      if (!slices.length) return '';
+      return slices.map(slice => {
+        const gpu = slice.gpu;
+        const used = Number(gpu.used_mib) || 0;
+        const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
+        const modelName = gpuModelNameForSlice(status, slice);
+        const amount = `${fmtGiB(used)} loaded`;
+        const modelSeries = runGpuLoadSeries(history, slice.run, gpu);
+        const telemetrySeries = runGpuTelemetrySeries(history, slice);
+        const currentTelemetry = telemetrySeries.length ? telemetrySeries[telemetrySeries.length - 1] : null;
+        const currentGpuUsed = currentTelemetry ? (Number(currentTelemetry.used) || 0) : 0;
+        const currentGpuTotal = currentTelemetry ? (Number(currentTelemetry.total) || 0) : 0;
+        const currentModelTotal = (slice.run.gpus || []).reduce((sum, entry) => sum + (Number(entry.used_mib) || 0), 0);
+        const currentModelSharePct = currentModelTotal > 0 ? (used / currentModelTotal) * 100 : 0;
+        const currentGpuModelPct = currentGpuTotal > 0 ? (used / currentGpuTotal) * 100 : 0;
+        const currentOtherUsed = Math.max(0, currentGpuUsed - used);
+        const currentOtherPct = currentGpuTotal > 0 ? (currentOtherUsed / currentGpuTotal) * 100 : 0;
+        const currentTotalPct = currentGpuTotal > 0 ? (currentGpuUsed / currentGpuTotal) * 100 : 0;
+        const modelGpuPctSeries = modelSeries.map((value, index) => {
+          const telemetry = telemetrySeries[index];
+          const usedValue = Number(value);
+          if (!telemetry || !Number.isFinite(usedValue) || Number(telemetry.total) <= 0) return null;
+          return (usedValue / Number(telemetry.total)) * 100;
+        });
+        const otherPctSeries = telemetrySeries.map((telemetry, index) => {
+          if (!telemetry || Number(telemetry.total) <= 0) return null;
+          const totalUsed = Number(telemetry.used) || 0;
+          const modelUsed = Number(modelSeries[index]) || 0;
+          return Math.max(0, totalUsed - modelUsed) / Number(telemetry.total) * 100;
+        });
+        const totalPctSeries = telemetrySeries.map(telemetry => {
+          if (!telemetry || Number(telemetry.total) <= 0) return null;
+          return (Number(telemetry.used) || 0) / Number(telemetry.total) * 100;
+        });
+        return `
+          <article class="trend-card gpu-load-card">
+            <div class="gpu-load-head">
+              <div class="label">${escapeHtml(gpuLabel)}</div>
+              <div class="gpu-load-badge">${escapeHtml(currentModelTotal > 0 ? `${currentModelSharePct.toFixed(1)}% model` : 'model slice')}</div>
+            </div>
+            <div class="value">${escapeHtml(amount)}</div>
+            <div class="gpu-model">${escapeHtml(modelName)}</div>
+            <div class="gpu-load-meta">
+              <span>${escapeHtml(currentGpuTotal > 0 ? `model ${fmtGiB(used)} (${fmtNum(currentGpuModelPct)}%)` : 'model load')}</span>
+              <span>${escapeHtml(currentGpuTotal > 0 ? `other ${fmtGiB(currentOtherUsed)} (${fmtNum(currentOtherPct)}%)` : amount)}</span>
+            </div>
+            <div class="chart-wrap">${stackedGpuSparkline(
+              (modelGpuPctSeries.length ? modelGpuPctSeries : [currentGpuModelPct]),
+              (otherPctSeries.length ? otherPctSeries : [currentOtherPct]),
+              (totalPctSeries.length ? totalPctSeries : [currentTotalPct]),
+              `${gpuLabel} ${modelName} GPU utilization`,
+              currentGpuTotal > 0 ? `${fmtGiB(currentGpuUsed)} / ${fmtGiB(currentGpuTotal)}` : fmtGiB(used),
+              '#a78bfa',
+              '#94a3b8'
+            )}</div>
+          </article>`;
+      }).join('');
+    }
+
+    function selectedSourceSummary(status) {
+      const running = filteredRuns(status);
+      const localActive = running.filter(run => run.sourceId === 'local').length;
+      const remoteActive = running.length - localActive;
+      const ramUsed = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
+      const parts = [
+        `${fmtInt(localActive)} local active`,
+        `${fmtInt(remoteActive)} remote active`,
+      ];
+      if (ramUsed > 0) {
+        parts.push(`RAM used ${fmtMiB(ramUsed)}`);
+      }
+      return parts.join(' | ');
+    }
+
+    function renderModels(status, history) {
+      const list = document.getElementById('models');
+      const current = filteredRuns(status);
+      const groups = groupedRuns(status).filter(groupVisible);
+      document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
+      if (!groups.length) {
+        list.innerHTML = '<div class="empty">No visible models are running right now.</div>';
+        return;
+      }
+      list.innerHTML = groups.map(group => {
+        const run = group.primary;
+        const series = valuesFor(history, run, 'tok_s');
+        const vramSeries = valuesFor(history, run, 'vram_mib');
+        const ramSeries = valuesFor(history, run, 'ram_mib');
+        const gpuCards = modelGpuCards(history, status, group);
+        const health = run.health || 'loading';
+        const transition = healthTransition(history, run);
+        const sources = groupSources(group).filter((item, index, arr) => arr.indexOf(item) === index);
+        const sourceMeta = sources.length > 1 ? `sources ${sources.join(' + ')}` : `source ${sources[0] || 'Local'}`;
+        const trendCards = [];
+        if (!gpuCards && (Number(run.vram_mib) || 0) > 0) {
+          trendCards.push(trendCard('VRAM Loaded', vramSeries, '#a78bfa', null, null, 'MiB', true, false));
+        }
+        if ((Number(run.ram_mib) || 0) > 0) {
+          trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', null, null, 'MiB', false));
+        }
+        trendCards.push(trendCard('Tok/s', series, '#7dd3fc', null, null, '', true, false));
+        const trendSummary = `
+          <div class="model-trends">
+            ${gpuCards}
+            ${trendCards.join('')}
+          </div>
+        `;
+        const meta = [
+          sourceMeta,
+          run.alias ? `alias ${run.alias}` : null,
+          `port ${run.port}`,
+          run.model_size_bytes ? `${fmtMiB(run.model_size_bytes / (1024 * 1024))}` : null,
+        ].filter(Boolean).join(' | ');
+        const metrics = [
+          metric('tok/s', fmtNum(groupFirstNonZero(group, 'tok_s') || run.tok_s)),
+          metric('peak', fmtNum(groupFirstNonZero(group, 'tok_peak') || run.tok_peak)),
+          metric('avg', fmtNum(groupFirstNonZero(group, 'tok_avg') || run.tok_avg)),
+          metric('VRAM', fmtMiB(groupSum(group, 'vram_mib') || run.vram_mib)),
+          metric('RAM', fmtMiB(groupSum(group, 'ram_mib') || run.ram_mib)),
+          metric('size', run.model_size_bytes ? fmtMiB(run.model_size_bytes / (1024 * 1024)) : 'n/a'),
+        ].join('');
+        return `
+          <article class="model">
+            <div>
+              <div class="model-top">
+                <div>
+                  <h3 class="model-title">${escapeHtml(run.model)} / ${escapeHtml(run.profile)}</h3>
+                  <div class="model-meta">${escapeHtml(meta || 'No extra metadata')}</div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;">
+                  ${group.runs.some(item => item.sourceId !== 'local') ? '<span class="source-chip">RPC</span>' : ''}
+                  ${transition ? `<span class="transition ${transition.cls}">${escapeHtml(transition.text)}</span>` : ''}
+                </div>
+              </div>
+              <div class="metrics">${metrics}</div>
+            </div>
+            <div class="model-side">
+              ${trendSummary}
+            </div>
+          </article>`;
+      }).join('');
+    }
+
+    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB', showChart = true, showYAxis = false) {
+      const current = series.length ? series[series.length - 1] : 0;
+      const lower = String(label || '').toLowerCase();
+      const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : lower.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
+      return `
+        <article class="trend-card">
+          <div class="label">${label}</div>
+          <div class="value">${escapeHtml(value)}</div>
+          <div class="model-meta">${escapeHtml(subtitle)}</div>
+          ${showChart ? `<div class="chart-wrap">${sparkline(series, color, label, valueText, unit, showYAxis)}</div>` : ''}
+        </article>`;
+    }
+
+    function renderSourceTrends(status, history) {
+      const container = document.getElementById('source-trends');
+      const runs = filteredRuns(status);
+      const samples = filteredSamples(history);
+      const summary = selectedSourceSummary(status);
+      document.getElementById('history-count').textContent = [`${samples.length} samples from ${sourceLabel(status)}`, summary].filter(Boolean).join(' | ');
+      const latest = latestSample(history);
+      if (latest) {
+        document.getElementById('server-updated').textContent = `Updated ${timeFmt.format(new Date(latest.sampled_at_ms))}`;
+      }
+      const gpuEntries = sourceGpuEntries(status);
+      const vramSeries = aggregateSamples(history, runs, 'vram_mib');
+      const totalVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
+      const usedVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.used) || 0), 0);
+      const sourceTotals = sourceTotalVramSeries(history);
+      const vramUtilSeries = ratioSeries(vramSeries, sourceTotals);
+      const vramValue = totalVram > 0 ? `${fmtMiB(usedVram)} / ${fmtMiB(totalVram)}` : `${fmtMiB(usedVram)} used`;
+      container.innerHTML = [
+        `
+          <article class="trend-card">
+            <div class="label">Source VRAM Used / Total</div>
+            <div class="value">${escapeHtml(vramValue)}</div>
+            <div class="model-meta">Per-GPU utilization across the selected source</div>
+            ${
+              gpuEntries.length
+                ? `<div class="gpu-list">${gpuEntries.map(entry => {
+                    const pct = entry.total > 0 ? Math.max(0, Math.min(100, (entry.used / entry.total) * 100)) : 100;
+                    const amount = entry.total > 0 ? `${fmtMiB(entry.used)} / ${fmtMiB(entry.total)}` : `${fmtMiB(entry.used)} used`;
+                    return `
+                      <div class="gpu-row">
+                        <div class="gpu-head">
+                          <div>
+                            <strong>${escapeHtml(entry.label)}</strong>
+                            <div class="gpu-model">${escapeHtml(entry.model)}</div>
+                          </div>
+                          <span>${escapeHtml(amount)}</span>
+                        </div>
+                        <div class="gpu-bar" aria-hidden="true">
+                          <div class="gpu-fill" style="width: ${pct.toFixed(1)}%"></div>
+                        </div>
+                      </div>`;
+                  }).join('')}</div>`
+                : '<div class="gpu-empty">No GPU telemetry available for the selected source.</div>'
+            }
+          </article>
+        `,
+        trendCard('Source VRAM Utilization', vramUtilSeries, '#a78bfa', 'Combined VRAM utilization across the selected source', vramValue, '%', true, true),
+      ].join('');
+    }
+
+    function renderHeader(status) {
+      const dot = document.getElementById('server-dot');
+      const text = document.getElementById('server-state');
+      const running = status.running || [];
+      const clients = status.clients || [];
+      document.getElementById('footer-version').textContent = `Version ${status.version || 'unknown build'}`;
+      document.getElementById('footer-source').textContent = `Endpoints: /status, /history, /dashboard | Source: ${sourceLabel(status)}`;
+      if (status.rpc_server && status.rpc_server.up) {
+        dot.className = 'status-dot ok';
+        text.textContent = `RPC server up on ${status.rpc_server.host || '0.0.0.0'}:${status.rpc_server.port}`;
+      } else if (running.length > 0) {
+        dot.className = 'status-dot ok';
+        text.textContent = clients.length > 0
+          ? `Live status connected with ${clients.length} client${clients.length === 1 ? '' : 's'}`
+          : 'Live status connected';
+      } else if (clients.length > 0) {
+        dot.className = 'status-dot ok';
+        text.textContent = `Connected with ${clients.length} client${clients.length === 1 ? '' : 's'}, waiting on running models`;
+      } else {
+        dot.className = 'status-dot';
+        text.textContent = 'Connected, waiting on running models';
+      }
+    }
+
+    function render(status, history) {
+      currentHistory = history;
+      window.lastStatus = status;
+      const nextSourceKey = sourceRenderKey(status);
+      const sourceKeyChanged = state.lastSourceKey !== nextSourceKey;
+      state.lastSourceKey = nextSourceKey;
+      if (sourceKeyChanged) {
+        document.getElementById('models').replaceChildren();
+        document.getElementById('source-trends').replaceChildren();
+      }
+      renderControls();
+      renderHeader(status);
+      renderModels(status, history);
+      renderSourceTrends(status, history);
+    }
+
+    async function fetchJSON(path) {
+      const res = await fetch(path, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error(`${path} returned ${res.status}`);
+      }
+      return await res.json();
+    }
+
+    async function refresh() {
+      try {
+        const [status, history] = await Promise.all([fetchJSON('/status'), fetchJSON('/history')]);
+        render(status, history);
+      } catch (err) {
+        document.getElementById('server-dot').className = 'status-dot bad';
+        document.getElementById('server-state').textContent = `Dashboard error: ${err.message}`;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

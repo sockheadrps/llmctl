@@ -56,7 +56,7 @@ type rpcServerActionChoice int
 
 const (
 	rpcServerActionPrimary   rpcServerActionChoice = iota // Start / View Output
-	rpcServerActionSecondary                               // Cancel / Stop / Clear
+	rpcServerActionSecondary                              // Cancel / Stop / Clear
 	rpcServerActionCancel
 )
 

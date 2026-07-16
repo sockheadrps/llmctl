@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/process"
 )
 
 type exportArgsState struct {
-	label    string
-	argsStr  string
-	copied   bool
+	label   string
+	argsStr string
+	copied  bool
 }
 
 func (m Model) openExportArgs(r row) (tea.Model, tea.Cmd) {

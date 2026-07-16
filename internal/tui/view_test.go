@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/config"
+	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/models"
-	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
@@ -181,11 +181,7 @@ func TestRenderDetailsShowsProfileNotesBelowModelSource(t *testing.T) {
 }
 
 func TestRenderClientStatusLinesShowsModelAndSizeOnly(t *testing.T) {
-	m := Model{
-		rpcServerAlive: true,
-		rpcServerState: runtime.RPCServerState{PID: 42},
-		gpuByPID:       map[int]int64{42: 2048},
-	}
+	m := Model{}
 	got := stripANSI(m.renderClientStatusLines(statusserver.ClientInfo{
 		Name: "client-machine",
 		Running: []statusserver.RunningInfo{{
@@ -198,10 +194,82 @@ func TestRenderClientStatusLinesShowsModelAndSizeOnly(t *testing.T) {
 	if !strings.Contains(got, "Model / Profile") {
 		t.Fatalf("expected model/profile label, got %q", got)
 	}
-	if !strings.Contains(got, "4.0 GB / 2.0 GB server GPU") {
-		t.Fatalf("expected full/server GPU size metadata, got %q", got)
+	if !strings.Contains(got, "4.0 GB") {
+		t.Fatalf("expected model size metadata, got %q", got)
 	}
 	if strings.Contains(got, "client-machine") {
 		t.Fatalf("expected client name to be omitted, got %q", got)
+	}
+}
+
+func TestRenderRemoteServiceEntryUsesRuntimeModelSizeAndRatioLoads(t *testing.T) {
+	m := Model{
+		gpuDevices: []gpu.DeviceUsage{
+			{Index: 0, Name: "NVIDIA GeForce RTX 4070"},
+		},
+	}
+	got := stripANSI(m.renderRemoteServiceEntry(statusserver.RunningInfo{
+		Model:          "PhiMini",
+		Profile:        "default",
+		Health:         "up",
+		Port:           8090,
+		VRAMMiB:        4096,
+		ModelSizeBytes: 1234,
+		GPUs: []statusserver.GPUDeviceInfo{
+			{Name: "RPC0", UsedMiB: 1536},
+			{Name: "CUDA0", UsedMiB: 2560},
+		},
+	}, []statusserver.GPUDeviceInfo{
+		{Index: 0, Name: "NVIDIA GeForce RTX 5060 Ti"},
+	}, 120))
+
+	if !strings.Contains(got, "(4.0 GB)") {
+		t.Fatalf("expected runtime model size from log-derived VRAM, got %q", got)
+	}
+	if strings.Contains(got, "loaded of") {
+		t.Fatalf("expected old loaded-of wording removed, got %q", got)
+	}
+	if !strings.Contains(got, "RPC0 NVIDIA GeForce RTX 5060 Ti: 1.5 GB / 4.0 GB (37.5%)") {
+		t.Fatalf("expected rpc gpu ratio formatting, got %q", got)
+	}
+	if !strings.Contains(got, "CUDA0 NVIDIA GeForce RTX 4070: 2.5 GB / 4.0 GB (62.5%)") {
+		t.Fatalf("expected cuda gpu ratio formatting, got %q", got)
+	}
+}
+
+func TestRenderServiceEntryShowsRPCAndCUDABreakdownInClientOverview(t *testing.T) {
+	m := Model{
+		cfg: &config.Config{
+			Models: map[string]models.Model{},
+		},
+		gpuDevices: []gpu.DeviceUsage{
+			{Index: 0, Name: "NVIDIA GeForce RTX 5060 Ti"},
+		},
+	}
+	got := stripANSI(m.renderServiceEntry(models.Running{
+		ModelKey:    "model",
+		ModelName:   "PhiMini",
+		ProfileKey:  "profile",
+		ProfileName: "default",
+		Port:        8090,
+	}, &statusserver.RunningInfo{
+		Model:          "PhiMini",
+		Profile:        "default",
+		Port:           8090,
+		VRAMMiB:        4096,
+		ModelSizeBytes: 1234,
+		GPUs: []statusserver.GPUDeviceInfo{
+			{Name: "RPC0", UsedMiB: 1536},
+			{Name: "CUDA0", UsedMiB: 2560},
+		},
+	}, []statusserver.GPUDeviceInfo{
+		{Index: 0, Name: "NVIDIA GeForce RTX 4070"},
+	}, 120))
+
+	if !strings.Contains(got, "RPC0 NVIDIA GeForce RTX 4070: 1.5 GB / 4.0 GB (37.5%)") {
+		t.Fatalf("expected rpc gpu breakdown in client overview, got %q", got)
+	}
+	if !strings.Contains(got, "CUDA0 NVIDIA GeForce RTX 5060 Ti: 2.5 GB / 4.0 GB (62.5%)") {
+		t.Fatalf("expected cuda gpu breakdown in client overview, got %q", got)
 	}
 }

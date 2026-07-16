@@ -46,7 +46,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.gpuNameScroll++
 			}
 		}
-		return m, scrollTickCmd()
+		if m.shouldContinueScrollTick() {
+			return m, scrollTickCmd()
+		}
+		return m, nil
 
 	case healthMsg:
 		for key, status := range msg {
@@ -78,7 +81,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vramMsg:
 		m.gpuUsage = msg.usage
-		m.gpuByPID = msg.byPID
+		m.gpuDevices = msg.devices
 		m.pushStatusServer()
 		return m, nil
 
@@ -343,4 +346,3 @@ func (m Model) updateNetworkSwitch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-

@@ -161,6 +161,26 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 	return append(args, BuildProfileArgs(p)...)
 }
 
+func buildStartArgs(m models.Model, p models.Profile, rpcEndpoint string) []string {
+	args := BuildArgs(m, p)
+	if !hasArg(args, "-v") && !hasArg(args, "--verbose") {
+		args = append(args, "-v")
+	}
+	if rpcEndpoint != "" {
+		args = append(args, "--rpc", rpcEndpoint)
+	}
+	return args
+}
+
+func hasArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
 // Start launches bin (typically "llama-server") with args from the given
 // profile, detached from the parent process group so it survives the CLI
 // invocation exiting, with stdout/stderr redirected to logPath.
@@ -176,10 +196,7 @@ func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndp
 		return 0, fmt.Errorf("create log file %s: %w", logPath, err)
 	}
 
-	args := BuildArgs(m, p)
-	if rpcEndpoint != "" {
-		args = append(args, "--rpc", rpcEndpoint)
-	}
+	args := buildStartArgs(m, p, rpcEndpoint)
 	cmd := exec.Command(resolvedBin, args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

@@ -1,47 +1,29 @@
 # Status Server
 
-The status server is llmctl's lightweight JSON endpoint for runtime visibility. It exposes the current running instances, health state, VRAM usage, tok/s, and RPC client snapshots.
+The status server is llmctl's lightweight JSON and browser monitoring surface.
+It is independent from RPC, so you can run the dashboard and history store without
+enabling distributed GPU mode.
 
----
+## What it exposes
 
-## What It Exposes
+- `GET /status` for the current snapshot
+- `GET /history` for recent snapshots
+- `GET /dashboard` for the browser dashboard when enabled
+- `GET /` redirects to `/dashboard` when the dashboard is enabled, otherwise to `/status`
 
-The server serves a `GET /status` endpoint that returns JSON with the current snapshot.
+`/status` is the live source of truth. `/history` powers the dashboard charts.
 
-You can also ask the CLI for the local instance list:
+![Browser dashboard showing source selector, active models, and trend cards](../assets/screenshots/dashboard.png)
 
-```bash
-llmctl status
-llmctl status --json
-```
+## Settings
 
-The plain-text form is handy for a terminal check. The JSON form is better for scripts.
+- Status server enable/disable
+- Host and port
+- History persistence
+- Dashboard serving
 
----
-
-## Why It Exists
-
-The status server is mainly used for two things:
-
-- RPC client discovery
-- External monitoring or automation
-
-In RPC mode, a client polls the server's status address, discovers the RPC endpoint, and shows the remote GPU telemetry in its own Overview tab.
-
----
-
-## How To Read It In The TUI
-
-The Overview tab is the human-friendly view of the status server snapshot:
-
-- Local running instances appear under `Local`
-- Remote client snapshots appear under `Remote`
-- GPU 0 shows local telemetry
-- GPU 1 shows remote telemetry when RPC is connected
-
-That means you usually do not need to hit `/status` by hand unless you're integrating llmctl with another tool.
-
----
+History persistence stores samples in `~/.llmctl/status_history.json` and restores
+them on restart when enabled.
 
 ## Example
 
@@ -49,4 +31,4 @@ That means you usually do not need to hit `/status` by hand unless you're integr
 curl http://127.0.0.1:11435/status
 ```
 
-Use the actual host and port shown in your llmctl settings or RPC server tab.
+Use the host and port shown in llmctl settings.
