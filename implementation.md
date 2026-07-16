@@ -35,6 +35,8 @@ Build a browser-style dashboard for server-enabled `llmctl` processes by extendi
 - [x] Make the layout work on desktop.
 - [x] Make the layout work on smaller windows.
 - [x] Show connected RPC client snapshots.
+- [x] Add an all-client summary row.
+- [x] Make the main model chart source-selectable across local and connected clients.
 
 ## Phase 4: Polish
 
