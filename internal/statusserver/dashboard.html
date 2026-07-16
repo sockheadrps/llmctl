@@ -651,7 +651,7 @@
           trendCards.push(trendCard('VRAM Utilization', vramUtilSeries, '#a78bfa', 'Share of selected source VRAM', null, '%'));
         }
         if ((Number(run.ram_mib) || 0) > 0) {
-          trendCards.push(trendCard('RAM', ramSeries, '#34d399', 'Per-model RAM trend'));
+          trendCards.push(trendCard('RAM Used', ramSeries, '#34d399', 'Current model RAM usage', null, 'MiB', false));
         }
         trendCards.push(trendCard('Tok/s', series, '#7dd3fc', 'Per-model tok/s trend'));
         const trendSummary = `
@@ -694,7 +694,7 @@
       }).join('');
     }
 
-    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB') {
+    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB', showChart = true) {
       const current = series.length ? series[series.length - 1] : 0;
       const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
       return `
@@ -702,7 +702,7 @@
           <div class="label">${label}</div>
           <div class="value">${escapeHtml(value)}</div>
           <div class="model-meta">${escapeHtml(subtitle)}</div>
-          <div style="margin-top: 10px">${sparkline(series, color, label, valueText, unit)}</div>
+          ${showChart ? `<div style="margin-top: 10px">${sparkline(series, color, label, valueText, unit)}</div>` : ''}
         </article>`;
     }
 
