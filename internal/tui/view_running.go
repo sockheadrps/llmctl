@@ -12,7 +12,6 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
-	"github.com/sockheadrps/llmctl/internal/process"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -139,12 +138,14 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 		}
 	}
 	if !cpuOnly {
-		if slices, err := process.ParseModelLoadSlices(r.LogFile); err == nil && len(slices) > 0 {
-			var total int64
-			for _, slice := range slices {
-				total += slice.UsedMiB
+		if m.health[hkey] == health.StatusUp {
+			if slices, err := m.modelLoadSlices(r.LogFile); err == nil && len(slices) > 0 {
+				var total int64
+				for _, slice := range slices {
+					total += slice.UsedMiB
+				}
+				text += fmt.Sprintf("  %.1fG", float64(total)/1024)
 			}
-			text += fmt.Sprintf("  %.1fG", float64(total)/1024)
 		}
 	} else {
 		if mb, ok := m.ramByPID[r.PID]; ok {
