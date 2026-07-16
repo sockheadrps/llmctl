@@ -440,10 +440,17 @@
 
     function sourceTotalVramSeries(history) {
       return filteredSamples(history).map(sample => {
-        return sourceRunsForSample(sample).reduce((sum, run) => {
-          const total = Number(run.gpu && run.gpu.total_mib) || 0;
-          return sum + total;
-        }, 0);
+        const status = sample.status || {};
+        let total = 0;
+        if (state.selectedSource === 'local' || state.selectedSource === 'all') {
+          total += Number(status.gpu && status.gpu.total_mib) || 0;
+        }
+        if (state.selectedSource === 'remote' || state.selectedSource === 'all') {
+          (status.clients || []).forEach(client => {
+            total += Number(client.gpu && client.gpu.total_mib) || 0;
+          });
+        }
+        return total;
       });
     }
 
