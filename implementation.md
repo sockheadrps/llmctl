@@ -71,6 +71,10 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - Active-model cards now render per-GPU VRAM load cards when device slices are available.
 - RPC-loaded models keep the `RPC` badge and can show a GPU-by-GPU load breakdown instead of only a single aggregate chart.
 - The per-GPU cards now represent model-slice load distribution, not raw GPU capacity utilization.
+- Each RPC GPU card now shows:
+  - model share on that GPU as the pill
+  - the model's GPU utilization percentage on the first meta line
+  - the remaining non-model VRAM usage on the second meta line
 - Split RPC models now merge matching local and remote peers so the UI can show the full model load across all GPUs.
 - The dashboard groups split models across all peers first, then filters the visible group by source so the combined GPU slices stay intact.
 - The dashboard now uses an explicit `allSourceRuns` helper so grouped cards keep working while still merging local and remote peers.

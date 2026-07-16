@@ -210,10 +210,8 @@
       color: rgba(232, 238, 252, 0.82);
       font-size: 12px;
       margin-top: 4px;
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      white-space: nowrap;
+      display: grid;
+      gap: 2px;
     }
     .gpu-load-card .chart-wrap {
       margin-top: 8px;
@@ -945,11 +943,13 @@
         const currentTelemetry = telemetrySeries.length ? telemetrySeries[telemetrySeries.length - 1] : null;
         const currentGpuUsed = currentTelemetry ? (Number(currentTelemetry.used) || 0) : 0;
         const currentGpuTotal = currentTelemetry ? (Number(currentTelemetry.total) || 0) : 0;
-        const currentModelPct = currentGpuTotal > 0 ? (used / currentGpuTotal) * 100 : 0;
+        const currentModelTotal = (slice.run.gpus || []).reduce((sum, entry) => sum + (Number(entry.used_mib) || 0), 0);
+        const currentModelSharePct = currentModelTotal > 0 ? (used / currentModelTotal) * 100 : 0;
+        const currentGpuModelPct = currentGpuTotal > 0 ? (used / currentGpuTotal) * 100 : 0;
         const currentOtherUsed = Math.max(0, currentGpuUsed - used);
         const currentOtherPct = currentGpuTotal > 0 ? (currentOtherUsed / currentGpuTotal) * 100 : 0;
         const currentTotalPct = currentGpuTotal > 0 ? (currentGpuUsed / currentGpuTotal) * 100 : 0;
-        const modelPctSeries = modelSeries.map((value, index) => {
+        const modelGpuPctSeries = modelSeries.map((value, index) => {
           const telemetry = telemetrySeries[index];
           const usedValue = Number(value);
           if (!telemetry || !Number.isFinite(usedValue) || Number(telemetry.total) <= 0) return null;
@@ -969,16 +969,16 @@
           <article class="trend-card gpu-load-card">
             <div class="gpu-load-head">
               <div class="label">${escapeHtml(gpuLabel)}</div>
-              <div class="gpu-load-badge">${escapeHtml(currentGpuTotal > 0 ? `${currentModelPct.toFixed(1)}% model` : 'model slice')}</div>
+              <div class="gpu-load-badge">${escapeHtml(currentModelTotal > 0 ? `${currentModelSharePct.toFixed(1)}% model` : 'model slice')}</div>
             </div>
             <div class="value">${escapeHtml(amount)}</div>
             <div class="gpu-model">${escapeHtml(modelName)}</div>
             <div class="gpu-load-meta">
-              <span>${escapeHtml(currentGpuTotal > 0 ? `model ${fmtMiB(used)} (${fmtNum(currentModelPct)}%)` : 'model load')}</span>
+              <span>${escapeHtml(currentGpuTotal > 0 ? `model ${fmtMiB(used)} (${fmtNum(currentGpuModelPct)}%)` : 'model load')}</span>
               <span>${escapeHtml(currentGpuTotal > 0 ? `other ${fmtMiB(currentOtherUsed)} (${fmtNum(currentOtherPct)}%)` : amount)}</span>
             </div>
             <div class="chart-wrap">${stackedGpuSparkline(
-              (modelPctSeries.length ? modelPctSeries : [currentModelPct]),
+              (modelGpuPctSeries.length ? modelGpuPctSeries : [currentGpuModelPct]),
               (otherPctSeries.length ? otherPctSeries : [currentOtherPct]),
               (totalPctSeries.length ? totalPctSeries : [currentTotalPct]),
               `${gpuLabel} ${modelName} GPU utilization`,
