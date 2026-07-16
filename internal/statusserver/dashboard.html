@@ -217,13 +217,13 @@
     }
     .gpu-load-card .chart-wrap {
       margin-top: 8px;
-      min-height: 74px;
+      min-height: 118px;
       flex: 1;
       display: flex;
     }
     .gpu-load-card .chart-wrap .spark {
-      min-height: 74px;
-      height: 74px;
+      min-height: 118px;
+      height: 118px;
     }
     .gpu-load-card .gpu-bar {
       margin-top: 9px;
@@ -671,8 +671,10 @@
           ${showYAxis ? `<line class="gridline" x1="${pad}" x2="${pad}" y1="${pad}" y2="${height - pad}"></line>` : ''}
           <path class="area" d="${data.area}" style="fill:${color}"></path>
           <path class="line" d="${data.path}" style="stroke:${color}"></path>
+          ${showYAxis ? `<text x="${pad + 2}" y="${pad + 12}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">100%</text>` : ''}
+          ${showYAxis ? `<text x="${pad + 2}" y="${height - pad - 2}" fill="rgba(148,163,184,0.95)" text-anchor="start" font-size="11">0%</text>` : ''}
           ${showYAxis && markerText ? `<text x="${markerX}" y="${markerY}" fill="rgba(232,238,252,0.95)" text-anchor="middle" font-size="12">${markerText}</text>` : ''}
-          ${!showYAxis ? `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>` : ''}
+          <text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>
         </svg>`;
     }
 
@@ -740,6 +742,49 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+    }
+
+    function deviceIndexFromLabel(label) {
+      const match = String(label || '').match(/(\d+)/);
+      if (!match) return null;
+      const idx = Number(match[1]);
+      return Number.isFinite(idx) ? idx : null;
+    }
+
+    function deviceModelName(devices, index) {
+      if (!Array.isArray(devices) || index === null) return '';
+      const found = devices.find(device => Number(device.index) === index && String(device.name || '').trim());
+      return found ? String(found.name || '').trim() : '';
+    }
+
+    function gpuDevicesForSlice(status, slice) {
+      const label = String((slice.gpu && slice.gpu.name) || '');
+      const upper = label.toUpperCase();
+      if (upper.startsWith('CUDA')) {
+        return (status.gpu && Array.isArray(status.gpu.devices)) ? status.gpu.devices : [];
+      }
+      if (upper.startsWith('RPC')) {
+        if (slice.run && slice.run.sourceId && slice.run.sourceId !== 'local') {
+          const client = (status.clients || []).find(client => client.id === slice.run.sourceId);
+          if (client && client.gpu && Array.isArray(client.gpu.devices) && client.gpu.devices.length > 0) {
+            return client.gpu.devices;
+          }
+        }
+        if (status.rpc_server && Array.isArray(status.rpc_server.gpus) && status.rpc_server.gpus.length > 0) {
+          return status.rpc_server.gpus;
+        }
+      }
+      return [];
+    }
+
+    function gpuModelNameForSlice(status, slice) {
+      const label = String((slice.gpu && slice.gpu.name) || '');
+      const index = deviceIndexFromLabel(label);
+      const model = deviceModelName(gpuDevicesForSlice(status, slice), index);
+      if (model) return model;
+      if (slice.gpu && slice.gpu.name) return slice.gpu.name;
+      if (slice.gpu && slice.gpu.uuid) return slice.gpu.uuid;
+      return 'Unknown GPU';
     }
 
     function sourceGpuEntries(status) {
@@ -847,12 +892,17 @@
         const gpu = slice.gpu;
         const used = Number(gpu.used_mib) || 0;
         const gpuLabel = Number.isFinite(Number(gpu.index)) ? `GPU ${Number(gpu.index)}` : 'GPU';
-        const modelName = gpu.name || gpu.uuid || 'Unknown GPU';
+        const modelName = gpuModelNameForSlice(status, slice);
         const amount = `${fmtMiB(used)} loaded`;
         const pct = totalLoad > 0 ? Math.max(0, Math.min(100, (used / totalLoad) * 100)) : 0;
         const pctText = totalLoad > 0 ? `${pct.toFixed(1)}% of model` : 'model slice';
         const series = runGpuLoadSeries(history, slice.run, gpu);
-        const current = series.length ? series[series.length - 1] : used;
+        const pctSeries = series.map(value => {
+          const usedValue = Number(value);
+          if (!Number.isFinite(usedValue) || totalLoad <= 0) return null;
+          return (usedValue / totalLoad) * 100;
+        });
+        const currentPct = totalLoad > 0 ? (used / totalLoad) * 100 : 0;
         return `
           <article class="trend-card gpu-load-card">
             <div class="gpu-load-head">
@@ -863,9 +913,9 @@
             <div class="gpu-model">${escapeHtml(modelName)}</div>
             <div class="gpu-load-meta">
               <span>${escapeHtml(totalLoad > 0 ? `${fmtMiB(totalLoad)} model total` : 'model load')}</span>
-              <span>${escapeHtml(totalLoad > 0 ? `${fmtNum(pct)}%` : amount)}</span>
+              <span>${escapeHtml(totalLoad > 0 ? `${fmtNum(currentPct)}%` : amount)}</span>
             </div>
-            <div class="chart-wrap">${sparkline(series.length ? series : [current], '#a78bfa', `${gpuLabel} model load`, fmtMiB(current), 'MiB')}</div>
+            <div class="chart-wrap">${sparkline((pctSeries.length ? pctSeries : [currentPct]), '#a78bfa', `${gpuLabel} ${modelName} model load`, `${fmtNum(currentPct)}%`, '%', true)}</div>
           </article>`;
       }).join('');
     }

@@ -246,8 +246,12 @@ func (m Model) renderActiveServices(contentW, contentH int) string {
 		b.WriteString(detailMutedStyle.Render("    → Models tab to start one"))
 		b.WriteString("\n")
 	} else {
+		var localStatus statusserver.Status
+		if m.statusServer != nil {
+			localStatus = m.statusServer.Status()
+		}
 		for _, r := range m.running {
-			b.WriteString(m.renderServiceEntry(r, contentW))
+			b.WriteString(m.renderServiceEntry(r, m.overviewRunningInfo(localStatus, r), m.overviewRemoteGPUDevices(), contentW))
 		}
 	}
 
@@ -316,8 +320,8 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, remoteDevic
 		modeBadge = detailMutedStyle.Render("[CPU]")
 	}
 	detail := "  └─ "
-	if size := m.overviewRunningModelSizeBytes(ri); size > 0 {
-		detail += fmt.Sprintf("(%s) ", util.FormatBytes(size))
+	if size := m.overviewRunningSize(&ri, ""); size != "" {
+		detail += "(" + size + ") "
 	}
 	detail += modeBadge + detailMutedStyle.Render(" (—)")
 	if !narrow {
@@ -354,6 +358,29 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, remoteDevic
 	return b.String()
 }
 
+func (m Model) overviewRemoteGPUDevices() []statusserver.GPUDeviceInfo {
+	if m.remoteStatus != nil && m.remoteStatus.GPU != nil && len(m.remoteStatus.GPU.Devices) > 0 {
+		return m.remoteStatus.GPU.Devices
+	}
+	return nil
+}
+
+func (m Model) overviewRunningInfo(st statusserver.Status, r models.Running) *statusserver.RunningInfo {
+	for i := range st.Running {
+		ri := &st.Running[i]
+		if ri.Port == r.Port && ri.Model == r.ModelName && ri.Profile == r.ProfileName {
+			return ri
+		}
+	}
+	for i := range st.Running {
+		ri := &st.Running[i]
+		if ri.Port == r.Port {
+			return ri
+		}
+	}
+	return nil
+}
+
 func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSlice {
 	slices := make([]gpuLoadSlice, 0, len(ri.GPUs))
 	for _, gpu := range ri.GPUs {
@@ -362,17 +389,18 @@ func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSli
 	return slices
 }
 
-func (m Model) overviewRunningModelSizeBytes(ri statusserver.RunningInfo) int64 {
-	switch {
-	case ri.VRAMMiB > 0:
-		return ri.VRAMMiB * 1024 * 1024
-	case ri.RAMMiB > 0:
-		return ri.RAMMiB * 1024 * 1024
-	case ri.ModelSizeBytes > 0:
-		return ri.ModelSizeBytes
-	default:
-		return 0
+func (m Model) overviewRunningSize(ri *statusserver.RunningInfo, modelKey string) string {
+	if ri != nil {
+		switch {
+		case ri.VRAMMiB > 0:
+			return util.FormatBytes(ri.VRAMMiB * 1024 * 1024)
+		case ri.RAMMiB > 0:
+			return util.FormatBytes(ri.RAMMiB * 1024 * 1024)
+		case ri.ModelSizeBytes > 0:
+			return util.FormatBytes(ri.ModelSizeBytes)
+		}
 	}
+	return m.overviewModelSize(modelKey)
 }
 
 func (m Model) renderRunningGPUBreakdown(slices []gpuLoadSlice, localDevices []gpu.DeviceUsage, remoteDevices []statusserver.GPUDeviceInfo, contentW int) string {
@@ -491,7 +519,7 @@ func overviewDeviceIndex(label string) (int, bool) {
 	return n, true
 }
 
-func (m Model) renderServiceEntry(r models.Running, contentW int) string {
+func (m Model) renderServiceEntry(r models.Running, ri *statusserver.RunningInfo, remoteDevices []statusserver.GPUDeviceInfo, contentW int) string {
 	var b strings.Builder
 	hkey := r.ModelKey + "/" + r.ProfileKey
 
@@ -543,7 +571,7 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 		}
 	}
 	detail := "  └─ "
-	if size := m.overviewModelSize(r.ModelKey); size != "" {
+	if size := m.overviewRunningSize(ri, r.ModelKey); size != "" {
 		detail += "(" + size + ") "
 	}
 	detail += modeBadge
@@ -574,7 +602,20 @@ func (m Model) renderServiceEntry(r models.Running, contentW int) string {
 	if spark != "" {
 		b.WriteString("   " + spark + "\n")
 	}
+	if ri != nil && len(ri.GPUs) > 0 {
+		if gpuLines := m.renderRunningGPUBreakdown(m.combinedLocalGPUSlices(ri.GPUs), m.gpuDevices, remoteDevices, contentW); gpuLines != "" {
+			b.WriteString(gpuLines)
+		}
+	}
 	return b.String()
+}
+
+func (m Model) combinedLocalGPUSlices(gpus []statusserver.GPUDeviceInfo) []gpuLoadSlice {
+	slices := make([]gpuLoadSlice, 0, len(gpus))
+	for _, gpu := range gpus {
+		slices = append(slices, gpuLoadSlice{label: gpu.Name, info: gpu})
+	}
+	return slices
 }
 
 // overviewSpeeds returns (current, avg, peak) display strings.

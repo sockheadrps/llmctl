@@ -236,3 +236,40 @@ func TestRenderRemoteServiceEntryUsesRuntimeModelSizeAndRatioLoads(t *testing.T)
 		t.Fatalf("expected cuda gpu ratio formatting, got %q", got)
 	}
 }
+
+func TestRenderServiceEntryShowsRPCAndCUDABreakdownInClientOverview(t *testing.T) {
+	m := Model{
+		cfg: &config.Config{
+			Models: map[string]models.Model{},
+		},
+		gpuDevices: []gpu.DeviceUsage{
+			{Index: 0, Name: "NVIDIA GeForce RTX 5060 Ti"},
+		},
+	}
+	got := stripANSI(m.renderServiceEntry(models.Running{
+		ModelKey:    "model",
+		ModelName:   "PhiMini",
+		ProfileKey:  "profile",
+		ProfileName: "default",
+		Port:        8090,
+	}, &statusserver.RunningInfo{
+		Model:          "PhiMini",
+		Profile:        "default",
+		Port:           8090,
+		VRAMMiB:        4096,
+		ModelSizeBytes: 1234,
+		GPUs: []statusserver.GPUDeviceInfo{
+			{Name: "RPC0", UsedMiB: 1536},
+			{Name: "CUDA0", UsedMiB: 2560},
+		},
+	}, []statusserver.GPUDeviceInfo{
+		{Index: 0, Name: "NVIDIA GeForce RTX 4070"},
+	}, 120))
+
+	if !strings.Contains(got, "RPC0 NVIDIA GeForce RTX 4070: 1.5 GB / 4.0 GB (37.5%)") {
+		t.Fatalf("expected rpc gpu breakdown in client overview, got %q", got)
+	}
+	if !strings.Contains(got, "CUDA0 NVIDIA GeForce RTX 5060 Ti: 2.5 GB / 4.0 GB (62.5%)") {
+		t.Fatalf("expected cuda gpu breakdown in client overview, got %q", got)
+	}
+}
