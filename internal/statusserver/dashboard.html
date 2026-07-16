@@ -154,7 +154,7 @@
     }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
-    .model-trends { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .model-trends { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
     .model-trends .trend-card .spark { height: 72px; }
     .model-trends .trend-card .label { font-size: 10px; }
     .model-trends .trend-card .model-meta { font-size: 11px; }
@@ -625,11 +625,17 @@
         const ramSeries = valuesFor(history, run, 'ram_mib');
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
+        const trendCards = [];
+        if ((Number(run.vram_mib) || 0) > 0) {
+          trendCards.push(trendCard('VRAM', vramSeries, '#a78bfa', 'Per-model VRAM trend'));
+        }
+        if ((Number(run.ram_mib) || 0) > 0) {
+          trendCards.push(trendCard('RAM', ramSeries, '#34d399', 'Per-model RAM trend'));
+        }
+        trendCards.push(trendCard('Tok/s', series, '#7dd3fc', 'Per-model tok/s trend'));
         const trendSummary = `
           <div class="model-trends">
-            ${trendCard('VRAM', vramSeries, '#a78bfa', 'Per-model VRAM trend')}
-            ${trendCard('RAM', ramSeries, '#34d399', 'Per-model RAM trend')}
-            ${trendCard('Tok/s', series, '#7dd3fc', 'Per-model tok/s trend')}
+            ${trendCards.join('')}
           </div>
         `;
         const meta = [
