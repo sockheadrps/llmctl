@@ -63,7 +63,6 @@
     .status-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--warn); }
     .status-dot.ok { background: var(--good); }
     .status-dot.bad { background: var(--bad); }
-    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
     .controls {
       display: grid;
       gap: 12px;
@@ -148,11 +147,40 @@
     .area { fill-opacity: 0.18; }
     .empty { padding: 20px; border-radius: 16px; border: 1px dashed rgba(148, 163, 184, 0.22); color: var(--muted); text-align: center; }
     .trend-row { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
-    .source-trend-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .source-trend-row { grid-template-columns: minmax(0, 1fr); }
+    .source-trend-layout {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      align-items: start;
+    }
     .trend-card { padding: 14px; border-radius: 18px; background: rgba(8, 15, 25, 0.88); border: 1px solid rgba(148, 163, 184, 0.12); }
     .trend-card .value { font-size: 26px; margin-top: 6px; }
     .model-trends { display: grid; gap: 12px; }
     .model-trends .trend-row { margin-bottom: 0; }
+    .gpu-list { display: grid; gap: 10px; margin-top: 12px; }
+    .gpu-row { display: grid; gap: 6px; }
+    .gpu-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; color: var(--muted); font-size: 12px; }
+    .gpu-head strong { color: var(--text); font-size: 14px; }
+    .gpu-bar {
+      position: relative;
+      overflow: hidden;
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.12);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .gpu-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(125, 211, 252, 0.95), rgba(167, 139, 250, 0.95));
+    }
+    .gpu-empty {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 12px;
+    }
     .pill {
       border: 1px solid rgba(148, 163, 184, 0.16);
       border-radius: 999px;
@@ -228,7 +256,7 @@
     }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 13px; }
     @media (max-width: 1080px) {
-      .hero, .panels, .stats, .trend-row, .controls, .model, .client-grid { grid-template-columns: 1fr; }
+      .hero, .panels, .trend-row, .controls, .model, .client-grid, .source-trend-layout { grid-template-columns: 1fr; }
       .statusbar { justify-items: start; text-align: left; }
     }
     @media (max-width: 640px) {
@@ -269,11 +297,8 @@
         <h2>Source Trends</h2>
         <div class="meta" id="history-count">0 samples</div>
       </div>
-      <div class="trend-row source-trend-row" id="source-trends"></div>
-      <div class="empty" id="source-trends-empty">Waiting for enough samples to chart.</div>
+      <div class="source-trend-layout" id="source-trends"></div>
     </section>
-
-    <section class="stats" id="stats"></section>
 
     <section class="panel" style="margin-top: 14px;">
       <div class="panel-head">
@@ -573,18 +598,46 @@
         .replaceAll("'", '&#39;');
     }
 
-    function renderStats(status) {
-      const stats = document.getElementById('stats');
+    function sourceGpuEntries(status) {
+      const entries = [];
+      const includeLocal = state.selectedSource === 'local' || state.selectedSource === 'all';
+      const includeRemote = state.selectedSource === 'remote' || state.selectedSource === 'all';
+
+      if (includeLocal && status.gpu) {
+        entries.push({
+          label: 'Local GPU',
+          used: Number(status.gpu.used_mib) || 0,
+          total: Number(status.gpu.total_mib) || 0,
+        });
+      }
+
+      if (includeRemote) {
+        (status.clients || []).forEach(client => {
+          if (!client.gpu) return;
+          entries.push({
+            label: client.name || client.id || 'Remote client',
+            used: Number(client.gpu.used_mib) || 0,
+            total: Number(client.gpu.total_mib) || 0,
+          });
+        });
+      }
+
+      return entries;
+    }
+
+    function selectedSourceSummary(status) {
       const running = filteredRuns(status);
-      const totalTok = running.reduce((sum, run) => sum + (Number(run.tok_s) || 0), 0);
-      const totalVram = running.reduce((sum, run) => sum + (Number(run.vram_mib) || 0), 0);
-      const totalRam = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
-      const clients = status.clients || [];
-      stats.innerHTML = [
-        card('Activity', fmtInt(running.length), `${sourceLabel(status)} runs · ${clients.length} peers`),
-        card('Tok/s', fmtNum(totalTok), 'Sum across active models'),
-        card('Memory', fmtMiB(totalVram || totalRam), totalVram > 0 ? 'Tracked VRAM' : 'Tracked RAM'),
-      ].join('');
+      const localActive = running.filter(run => run.sourceId === 'local').length;
+      const remoteActive = running.length - localActive;
+      const ramUsed = running.reduce((sum, run) => sum + (Number(run.ram_mib) || 0), 0);
+      const parts = [
+        `${fmtInt(localActive)} local active`,
+        `${fmtInt(remoteActive)} remote active`,
+      ];
+      if (ramUsed > 0) {
+        parts.push(`RAM used ${fmtMiB(ramUsed)}`);
+      }
+      return parts.join(' | ');
     }
 
     function renderModels(status, history) {
@@ -671,25 +724,42 @@
 
     function renderSourceTrends(status, history) {
       const container = document.getElementById('source-trends');
-      const empty = document.getElementById('source-trends-empty');
       const runs = filteredRuns(status);
       const samples = filteredSamples(history);
-      document.getElementById('history-count').textContent = `${samples.length} samples from ${sourceLabel(status)}`;
+      const summary = selectedSourceSummary(status);
+      document.getElementById('history-count').textContent = [`${samples.length} samples from ${sourceLabel(status)}`, summary].filter(Boolean).join(' | ');
       const latest = latestSample(history);
       if (latest) {
         document.getElementById('server-updated').textContent = `Updated ${timeFmt.format(new Date(latest.sampled_at_ms))}`;
       }
-      if (samples.length < 2) {
-        empty.style.display = 'block';
-        container.innerHTML = '';
-        return;
-      }
-      empty.style.display = 'none';
+      const gpuEntries = sourceGpuEntries(status);
       const vramSeries = aggregateSamples(history, runs, 'vram_mib');
-      const ramSeries = aggregateSamples(history, runs, 'ram_mib');
       container.innerHTML = [
-        trendCard('Source VRAM', vramSeries, '#a78bfa', 'Sum of tracked VRAM'),
-        trendCard('Source RAM', ramSeries, '#34d399', 'Sum of tracked RAM'),
+        `
+          <article class="trend-card">
+            <div class="label">Source VRAM</div>
+            <div class="model-meta">Per-GPU utilization across the selected source</div>
+            ${
+              gpuEntries.length
+                ? `<div class="gpu-list">${gpuEntries.map(entry => {
+                    const pct = entry.total > 0 ? Math.max(0, Math.min(100, (entry.used / entry.total) * 100)) : 100;
+                    const amount = entry.total > 0 ? `${fmtMiB(entry.used)} / ${fmtMiB(entry.total)}` : `${fmtMiB(entry.used)} used`;
+                    return `
+                      <div class="gpu-row">
+                        <div class="gpu-head">
+                          <strong>${escapeHtml(entry.label)}</strong>
+                          <span>${escapeHtml(amount)}</span>
+                        </div>
+                        <div class="gpu-bar" aria-hidden="true">
+                          <div class="gpu-fill" style="width: ${pct.toFixed(1)}%"></div>
+                        </div>
+                      </div>`;
+                  }).join('')}</div>`
+                : '<div class="gpu-empty">No GPU telemetry available for the selected source.</div>'
+            }
+          </article>
+        `,
+        trendCard('Source VRAM Trend', vramSeries, '#a78bfa', 'Combined VRAM across the selected source'),
       ].join('');
     }
 
@@ -723,7 +793,6 @@
       renderControls(status);
       bindControls(status, history);
       renderHeader(status);
-      renderStats(status);
       renderModels(status, history);
       renderSourceTrends(status, history);
     }

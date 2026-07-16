@@ -59,10 +59,14 @@ This note is meant to be a docs source-of-truth reference, not a task tracker.
 - The dashboard includes:
   - current running model cards
   - tok/s trends
-  - VRAM and RAM trends
+  - per-model VRAM and RAM trends
   - health transition badges
-- The source trends panel now shows correlated source-level VRAM and RAM charts.
-- The source trends panel no longer shows a separate source tok/s card.
+- The source trends panel now shows:
+  - a per-GPU VRAM utilization card with stacked horizontal bars
+  - a combined VRAM trend chart for the selected source
+  - a compact summary line with local and remote active counts
+- The source trends panel no longer shows a separate source tok/s card or a separate RAM trend chart.
+- RAM is shown as a used-only summary because the status payload does not expose a total.
 - The dashboard no longer has a separate Remote Clients section.
 - The top status chip reflects connected client activity instead of implying only local runs exist.
 - Remote runs are labeled with their source so the selected view is easier to read.
