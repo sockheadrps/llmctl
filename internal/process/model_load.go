@@ -10,7 +10,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
-var modelBufferPattern = regexp.MustCompile(`(?i)(CUDA\d+|RPC\d+|CPU_Mapped|CPU)\s+(model|KV|compute)\s+buffer size\s*=\s*([\d.]+)\s*MiB`)
+var modelBufferPattern = regexp.MustCompile(`(?i)(CUDA\d+|RPC\d+(?:\[[^\]]+\])?|CPU_Mapped|CPU)\s+(model|KV|compute)\s+buffer size\s*=\s*([\d.]+)\s*MiB`)
 
 type bufferAllocation struct {
 	model   float64
@@ -99,6 +99,9 @@ func normalizeModelLoadDevice(device string) string {
 	device = strings.TrimSpace(device)
 	if device == "" {
 		return ""
+	}
+	if idx := strings.Index(device, "["); idx >= 0 {
+		device = device[:idx]
 	}
 	switch {
 	case strings.HasPrefix(strings.ToUpper(device), "CUDA"):

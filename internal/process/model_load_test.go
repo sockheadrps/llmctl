@@ -10,9 +10,9 @@ func TestParseModelLoadSlicesAggregatesBuffers(t *testing.T) {
 load_tensors: CUDA0 model buffer size = 4660.00 MiB
 llama_kv_cache: CUDA0 KV buffer size = 512.00 MiB
 sched_reserve: CUDA0 compute buffer size = 128.00 MiB
-load_tensors: RPC0 model buffer size  = 11730.00 MiB
-llama_kv_cache: RPC0 KV buffer size = 256.00 MiB
-sched_reserve: RPC0 compute buffer size = 64.00 MiB
+load_tensors: RPC0[192.168.50.1:50052] model buffer size  = 11730.00 MiB
+llama_kv_cache: RPC0[192.168.50.1:50052] KV buffer size = 256.00 MiB
+sched_reserve: RPC0[192.168.50.1:50052] compute buffer size = 64.00 MiB
 CPU_Mapped model buffer size = 682.00 MiB
 `
 
