@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/build"
-	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
@@ -352,28 +351,9 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, contentW in
 func (m Model) combinedRemoteGPUSlices(ri statusserver.RunningInfo) []gpuLoadSlice {
 	slices := make([]gpuLoadSlice, 0, len(ri.GPUs))
 	for _, gpu := range ri.GPUs {
-		slices = append(slices, gpuLoadSlice{label: "Remote", info: gpu})
-	}
-
-	if m.cfg != nil && m.cfg.RPCMode == "server" && m.rpcServerAlive && m.rpcServerState.PID > 0 {
-		if devices := m.gpuByPIDDevices[m.rpcServerState.PID]; len(devices) > 0 {
-			for _, device := range devices {
-				slices = append(slices, gpuLoadSlice{label: "Local", info: deviceToGPUInfo(device)})
-			}
-		}
+		slices = append(slices, gpuLoadSlice{info: gpu})
 	}
 	return slices
-}
-
-func deviceToGPUInfo(device gpu.ProcessUsage) statusserver.GPUDeviceInfo {
-	info := statusserver.GPUDeviceInfo{
-		UUID:    device.GPUUUID,
-		UsedMiB: device.UsedMiB,
-	}
-	if info.Name == "" {
-		info.Name = device.GPUUUID
-	}
-	return info
 }
 
 func (m Model) renderRunningGPUBreakdown(slices []gpuLoadSlice, contentW int) string {

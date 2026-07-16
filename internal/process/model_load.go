@@ -1,8 +1,7 @@
 package process
 
 import (
-	"fmt"
-	"math"
+	"bufio"
 	"os"
 	"regexp"
 	"strconv"
@@ -11,72 +10,104 @@ import (
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
-var modelBufferLineRE = regexp.MustCompile(`(?i)^\s*(CUDA|RPC)(\d+)\s+model buffer size\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*MiB\s*$`)
+var modelBufferPattern = regexp.MustCompile(`(?i)(CUDA\d+|RPC\d+|CPU_Mapped|CPU)\s+(model|KV|compute)\s+buffer size\s*=\s*([\d.]+)\s*MiB`)
 
-// ParseModelLoadSlices extracts model VRAM slices from a llama-server log.
-// It keeps the last seen size for each CUDA/RPC buffer label.
+type bufferAllocation struct {
+	model   float64
+	kv      float64
+	compute float64
+}
+
+// ParseModelLoadSlices extracts per-device model VRAM slices from a llama-server log.
+// It aggregates model, KV, and compute buffers for each device, and ignores CPU-only
+// mapped buffers when building GPU slices.
 func ParseModelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, error) {
 	if strings.TrimSpace(logPath) == "" {
 		return nil, nil
 	}
-	data, err := os.ReadFile(logPath)
+	file, err := os.Open(logPath)
 	if err != nil {
 		return nil, err
 	}
-	return parseModelLoadSlices(string(data)), nil
-}
+	defer file.Close()
 
-func parseModelLoadSlices(raw string) []statusserver.GPUDeviceInfo {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-	seen := make(map[string]statusserver.GPUDeviceInfo)
+	summary := map[string]*bufferAllocation{}
 	order := make([]string, 0, 4)
 
-	for _, line := range strings.Split(raw, "\n") {
-		match := modelBufferLineRE.FindStringSubmatch(strings.TrimSpace(line))
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		match := modelBufferPattern.FindStringSubmatch(scanner.Text())
 		if len(match) != 4 {
 			continue
 		}
-		label := strings.ToUpper(match[1]) + match[2]
-		value, err := strconv.ParseFloat(match[3], 64)
-		if err != nil {
+
+		device := normalizeModelLoadDevice(match[1])
+		if device == "" {
 			continue
 		}
-		info := statusserver.GPUDeviceInfo{
-			Index:   mustAtoi(match[2]),
-			UUID:    label,
-			Name:    label,
-			UsedMiB: int64(math.Round(value)),
+
+		value, err := strconv.ParseFloat(match[3], 64)
+		if err != nil || value <= 0 {
+			continue
 		}
-		if _, ok := seen[label]; !ok {
-			order = append(order, label)
+
+		alloc := summary[device]
+		if alloc == nil {
+			alloc = &bufferAllocation{}
+			summary[device] = alloc
+			order = append(order, device)
 		}
-		seen[label] = info
+
+		switch strings.ToLower(match[2]) {
+		case "model":
+			alloc.model = value
+		case "kv":
+			alloc.kv = value
+		case "compute":
+			alloc.compute = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
 	if len(order) == 0 {
-		return nil
+		return nil, nil
 	}
-	out := make([]statusserver.GPUDeviceInfo, 0, len(order))
-	for _, label := range order {
-		out = append(out, seen[label])
+
+	result := make([]statusserver.GPUDeviceInfo, 0, len(order))
+	for _, device := range order {
+		alloc := summary[device]
+		if alloc == nil {
+			continue
+		}
+		total := alloc.model + alloc.kv + alloc.compute
+		if total <= 0 {
+			continue
+		}
+		result = append(result, statusserver.GPUDeviceInfo{
+			Name:    device,
+			UUID:    device,
+			UsedMiB: int64(total + 0.5),
+		})
 	}
-	return out
+
+	return result, nil
 }
 
-func mustAtoi(v string) int {
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return -1
+func normalizeModelLoadDevice(device string) string {
+	device = strings.TrimSpace(device)
+	if device == "" {
+		return ""
 	}
-	return n
-}
-
-func formatModelLoadSlices(slices []statusserver.GPUDeviceInfo) string {
-	parts := make([]string, 0, len(slices))
-	for _, s := range slices {
-		parts = append(parts, fmt.Sprintf("%s=%d", s.Name, s.UsedMiB))
+	switch {
+	case strings.HasPrefix(strings.ToUpper(device), "CUDA"):
+		return strings.Replace(strings.ToUpper(device), "CUDA", "CUDA ", 1)
+	case strings.HasPrefix(strings.ToUpper(device), "RPC"):
+		return strings.Replace(strings.ToUpper(device), "RPC", "RPC ", 1)
+	case strings.EqualFold(device, "CPU_Mapped") || strings.EqualFold(device, "CPU"):
+		return ""
+	default:
+		return device
 	}
-	return strings.Join(parts, ",")
 }

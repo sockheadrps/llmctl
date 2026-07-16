@@ -134,27 +134,8 @@ func checkVRAMCmd() tea.Cmd {
 			usage.UsedMiB += device.UsedMiB
 			usage.TotalMiB += device.TotalMiB
 		}
-		byPID, err := gpu.ByPID()
-		if err != nil {
-			byPID = nil
-		}
-		byPIDDevices, err := gpu.ByPIDDevices()
-		if err != nil {
-			byPIDDevices = nil
-		}
-		return vramMsg{usage: usage, byPID: byPID, devices: devices, byPIDDevices: groupProcessUsage(byPIDDevices)}
+		return vramMsg{usage: usage, devices: devices}
 	}
-}
-
-func groupProcessUsage(usages []gpu.ProcessUsage) map[int][]gpu.ProcessUsage {
-	if len(usages) == 0 {
-		return nil
-	}
-	result := make(map[int][]gpu.ProcessUsage)
-	for _, usage := range usages {
-		result[usage.PID] = append(result[usage.PID], usage)
-	}
-	return result
 }
 
 // server-mode only

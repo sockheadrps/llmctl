@@ -65,13 +65,11 @@ type Model struct {
 	tokRates   map[string]float64   // current tok/s while actively generating; absent when idle
 	tokPeak    map[string]float64   // session-high tok/s per instance, for scaling the rate meter
 
-	gpuAvailable    bool // whether nvidia-smi was found at startup
-	gpuName         string
-	gpuUsage        gpu.Usage
-	gpuByPID        map[int]int64
-	gpuDevices      []gpu.DeviceUsage
-	gpuByPIDDevices map[int][]gpu.ProcessUsage
-	ramByPID        map[int]int64 // RSS MiB for CPU-only model processes
+	gpuAvailable bool // whether nvidia-smi was found at startup
+	gpuName      string
+	gpuUsage     gpu.Usage
+	gpuDevices   []gpu.DeviceUsage
+	ramByPID     map[int]int64 // RSS MiB for CPU-only model processes
 
 	statusServer          *statusserver.Server
 	statusServerHost      string

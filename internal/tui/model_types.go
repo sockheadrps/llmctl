@@ -93,13 +93,10 @@ type tokSample struct {
 // right now. Instances with nothing in flight are simply absent.
 type slotsMsg map[string]int
 
-// vramMsg carries a GPU VRAM snapshot: aggregate usage plus a per-PID
-// breakdown for matching against running instances.
+// vramMsg carries a GPU VRAM snapshot: aggregate usage plus device details.
 type vramMsg struct {
-	usage        gpu.Usage
-	byPID        map[int]int64
-	devices      []gpu.DeviceUsage
-	byPIDDevices map[int][]gpu.ProcessUsage
+	usage   gpu.Usage
+	devices []gpu.DeviceUsage
 }
 
 // ramMsg carries RSS MiB per PID for CPU-only model processes.

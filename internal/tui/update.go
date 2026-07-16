@@ -78,9 +78,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vramMsg:
 		m.gpuUsage = msg.usage
-		m.gpuByPID = msg.byPID
 		m.gpuDevices = msg.devices
-		m.gpuByPIDDevices = msg.byPIDDevices
 		m.pushStatusServer()
 		return m, nil
 

@@ -223,6 +223,38 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
+func TestBuildStartArgsAddsVerboseForRPC(t *testing.T) {
+	model := models.Model{Path: "/m.gguf"}
+	profile := models.Profile{Port: 8080}
+
+	got := buildStartArgs(model, profile, "127.0.0.1:50052")
+	if !slices.Contains(got, "-v") {
+		t.Fatalf("expected RPC start args to include -v, got %v", got)
+	}
+	if !slices.Contains(got, "--rpc") {
+		t.Fatalf("expected RPC start args to include --rpc, got %v", got)
+	}
+}
+
+func TestBuildStartArgsDoesNotDuplicateVerbose(t *testing.T) {
+	model := models.Model{Path: "/m.gguf"}
+	profile := models.Profile{
+		Port:      8080,
+		ExtraArgs: []string{"--verbose"},
+	}
+
+	got := buildStartArgs(model, profile, "127.0.0.1:50052")
+	count := 0
+	for _, arg := range got {
+		if arg == "-v" || arg == "--verbose" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected one verbose flag, got %d in %v", count, got)
+	}
+}
+
 func TestTailLog(t *testing.T) {
 	write := func(t *testing.T, content string) string {
 		t.Helper()

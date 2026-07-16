@@ -136,13 +136,6 @@ func (m *Model) pushStatusServer() {
 // shared
 // buildStatusSnapshot assembles a statusserver.Status from current model state.
 func (m Model) buildStatusSnapshot() statusserver.Status {
-	gpuMeta := make(map[string]gpu.DeviceUsage, len(m.gpuDevices))
-	for _, device := range m.gpuDevices {
-		if device.UUID != "" {
-			gpuMeta[device.UUID] = device
-		}
-	}
-
 	toGPUDeviceInfo := func(device gpu.DeviceUsage) statusserver.GPUDeviceInfo {
 		info := statusserver.GPUDeviceInfo{
 			Index:    device.Index,
@@ -153,22 +146,6 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 		}
 		if info.Name == "" {
 			info.Name = "Unknown GPU"
-		}
-		return info
-	}
-
-	toRunningGPUInfo := func(device gpu.ProcessUsage) statusserver.GPUDeviceInfo {
-		info := statusserver.GPUDeviceInfo{
-			UUID:    device.GPUUUID,
-			UsedMiB: device.UsedMiB,
-		}
-		if meta, ok := gpuMeta[device.GPUUUID]; ok {
-			info.Index = meta.Index
-			info.Name = meta.Name
-			info.TotalMiB = meta.TotalMiB
-		}
-		if info.Name == "" {
-			info.Name = device.GPUUUID
 		}
 		return info
 	}
@@ -226,20 +203,10 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			}
 		}
 		if !cpuOnly {
-			if slices, err := process.ParseModelLoadSlices(r.LogFile); err == nil && len(slices) > 0 {
+			if slices, err := process.ParseModelLoadSlices(r.LogFile); err == nil {
 				info.GPUs = slices
 				for _, slice := range slices {
 					info.VRAMMiB += slice.UsedMiB
-				}
-			} else {
-				if mb, ok := m.gpuByPID[r.PID]; ok {
-					info.VRAMMiB = mb
-				}
-				if devices := m.gpuByPIDDevices[r.PID]; len(devices) > 0 {
-					info.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
-					for _, device := range devices {
-						info.GPUs = append(info.GPUs, toRunningGPUInfo(device))
-					}
 				}
 			}
 		} else {
@@ -260,15 +227,6 @@ func (m Model) buildStatusSnapshot() statusserver.Status {
 			Up:   true,
 			Host: m.cfg.RPCServerHost,
 			Port: m.cfg.RPCServerPort,
-		}
-		if mb, ok := m.gpuByPID[m.rpcServerState.PID]; ok {
-			rpcInfo.VRAMMiB = mb
-		}
-		if devices := m.gpuByPIDDevices[m.rpcServerState.PID]; len(devices) > 0 {
-			rpcInfo.GPUs = make([]statusserver.GPUDeviceInfo, 0, len(devices))
-			for _, device := range devices {
-				rpcInfo.GPUs = append(rpcInfo.GPUs, toRunningGPUInfo(device))
-			}
 		}
 		st.RPCServer = rpcInfo
 	}
