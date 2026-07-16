@@ -489,11 +489,11 @@
       return samples[samples.length - 1];
     }
 
-    function pointToXY(values, width, height, pad) {
+    function pointToXY(values, width, height, pad, scaleMode = 'auto') {
       const finite = values.filter(v => Number.isFinite(v));
       if (!finite.length) return null;
-      const min = Math.min(...finite);
-      const max = Math.max(...finite);
+      const min = scaleMode === 'percent' ? 0 : Math.min(...finite);
+      const max = scaleMode === 'percent' ? 100 : Math.max(...finite);
       const span = max - min || 1;
       const usableW = width - pad * 2;
       const usableH = height - pad * 2;
@@ -530,7 +530,7 @@
       const width = 220;
       const height = 92;
       const pad = 8;
-      const data = pointToXY(values, width, height, pad);
+      const data = pointToXY(values, width, height, pad, showYAxis ? 'percent' : 'auto');
       if (!data) return '<div class="empty">No samples yet</div>';
       const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
       const topRight = valueText ? escapeHtml(valueText) : `${fmtNum(maxValue)}${unit}`;
@@ -543,7 +543,7 @@
           ` : ''}
           <path class="area" d="${data.area}" style="fill:${color}"></path>
           <path class="line" d="${data.path}" style="stroke:${color}"></path>
-          <text x="${showYAxis ? pad + 28 : pad}" y="${showYAxis ? 16 : 18}" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
+          <text x="${showYAxis ? pad + 38 : pad}" y="${showYAxis ? 16 : 18}" fill="rgba(148,163,184,0.8)" font-size="11">${label}</text>
           ${showYAxis ? '' : `<text x="${width - pad}" y="18" fill="rgba(255,255,255,0.9)" text-anchor="end" font-size="12">${topRight}</text>`}
         </svg>`;
     }
@@ -585,8 +585,7 @@
       }
       if (!sourceSel.dataset.bound) {
         sourceSel.addEventListener('change', () => {
-          const latest = latestSample(currentHistory);
-          state.sourceHistoryCutoffMs = latest ? Number(latest.sampled_at_ms) || Date.now() : Date.now();
+          state.sourceHistoryCutoffMs = Date.now() + 1;
           state.selectedSource = sourceSel.value;
           render(window.lastStatus, currentHistory);
         });
