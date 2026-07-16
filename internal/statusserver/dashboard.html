@@ -438,11 +438,29 @@
       });
     }
 
+    function sourceTotalVramSeries(history) {
+      return filteredSamples(history).map(sample => {
+        return sourceRunsForSample(sample).reduce((sum, run) => {
+          const total = Number(run.gpu && run.gpu.total_mib) || 0;
+          return sum + total;
+        }, 0);
+      });
+    }
+
     function valuesFor(history, current, field) {
       const currentKey = sourceRunKey(current);
       return filteredSamples(history).map(sample => {
         const found = sourceRunsForSample(sample).find(run => sourceRunKey(run) === currentKey);
         return found ? Number(found[field]) || 0 : null;
+      });
+    }
+
+    function ratioSeries(values, totals) {
+      return values.map((value, index) => {
+        const total = Number(totals[index]) || 0;
+        const used = Number(value);
+        if (!Number.isFinite(used) || total <= 0) return null;
+        return (used / total) * 100;
       });
     }
 
@@ -489,13 +507,14 @@
       return { path, area };
     }
 
-    function sparkline(values, color, label, valueText = null) {
+    function sparkline(values, color, label, valueText = null, unit = '') {
       const width = 220;
       const height = 82;
       const pad = 8;
       const data = pointToXY(values, width, height, pad);
       if (!data) return '<div class="empty">No samples yet</div>';
-      const topRight = valueText ? escapeHtml(valueText) : fmtNum(Math.max(...values.filter(v => Number.isFinite(v))));
+      const maxValue = Math.max(...values.filter(v => Number.isFinite(v)));
+      const topRight = valueText ? escapeHtml(valueText) : `${fmtNum(maxValue)}${unit}`;
       return `
         <svg class="spark" viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}">
           <line class="gridline" x1="${pad}" x2="${width - pad}" y1="${height - pad}" y2="${height - pad}"></line>
@@ -614,6 +633,7 @@
     function renderModels(status, history) {
       const list = document.getElementById('models');
       const current = filteredRuns(status);
+      const sourceTotals = sourceTotalVramSeries(history);
       document.getElementById('active-count').textContent = `${current.length} running from ${sourceLabel(status)}`;
       if (!current.length) {
         list.innerHTML = '<div class="empty">No visible models are running right now.</div>';
@@ -623,11 +643,12 @@
         const series = valuesFor(history, run, 'tok_s');
         const vramSeries = valuesFor(history, run, 'vram_mib');
         const ramSeries = valuesFor(history, run, 'ram_mib');
+        const vramUtilSeries = ratioSeries(vramSeries, sourceTotals);
         const health = run.health || 'loading';
         const transition = healthTransition(history, run);
         const trendCards = [];
         if ((Number(run.vram_mib) || 0) > 0) {
-          trendCards.push(trendCard('VRAM', vramSeries, '#a78bfa', 'Per-model VRAM trend'));
+          trendCards.push(trendCard('VRAM Utilization', vramUtilSeries, '#a78bfa', 'Share of selected source VRAM', null, '%'));
         }
         if ((Number(run.ram_mib) || 0) > 0) {
           trendCards.push(trendCard('RAM', ramSeries, '#34d399', 'Per-model RAM trend'));
@@ -673,15 +694,15 @@
       }).join('');
     }
 
-    function trendCard(label, series, color, subtitle, valueText = null) {
+    function trendCard(label, series, color, subtitle, valueText = null, unit = 'MiB') {
       const current = series.length ? series[series.length - 1] : 0;
-      const value = valueText || (label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
+      const value = valueText || (unit === '%' ? `${fmtNum(current)}%` : label.includes('tok/s') ? fmtNum(current) : fmtMiB(current));
       return `
         <article class="trend-card">
           <div class="label">${label}</div>
           <div class="value">${escapeHtml(value)}</div>
           <div class="model-meta">${escapeHtml(subtitle)}</div>
-          <div style="margin-top: 10px">${sparkline(series, color, label, valueText)}</div>
+          <div style="margin-top: 10px">${sparkline(series, color, label, valueText, unit)}</div>
         </article>`;
     }
 
@@ -699,6 +720,8 @@
       const vramSeries = aggregateSamples(history, runs, 'vram_mib');
       const totalVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.total) || 0), 0);
       const usedVram = gpuEntries.reduce((sum, entry) => sum + (Number(entry.used) || 0), 0);
+      const sourceTotals = sourceTotalVramSeries(history);
+      const vramUtilSeries = ratioSeries(vramSeries, sourceTotals);
       const vramValue = totalVram > 0 ? `${fmtMiB(usedVram)} / ${fmtMiB(totalVram)}` : `${fmtMiB(usedVram)} used`;
       container.innerHTML = [
         `
@@ -729,7 +752,7 @@
             }
           </article>
         `,
-        trendCard('Source VRAM Trend', vramSeries, '#a78bfa', 'Combined VRAM across the selected source', vramValue),
+        trendCard('Source VRAM Utilization', vramUtilSeries, '#a78bfa', 'Combined VRAM utilization across the selected source', vramValue, '%'),
       ].join('');
     }
 
