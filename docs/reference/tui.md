@@ -69,7 +69,7 @@ Tabs cycle left-to-right. Overview is the leftmost tab and the default on launch
 
 The at-a-glance dashboard. Read-only — no cursor navigation within it.
 
-![Overview tab with Active Services and System Telemetry boxes](../assets/screenshots/concepts-overview-populated.png)
+![Overview tab with Active Services and System Telemetry boxes](/assets/screenshots/concepts-overview-populated.png)
 
 ### Active Services box (left)
 
@@ -129,7 +129,7 @@ The browser dashboard uses the same source and per-GPU telemetry model as the Ov
 
 Browse, create, and manage models and profiles.
 
-![Models tab showing expanded model tree with profiles, details pane on right](../assets/screenshots/local-models-tree.png)
+![Models tab showing expanded model tree with profiles, details pane on right](/assets/screenshots/local-models-tree.png)
 
 ### Sub-tabs
 
@@ -180,7 +180,7 @@ When a **model** row is selected: shows the model's source path, file size, and 
 
 When a **profile** row is selected: shows the full profile configuration — port, GPU layers, context size, sampling parameters, cache settings, and any extra args.
 
-![Expanded model tree and profile details area](../assets/screenshots/concepts-model-profiles-tree.png)
+![Expanded model tree and profile details area](/assets/screenshots/concepts-model-profiles-tree.png)
 
 The details pane auto-scrolls when content is taller than the pane.
 
@@ -190,7 +190,7 @@ The details pane auto-scrolls when content is taller than the pane.
 
 Configure llmctl's runtime environment.
 
-![Settings tab with binary path, model directories, and RPC configuration rows](../assets/screenshots/tui-ref-settings.png)
+![Settings tab with binary path, model directories, and RPC configuration rows](/assets/screenshots/tui-ref-settings.png)
 
 Navigate rows with `↑` / `↓`. Press `Enter` to edit a field. Press `Enter` to save or `Esc` to cancel an edit.
 
@@ -222,11 +222,11 @@ The network interface used for RPC and internet connectivity checks. Shown only 
 
 ---
 
-## Running Tab
+## Running Summary Pane
 
 Live view of all active instances.
 
-![Running tab showing two instances with health dots, rate meters, and VRAM bar](../assets/screenshots/local-models-running.png)
+![Running tab showing two instances with health dots, rate meters, and VRAM bar](/assets/screenshots/local-models-running.png)
 
 ### VRAM bar
 
@@ -272,7 +272,7 @@ Press `Enter` on an instance row to open the action menu:
 
 Visible only when RPC is enabled in Settings.
 
-![RPC Server tab showing server status, address, and connected clients](../assets/screenshots/tui-ref-rpc-server.png)
+![RPC Server tab showing server status, address, and connected clients](/assets/screenshots/tui-ref-rpc-server.png)
 
 ### Server mode
 
@@ -343,3 +343,4 @@ Several actions open a full-screen overlay instead of changing the main layout.
 | **Network switch** | `Enter` on a switch row in the Network tab |
 
 All overlays dismiss with `Esc`.
+

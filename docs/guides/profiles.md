@@ -26,7 +26,7 @@ Switching between use cases is just navigating to the right profile row and pres
 
 The only required field is **Port**. Every other field has a default.
 
-![New profile form with port, GPU layers, and context size fields visible](../assets/screenshots/new-profile-form.png)
+![New profile form with port, GPU layers, and context size fields visible](/assets/screenshots/new-profile-form.png)
 
 
 ---
@@ -125,4 +125,5 @@ Each profile needs its own port. If you're getting this error, check the **Runni
 
 Select a profile row in the **Models** tab tree — the right pane shows the full configuration: port, GPU layers, context size, flash attention state, cache settings, and any extra args passed to `llama-server`.
 
-![Expanded Models tree showing profile rows and the right-hand details pane](../assets/screenshots/concepts-model-profiles-tree.png)
+![Expanded Models tree showing profile rows and the right-hand details pane](/assets/screenshots/concepts-model-profiles-tree.png)
+

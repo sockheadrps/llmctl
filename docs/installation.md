@@ -83,7 +83,7 @@ go build -o llmctl .
 
 Run `llmctl` in your terminal. On first launch you'll see the Overview tab with empty Active Services — nothing is running yet.
 
-![llmctl on first launch — Overview tab, empty state](./assets/screenshots/first-launch.png)
+![llmctl on first launch — Overview tab, empty state](/assets/screenshots/first-launch.png)
 
 The first thing to do is point llmctl at your `llama-server` binary:
 
@@ -92,3 +92,4 @@ The first thing to do is point llmctl at your `llama-server` binary:
 3. Under **Model directories**, add one or more folders where your GGUF files live
 
 From there, head to the [Quickstart](./quickstart) to import your first model and get it running.
+

@@ -26,7 +26,7 @@ One model can have many profiles. For example, a single Phi-4 GGUF might have:
 
 You create and edit profiles entirely within the TUI — no config file editing required.
 
-![Models tab tree showing one model expanded with three profiles beneath it](./assets/screenshots/new-profile-form.png)
+![Models tab tree showing one model expanded with three profiles beneath it](/assets/screenshots/new-profile-form.png)
 
 ---
 
@@ -53,7 +53,7 @@ The Overview tab is the main at-a-glance dashboard. It's split into two boxes:
 
 **System Telemetry** — shows GPU name and VRAM usage for your local GPU (GPU 0) and any remote GPU connected via RPC (GPU 1), plus RPC backend status.
 
-![Overview tab with Local and Remote sections populated, System Telemetry showing two GPUs](./assets/screenshots/concepts-overview-populated.png)
+![Overview tab with Local and Remote sections populated, System Telemetry showing two GPUs](/assets/screenshots/concepts-overview-populated.png)
 
 ---
 
@@ -97,3 +97,4 @@ This is a common source of confusion:
 | Persists across restarts? | Yes | No — must be started again (However running models stay running even when you exit llmctl) |
 
 Think of a profile like a saved launch configuration. Starting it creates an instance. Stopping the instance doesn't delete the profile.
+

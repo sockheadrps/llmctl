@@ -52,11 +52,11 @@ On the machine that will contribute its GPU:
 3. Optionally configure the bind host and port
 4. Go to the **RPC Server** tab
 
-![RPC Server start modal in server mode](../assets/screenshots/rpcserverstartmodal.png)
+![RPC Server start modal in server mode](/assets/screenshots/rpcserverstartmodal.png)
 
 Press `Enter` on the **Start** row to launch `ggml-rpc-server`. The status changes to **ONLINE**.
 
-![RPC Server tab showing ONLINE status and LAN addresses](../assets/screenshots/rpcserverup.png)
+![RPC Server tab showing ONLINE status and LAN addresses](/assets/screenshots/rpcserverup.png)
 
 Under **LAN addresses** you'll see the local IPs where the status server is reachable. Press `Enter` on one to copy it - you'll paste this into the client machine's Settings in the next step.
 
@@ -78,13 +78,13 @@ llmctl polls that address and auto-discovers the RPC endpoint. You don't need to
 
 Go to the **RPC Server** tab on the client machine. The status should show **CONNECTED** with the discovered RPC endpoint address.
 
-![Client machine connected to a remote RPC server](../assets/screenshots/rpcclientconnection.png)
+![Client machine connected to a remote RPC server](/assets/screenshots/rpcclientconnection.png)
 
 Switch to the **Overview** tab. Under **System Telemetry**, you'll see:
 - **GPU 0** - your local GPU name and VRAM
 - **GPU 1** - the remote machine's GPU name and VRAM
 
-![Overview tab with local and remote telemetry populated](../assets/screenshots/concepts-overview-populated.png)
+![Overview tab with local and remote telemetry populated](/assets/screenshots/concepts-overview-populated.png)
 
 If the model is split across GPUs, the Overview and dashboard also show per-GPU model-load slices once the startup log has been parsed.
 
@@ -126,3 +126,4 @@ Once running, the **Overview** tab on the server machine (if it's also running l
 - If the machines are linked directly by Ethernet, raise the MTU on both NICs. Jumbo frames cut packet overhead during large tensor transfers, and they matter more on a direct cable than on a busy LAN. Keep the MTU identical at both ends, and make sure both adapters actually support the larger frame size.
 
   On Windows, that usually means enabling the NIC's Jumbo Packet setting first, then setting the adapter MTU to `9000` or the closest supported value. On Linux, use `ip link` or NetworkManager to set the same MTU on both the RPC client and server interfaces.
+
