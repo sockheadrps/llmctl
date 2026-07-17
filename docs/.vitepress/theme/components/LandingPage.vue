@@ -422,8 +422,9 @@ onMounted(() => {
 
       const scroller = document.scrollingElement || document.documentElement
       const navHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')) || 0
-      const snapGap = 0
-      const downTargetTop = marqueeWrap.value.offsetTop - navHeight - snapGap
+      const snapGap = 96
+      const downTargetTop = marqueeWrap.value.offsetTop - navHeight
+      const downLandingTop = downTargetTop + snapGap
       const upTargetTop = heroSection.value.offsetTop - navHeight - 24
       const canSnapDown = event.deltaY > 0 && window.scrollY < downTargetTop - 48
       const canSnapUp = event.deltaY < 0 && window.scrollY > downTargetTop - 170
@@ -436,7 +437,7 @@ onMounted(() => {
 
       if (canSnapDown) {
         armWhySectionReplay()
-        scroller.scrollTo({ top: downTargetTop, behavior: 'smooth' })
+        scroller.scrollTo({ top: downLandingTop, behavior: 'smooth' })
         return
       }
 
@@ -595,7 +596,7 @@ onBeforeUnmount(() => {
           <span style="color:var(--text2)">Flag configurations and spot-benchmarking is painful.</span>
         </h2>
         <p class="section-subtitle reveal reveal-delay-2">
-          llmctl keeps your model launch workflows, profile presets, and RPC offload setups in one place so you can move from idea to run without rebuilding the same command line over and over.
+          Launch configurable, reproducable inference servers and manage network connected GPU layer sharing with benchmark feedback. Without typing 67 runtime flags. 
         </p>
 
         <div class="why-links reveal reveal-delay-3">
@@ -616,6 +617,18 @@ onBeforeUnmount(() => {
             <small>See the full terminal workflow at a glance.</small>
           </a>
         </div>
+      </div>
+
+      <div class="why-annotation why-annotation-mobile" :class="{ visible: annotationVisible }" aria-hidden="true">
+        <span class="why-annotation-text why-annotation-text-mobile">
+          <span>This is</span>
+          <span>why</span>
+        </span>
+        <svg class="why-annotation-arrow why-annotation-arrow-mobile" viewBox="0 0 220 180" preserveAspectRatio="none">
+          <path class="why-annotation-line" d="M 58 42 C 78 42, 92 45, 108 52 C 123 59, 132 69, 135 82 C 137 93, 137 103, 130 113" />
+          <path class="why-annotation-line why-annotation-head" d="M 134 113 C 130 109, 127 106, 124 104" />
+          <path class="why-annotation-line why-annotation-head" d="M 134 113 C 138 109, 141 106, 144 104" />
+        </svg>
       </div>
 
       <div ref="terminalPanel" class="terminal-panel reveal reveal-delay-1" aria-label="Example llama-server command">
@@ -1082,7 +1095,7 @@ onBeforeUnmount(() => {
 
 .hero-stack-card.is-landscape.is-back {
   z-index: 1;
-  transform: translate3d(124px, 98px, -78px) scale(0.86);
+  transform: translate3d(124px, -36px, -78px) scale(0.86);
   opacity: 0.84;
   filter: saturate(0.9) brightness(0.92);
 }
@@ -1247,6 +1260,10 @@ onBeforeUnmount(() => {
 
 .why-annotation-head {
   animation-delay: .9s;
+}
+
+.why-annotation-mobile {
+  display: none;
 }
 
 .why-copy {
@@ -1444,32 +1461,110 @@ onBeforeUnmount(() => {
 @media (max-width: 720px) {
   .landing-shell {
     padding-inline: .75rem;
+    min-height: calc(100svh - var(--vp-nav-height));
+    display: flex;
+    flex-direction: column;
+    --hero-actions-gap: clamp(1rem, 4vw, 1.5rem);
+    --hero-media-offset: clamp(0.1rem, 1vw, 0.2rem);
+    --hero-scroll-bottom: clamp(2.2rem, 8vw, 2.7rem);
+    --why-annotation-height: clamp(2rem, 8vw, 2.625rem);
+    --why-annotation-gap: clamp(-0.15rem, -0.3vw, 0rem);
+    --why-annotation-left: clamp(2.5%, 4vw, 4%);
+    --why-annotation-top: clamp(-2px, -0.4vw, 0px);
+    --why-annotation-arrow-top: clamp(4px, 1vw, 8px);
+    --why-section-padding-top: clamp(1.2rem, 4vw, 1.7rem);
   }
 
   .hero {
-    padding-top: 1rem;
+    padding-top: .75rem;
+    gap: 1rem;
+    position: relative;
+    padding-bottom: 1.4rem;
   }
 
   .hero-actions {
     flex-wrap: wrap;
+    margin-top: var(--hero-actions-gap);
+  }
+
+  .hero-media {
+    margin-top: var(--hero-media-offset);
   }
 
   .hero-stack {
-    transform: none !important;
-    perspective: none;
-  }
-
-  .hero-stack {
-    min-height: 0;
+    width: min(100%, 100vw - 1.5rem);
+    min-height: clamp(340px, 96vw, 500px);
+    perspective: 1100px;
+    margin-inline: auto;
   }
 
   .hero-stack-card {
+    touch-action: manipulation;
+  }
+
+  .hero-stack-card.is-dashboard.is-front {
+    transform: translate3d(0, 52px, 0) scale(0.86);
+  }
+
+  .hero-stack-card.is-landscape.is-back {
+    transform: translate3d(22px, -92px, -60px) scale(0.98);
+    opacity: 1;
+    filter: saturate(0.98) brightness(0.98);
+  }
+
+  .hero-stack-card.is-dashboard.is-back {
+    transform: translate3d(44px, -68px, -52px) scale(0.94);
+    opacity: 0.98;
+    filter: saturate(0.96) brightness(0.98);
+  }
+
+  .hero-scroll {
+    position: absolute;
+    left: 50%;
+    bottom: var(--hero-scroll-bottom);
+    transform: translateX(-50%);
+    margin: 0;
+  }
+
+  .why-links {
+    display: none;
+  }
+
+  .why-annotation {
+    display: none;
+  }
+
+  .why-annotation-mobile {
+    display: block;
     position: relative;
     inset: auto;
-    margin-bottom: 1rem;
-    transform: none !important;
-    opacity: 1 !important;
-    filter: none !important;
+    height: var(--why-annotation-height);
+    margin: 0 0 var(--why-annotation-gap);
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+
+  .why-annotation-mobile.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .why-annotation-text-mobile {
+    left: var(--why-annotation-left);
+    top: var(--why-annotation-top);
+    transform: rotate(-4deg);
+  }
+
+  .why-annotation-arrow-mobile {
+    inset: auto;
+    left: 0;
+    top: var(--why-annotation-arrow-top);
+    width: 100%;
+    height: 82px;
+  }
+
+  .why-section {
+    padding-top: var(--why-section-padding-top);
   }
 
   .hero-card-frame {
@@ -1486,12 +1581,27 @@ onBeforeUnmount(() => {
   }
 
   .terminal-body {
-    font-size: .74rem;
-    line-height: 1.45;
+    padding: .95rem .95rem 1.05rem;
+    font-size: .68rem;
+    line-height: 1.38;
+  }
+
+  .terminal-topbar {
+    padding: .65rem .85rem;
+    gap: .35rem;
+  }
+
+  .terminal-title {
+    font-size: .68rem;
+    margin-left: .35rem;
   }
 
   .terminal-panel {
-    min-height: 0;
+    min-height: 27rem;
+  }
+
+  .marquee-wrap {
+    margin-top: -1.4rem;
   }
 }
 
