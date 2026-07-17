@@ -18,7 +18,7 @@ const heroCards = [
 ]
 
 const angle = 12
-const hoverResetDelay = 500
+const hoverResetDelay = 400
 const hoverBuffer = 24
 const remap = (value, oldMax, newMax) => {
   const newValue = ((value + oldMax) * (newMax * 2)) / (oldMax * 2) - newMax
@@ -62,6 +62,7 @@ const queueHoverReset = (heroId, cardEl) => {
 
   hoverResetTimer = window.setTimeout(() => {
     hoverResetTimer = null
+    heroTrackingActive = false
 
     if (activeHero.value !== heroId) {
       return
@@ -77,9 +78,17 @@ const queueHoverReset = (heroId, cardEl) => {
   }, hoverResetDelay)
 }
 
-const handleCardMove = (event) => {
+const handleCardEnter = () => {
   clearHoverReset()
+  heroTrackingActive = true
 
+  if (stopIntroMotion) {
+    stopIntroMotion()
+    stopIntroMotion = null
+  }
+}
+
+const handleCardMove = (event) => {
   if (stopIntroMotion) {
     stopIntroMotion()
     stopIntroMotion = null
@@ -104,28 +113,36 @@ const handleCardMove = (event) => {
     bottom: rect.bottom + hoverBuffer,
   }
 
-  if (
-    event.clientX < bufferRect.left ||
-    event.clientX > bufferRect.right ||
-    event.clientY < bufferRect.top ||
-    event.clientY > bufferRect.bottom
-  ) {
-    queueHoverReset(activeHero.value, cardEl)
-    return
-  }
-
-  clearHoverReset()
-
-  if (
+  const insideImage =
     event.clientX >= rect.left &&
     event.clientX <= rect.right &&
     event.clientY >= rect.top &&
     event.clientY <= rect.bottom
-  ) {
-    const x = event.clientX - (rect.left + rect.width / 2)
-    const y = event.clientY - (rect.top + rect.height / 2)
-    setCardPose(cardEl, remap(x, rect.width / 2, angle), remap(y, rect.height / 2, angle) * -1)
+
+  const insideBuffer =
+    event.clientX >= bufferRect.left &&
+    event.clientX <= bufferRect.right &&
+    event.clientY >= bufferRect.top &&
+    event.clientY <= bufferRect.bottom
+
+  if (insideImage) {
+    heroTrackingActive = true
+    clearHoverReset()
+  } else if (insideBuffer) {
+    if (!heroTrackingActive) {
+      return
+    }
+    clearHoverReset()
+  } else {
+    if (heroTrackingActive && hoverResetTimer === null) {
+      queueHoverReset(activeHero.value, cardEl)
+    }
+    return
   }
+
+  const x = event.clientX - (rect.left + rect.width / 2)
+  const y = event.clientY - (rect.top + rect.height / 2)
+  setCardPose(cardEl, remap(x, rect.width / 2, angle), remap(y, rect.height / 2, angle) * -1)
 }
 
 const handleCardLeave = (event) => {
@@ -145,6 +162,7 @@ const handleCardLeave = (event) => {
 }
 
 let hoverResetTimer = null
+let heroTrackingActive = false
 
 const getFrontCardImage = () => document.querySelector('.hero-stack-card.is-front .hero-card-image')
 
@@ -298,6 +316,7 @@ onBeforeUnmount(() => {
               :alt="card.alt"
               loading="eager"
               class="hero-card-image"
+              @pointerenter="handleCardEnter"
               @click="toggleHeroFront(card.id)"
               @pointerout="handleCardLeave"
             />
