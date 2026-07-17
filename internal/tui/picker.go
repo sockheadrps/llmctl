@@ -2,9 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -95,22 +93,22 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // importSelectedModel adds the picked GGUF file as a model, or — if it
-// matches a model that already exists but is currently hidden for having
-// no profiles — reuses that entry instead of creating a duplicate. Either
-// way the result gets a "default" profile so it has something to run and
-// isn't immediately hidden again by buildRows.
+// matches an existing model currently hidden for having no profiles —
+// reuses that entry instead of creating a duplicate. Either way the result
+// gets a "default" profile so it has something to run and isn't hidden
+// again by buildRows.
 func (m Model) importSelectedModel() (tea.Model, tea.Cmd) {
 	if len(m.picker.files) == 0 {
 		return m, nil
 	}
 	path := m.picker.files[m.picker.cursor]
 
-	key := modelKeyByPath(m.cfg.Models, path)
+	key := models.ModelKeyByPath(m.cfg.Models, path)
 	if key == "" {
-		key = uniqueModelKey(m.cfg.Models, modelKeyFromPath(path))
+		key = models.UniqueModelKey(m.cfg.Models, models.ModelKeyFromPath(path))
 		m.cfg.Models[key] = models.Model{
 			Key:      key,
-			Name:     modelNameFromPath(path),
+			Name:     models.ModelNameFromPath(path),
 			Path:     path,
 			Profiles: map[string]models.Profile{},
 		}
@@ -121,7 +119,7 @@ func (m Model) importSelectedModel() (tea.Model, tea.Cmd) {
 		if mdl.Profiles == nil {
 			mdl.Profiles = map[string]models.Profile{}
 		}
-		mdl.Profiles["default"] = defaultProfile(m.cfg)
+		mdl.Profiles["default"] = tuiDefaultProfile(m.cfg)
 		m.cfg.Models[key] = mdl
 	}
 
@@ -141,69 +139,6 @@ func (m Model) importSelectedModel() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// defaultProfile is the starting-point profile given to a newly (re-)added
-// model, mirroring the New Profile form's own defaults.
-func defaultProfile(cfg *config.Config) models.Profile {
-	temp, topP, minP, topK := 0.6, 0.95, 0.0, 20
-	return models.Profile{
-		Name:      "default",
-		Port:      suggestPort(cfg),
-		CtxSize:   8192,
-		Temp:      &temp,
-		TopP:      &topP,
-		TopK:      &topK,
-		MinP:      &minP,
-		FlashAttn: true,
-		GPULayers: 999,
-	}
-}
-
-// modelKeyByPath returns the key of the model whose Path matches path, or
-// "" if none does.
-func modelKeyByPath(existing map[string]models.Model, path string) string {
-	for k, mdl := range existing {
-		if mdl.Path == path {
-			return k
-		}
-	}
-	return ""
-}
-
-func modelNameFromPath(path string) string {
-	base := filepath.Base(path)
-	return strings.TrimSuffix(base, filepath.Ext(base))
-}
-
-func modelKeyFromPath(path string) string {
-	name := strings.ToLower(modelNameFromPath(path))
-	var b strings.Builder
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-':
-			b.WriteRune(r)
-		case r == '_', r == ' ':
-			b.WriteRune('-')
-		}
-	}
-	key := b.String()
-	if key == "" {
-		key = "model"
-	}
-	return key
-}
-
-func uniqueModelKey(existing map[string]models.Model, base string) string {
-	if _, ok := existing[base]; !ok {
-		return base
-	}
-	for i := 2; ; i++ {
-		candidate := fmt.Sprintf("%s-%d", base, i)
-		if _, ok := existing[candidate]; !ok {
-			return candidate
-		}
-	}
-}
-
 func indexOfModelRow(rows []row, modelKey string) int {
 	for i, r := range rows {
 		if r.kind == rowModel && r.modelKey == modelKey {
@@ -212,3 +147,14 @@ func indexOfModelRow(rows []row, modelKey string) int {
 	}
 	return 0
 }
+
+// tuiDefaultProfile wraps models.DefaultProfile so the TUI side can
+// still apply a port suggestion that avoids collisions with existing
+// profiles in this config. (Section 3 extraction kept DefaultProfile
+// pure; the TUI still owns port-collision awareness.)
+func tuiDefaultProfile(cfg *config.Config) models.Profile {
+	p := models.DefaultProfile()
+	p.Port = suggestPort(cfg)
+	return p
+}
+

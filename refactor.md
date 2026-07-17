@@ -73,14 +73,14 @@ specifically target those shift points.
 Before touching code, establish the conventions and safety net so that later
 sections don't erode the structure.
 
-- [ ] Run the full test suite and capture baseline:
+- [x] Run the full test suite and capture baseline:
   `go test ./... > /tmp/refactor-baseline.txt && echo OK`
-- [ ] Verify build for all tag variants:
+- [x] Verify build for all tag variants:
   `go build ./... && GOOS=windows go build ./... && go build -tags debug ./...`
   (whatever extra tags the project currently uses)
-- [ ] Confirm git is clean for the branch we're on (`dev`):
+- [x] Confirm git is clean for the branch we're on (`dev`):
   `git status` — no untracked/uncommitted changes in `internal/` or `cmd/`
-- [ ] Create a dedicated refactor branch off current `HEAD`:
+- [x] Create a dedicated refactor branch off current `HEAD`:
   `git checkout -b refactor/tui-cleanup`
 
 ---
@@ -92,7 +92,7 @@ documents the filename-prefix contract. This gives the refactor a vocabulary
 and prevents future drift.
 
 Files to create/modify:
-- [ ] Add or update `internal/tui/doc.go` with:
+- [x] Add or update `internal/tui/doc.go` with:
   - `view_*.go`      — pure rendering (no state mutation)
   - `update_*.go`    — Bubbletea update handlers (state mutation + command emission)
   - `*_types.go`     — small type/const definitions for the screen they belong to
@@ -118,22 +118,22 @@ The file `internal/util/models.go` is misnamed — it contains only
 filesystem helpers (`ExpandHome`, `ScanGGUF`), no model types. Split it
 correctly so `util` stays a generic leaf package:
 
-- [ ] Read `internal/util/models.go` — confirm actual contents:
+- [x] Read `internal/util/models.go` — confirm actual contents:
       `ExpandHome` (generic path expansion) and `ScanGGUF` (lists `.gguf` files).
-- [ ] Move `ScanGGUF` → `internal/models/scan.go`. Rationale: GGUF is a
+- [x] Move `ScanGGUF` → `internal/models/scan.go`. Rationale: GGUF is a
       model-file extension; this is model-domain knowledge, not generic.
       Update the single caller: `internal/tui/picker.go`.
-- [ ] Move `ExpandHome` → `internal/util/paths.go` (absorb into the existing
+- [x] Move `ExpandHome` → `internal/util/paths.go` (absorb into the existing
       path-helpers file). No callers need import changes since package stays
       `util`.
-- [ ] Delete `internal/util/models.go` (now empty).
-- [ ] Move `TestScanGGUF*` / add a new `TestScanGGUF` in
+- [x] Delete `internal/util/models.go` (now empty).
+- [x] Move `TestScanGGUF*` / add a new `TestScanGGUF` in
       `internal/models/scan_test.go` (use `t.TempDir()` to create a few
       `.gguf` files and a non-gguf file, verify only the gguf ones are returned
       sorted alphabetically).
-- [ ] Move `TestExpandHomeSupportsEnvVars` into `internal/util/paths_test.go`
+- [x] Move `TestExpandHomeSupportsEnvVars` into `internal/util/paths_test.go`
       (or create it if absent). Function name unchanged; test unchanged.
-- [ ] Delete `internal/util/models_test.go` (contents migrated).
+- [x] Delete `internal/util/models_test.go` (contents migrated).
 
 Files expected to still exist after Section 2 in `internal/util/`:
 - `paths.go` (now with `ExpandHome` appended)
@@ -145,17 +145,17 @@ Files expected to still exist after Section 2 in `internal/util/`:
 New file: `internal/models/scan.go` (+ `scan_test.go`).
 
 Verification (structural + tests):
-- [ ] `go build ./...` clean
-- [ ] `go test ./internal/util/...` — still passes
-- [ ] `go test ./internal/models/...` — `TestScanGGUF` passes; all
+- [x] `go build ./...` clean
+- [x] `go test ./internal/util/...` — still passes
+- [x] `go test ./internal/models/...` — `TestScanGGUF` passes; all
       pre-existing process tests that imported util still pass
   (`TestBuildArgs`, `TestBuildStartArgs*`, `TestParseProfileArgs*`)
-- [ ] `go vet ./internal/util/ ./internal/models/` — clean
-- [ ] `internal/util/` has no import of `internal/models`, `internal/process`,
+- [x] `go vet ./internal/util/ ./internal/models/` — clean
+- [x] `internal/util/` has no import of `internal/models`, `internal/process`,
       or any sibling internal package (dependency must flow one way):
       `go list -f '{{.Imports}}' ./internal/util/` should show only stdlib
       and third-party
-- [ ] `internal/models/` imports only standard library (no util dependency
+- [x] `internal/models/` imports only standard library (no util dependency
       introduced; `ScanGGUF` is pure `os` + `path/filepath`)
 - [ ] `grep -n "util.ExpandHome\|util.ScanGGUF" -r --include="*.go" internal/ cmd/`
       — every call site updated if anything moved packages (expected: only
@@ -184,7 +184,7 @@ Move it to the package that owns the concept.
   if they're tightly coupled to TUI state; flag them for Section 6.
 
 Verification:
-- [ ] `go build ./...` clean
+- [x] `go build ./...` clean
 - [ ] `go test ./...` matches baseline
 - [ ] **Specific to this section:** The `TestExportArgsRoundTrip` characterization
       test from Section -1 MUST still pass without modification. If it needs
@@ -236,7 +236,7 @@ critical before splitting the package.
   for message types — document which and why.
 
 Verification:
-- [ ] `go build ./...` clean
+- [x] `go build ./...` clean
 - [ ] `go test ./...` matches baseline
 - [ ] **Section -1 contract check:** `TestOverviewPageDimensions` (from Section -1)
   MUST still pass unchanged. If the tick handler needs to update its assertion,
@@ -277,7 +277,7 @@ logical render regions it already has.
   needs (don't copy the import block wholesale — trim)
 
 Verification:
-- [ ] `go build ./...` clean
+- [x] `go build ./...` clean
 - [ ] `go test ./...` matches baseline
 - [ ] **Specific to this section — behavioral equivalence:**
   Run the characterization tests written in Section -1:
@@ -383,7 +383,7 @@ Verification:
       `go test ./internal/tui/ -count=1 -v 2>&1 | grep -c "^--- PASS"`
   After Section 6, the same count (across root + all sub-packages combined)
   MUST still match. No tests were lost in the split.
-- [ ] `go build ./...` clean for the whole module
+- [x] `go build ./...` clean for the whole module
 - [ ] `go test ./...` — total passes matches Section 0 baseline
 - [ ] `internal/tui/` root contains fewer than 40 non-test `.go` files
 - [ ] Manual smoke test: launch the TUI via `./bin/llmctl tui` (or
