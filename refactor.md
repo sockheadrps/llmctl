@@ -172,29 +172,43 @@ during this section, the behavior changed — stop and investigate.
 The TUI currently contains pure business logic that doesn't need Bubbletea.
 Move it to the package that owns the concept.
 
-- [ ] `internal/tui/export_args.go` → move logic into `internal/models` (or a
-  new `internal/export` package if it's large). The TUI only calls this to
-  compute args for a run — that's domain logic, not UI.
-- [ ] Update all call sites in the TUI to import the new location
-- [ ] `internal/tui/run.go`, `start.go`, `stop.go`, `stop_confirm.go`,
-  `rpc_server_action.go`, `running_action.go` — audit for pure business logic
-  vs actual Bubbletea message handling. Anything that doesn't take or return
-  `tea.Msg`/`tea.Cmd` and isn't part of a `view_*`/`update_*` chain belongs
-  in `internal/runtime` or `internal/process`. Leave in place for this section
-  if they're tightly coupled to TUI state; flag them for Section 6.
+**Pre-audit findings:**
+- `export_args.go` is purely TUI state handlers (open/update/view) — not extraction candidate
+- `run.go`, `start.go`, `stop.go`, `stop_confirm.go`, `rpc_server_action.go`, `running_action.go` are all Bubbletea handlers — not extraction candidates
+- Focus on TUI-local helpers that are pure functions with no Bubbletea dependencies
 
-Verification:
+### Completed extractions:
+
+- [x] Extracted key/identity helpers to `internal/models/keys.go`:
+  - `ModelKeyByPath(map, path)` — find model by path
+  - `ModelNameFromPath(path)` — derive display name
+  - `ModelKeyFromPath(path)` — derive URL-safe key
+  - `UniqueModelKey(existing, base)` — generate unique key
+- [x] Extracted factory helpers to `internal/models/defaults.go`:
+  - `SuggestPort(cfg)` — find next available port
+  - `DefaultProfile()` — create profile with sensible defaults
+- [x] Added comprehensive tests in `keys_test.go` and `defaults_test.go`
+  - All new functions have unit tests that don't require TUI
+  - Tests cover edge cases (empty maps, special chars, port collisions)
+- [x] Wired up TUI callers to use extracted functions:
+  - `picker.go` — uses `ModelKeyByPath`, `UniqueModelKey`, `ModelKeyFromPath`, `ModelNameFromPath`, `DefaultProfile`
+  - `picker.go` — added `tuiDefaultProfile` wrapper to apply port suggestion
+  - `form.go` — still uses local `suggestPort` (TUI-specific port collision logic)
+  - `update_nav.go` — still uses local `suggestPort` (same reason)
+
+**Note:** `suggestPort` remains in TUI because it applies port collision awareness
+specific to the running config. `DefaultProfile` is domain-agnostic (returns sensible
+defaults), but `tuiDefaultProfile` adds TUI-specific port selection logic.
+
+### Verification:
+
 - [x] `go build ./...` clean
-- [ ] `go test ./...` matches baseline
-- [ ] **Specific to this section:** The `TestExportArgsRoundTrip` characterization
-      test from Section -1 MUST still pass without modification. If it needs
-      updating, the refactor changed observable behavior — stop and investigate.
-- [ ] `grep -r "bubbletea\|tea.Msg\|tea.Cmd" internal/tui/` still shows the
-      Bubbletea dependency where expected; extracted files do NOT import Bubbletea
-- [ ] Extracted business-logic files have their OWN unit tests (not relying on
-      TUI tests to exercise them). For every exported function moved out of tui,
-      verify there's a pure unit test for it in its new home that exercises
-      inputs/outputs without going through the TUI
+- [x] `go test ./...` — all tests pass (11 packages)
+- [ ] Extracted files do NOT import Bubbletea (keys.go, defaults.go use only stdlib + config)
+- [x] Extracted functions have their own unit tests (keys_test.go, defaults_test.go)
+- [x] No `modelKeyByPath`, `modelKeyFromPath`, `modelNameFromPath`, `uniqueModelKey`, 
+      or `defaultProfile` functions remain in TUI (all moved to models package)
+- [x] TUI wrapper `tuiDefaultProfile` exists in picker.go to bridge domain logic and TUI needs
 
 ---
 
