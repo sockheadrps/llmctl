@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const to = (path) => withBase(path)
 const activeHero = ref('landing')
+const marqueeWrap = ref(null)
 const terminalLines = [
   'llama-server \\',
   '  -m models Ternary-Bonsai-27B-Q2_0.gguf \\',
@@ -31,6 +32,8 @@ const typedTerminalLines = ref(terminalLines.map(() => ''))
 const terminalFinished = ref(false)
 const annotationVisible = ref(false)
 const terminalPanel = ref(null)
+const heroSection = ref(null)
+const whySection = ref(null)
 let terminalTimer = null
 let annotationTimer = null
 const heroCards = [
@@ -312,11 +315,21 @@ const startIntroMotion = () => {
 
 let stopIntroMotion = null
 let cleanupHero = null
+let revealObserver = null
 let terminalObserver = null
 let terminalTypingStarted = false
+let terminalTypingArmed = true
+let previousScrollSnapType = ''
+let previousScrollPaddingTop = ''
+let previousScrollBehavior = ''
+let previousBodyScrollSnapType = ''
+let previousBodyScrollPaddingTop = ''
+let previousBodyScrollBehavior = ''
+let snapEnabled = false
+let snapWheelHandler = null
 
 const startTerminalTypingOnce = () => {
-  if (terminalTypingStarted) {
+  if (terminalTypingStarted || !terminalTypingArmed) {
     return
   }
 
@@ -324,17 +337,67 @@ const startTerminalTypingOnce = () => {
   startTerminalTyping()
 }
 
+const resetWhySectionState = () => {
+  stopTerminalTyping()
+  stopAnnotationTimer()
+  annotationVisible.value = false
+  terminalFinished.value = false
+  typedTerminalLines.value = terminalLines.map(() => '')
+  terminalTypingStarted = false
+  terminalTypingArmed = false
+
+  if (whySection.value && revealObserver) {
+    whySection.value.querySelectorAll('.reveal.visible').forEach((el) => {
+      el.classList.remove('visible')
+    })
+  }
+}
+
+const armWhySectionReplay = () => {
+  terminalTypingArmed = true
+
+  if (whySection.value && revealObserver) {
+    whySection.value.querySelectorAll('.reveal').forEach((el) => {
+      revealObserver.observe(el)
+    })
+  }
+
+  if (terminalPanel.value && terminalObserver) {
+    terminalObserver.observe(terminalPanel.value)
+  }
+}
+
 onMounted(() => {
-  const observer = new IntersectionObserver((entries) => {
+  snapEnabled = window.matchMedia('(min-width: 961px)').matches
+  if (snapEnabled) {
+    const scrollRoot = document.scrollingElement || document.documentElement
+    previousScrollSnapType = document.documentElement.style.scrollSnapType
+    previousScrollPaddingTop = document.documentElement.style.scrollPaddingTop
+    previousScrollBehavior = document.documentElement.style.scrollBehavior
+    previousBodyScrollSnapType = document.body.style.scrollSnapType
+    previousBodyScrollPaddingTop = document.body.style.scrollPaddingTop
+    previousBodyScrollBehavior = document.body.style.scrollBehavior
+    scrollRoot.style.scrollSnapType = 'y proximity'
+    scrollRoot.style.scrollPaddingTop = 'calc(var(--vp-nav-height) + 1rem)'
+    scrollRoot.style.scrollBehavior = 'smooth'
+    document.documentElement.style.scrollSnapType = 'y proximity'
+    document.documentElement.style.scrollPaddingTop = 'calc(var(--vp-nav-height) + 1rem)'
+    document.documentElement.style.scrollBehavior = 'smooth'
+    document.body.style.scrollSnapType = 'y proximity'
+    document.body.style.scrollPaddingTop = 'calc(var(--vp-nav-height) + 1rem)'
+    document.body.style.scrollBehavior = 'smooth'
+  }
+
+  revealObserver = new IntersectionObserver((entries) => {
     entries.forEach(e => {
       if (e.isIntersecting) {
         e.target.classList.add('visible')
-        observer.unobserve(e.target)
+        revealObserver?.unobserve(e.target)
       }
     })
   }, { threshold: .15, rootMargin: '0px 0px -40px 0px' })
 
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
+  document.querySelectorAll('.reveal').forEach(el => revealObserver?.observe(el))
 
   terminalObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
@@ -351,19 +414,66 @@ onMounted(() => {
     terminalObserver.observe(terminalPanel.value)
   }
 
+  if (snapEnabled) {
+    snapWheelHandler = (event) => {
+      if (!heroSection.value || !marqueeWrap.value) {
+        return
+      }
+
+      const scroller = document.scrollingElement || document.documentElement
+      const navHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')) || 0
+      const snapGap = 0
+      const downTargetTop = marqueeWrap.value.offsetTop - navHeight - snapGap
+      const upTargetTop = heroSection.value.offsetTop - navHeight - 24
+      const canSnapDown = event.deltaY > 0 && window.scrollY < downTargetTop - 48
+      const canSnapUp = event.deltaY < 0 && window.scrollY > downTargetTop - 170
+
+      if (!canSnapDown && !canSnapUp) {
+        return
+      }
+
+      event.preventDefault()
+
+      if (canSnapDown) {
+        armWhySectionReplay()
+        scroller.scrollTo({ top: downTargetTop, behavior: 'smooth' })
+        return
+      }
+
+      resetWhySectionState()
+      scroller.scrollTo({ top: upTargetTop, behavior: 'smooth' })
+    }
+
+    window.addEventListener('wheel', snapWheelHandler, { passive: false })
+  }
+
   stopIntroMotion = startIntroMotion()
   cleanupHero = () => {
     clearHoverReset()
     stopTerminalTyping()
     stopAnnotationTimer()
+    revealObserver?.disconnect()
+    revealObserver = null
     terminalObserver?.disconnect()
     terminalObserver = null
     if (stopIntroMotion) {
       stopIntroMotion()
       stopIntroMotion = null
     }
-    observer.disconnect()
     terminalTypingStarted = false
+    terminalTypingArmed = true
+    if (snapEnabled) {
+      document.documentElement.style.scrollSnapType = previousScrollSnapType
+      document.documentElement.style.scrollPaddingTop = previousScrollPaddingTop
+      document.documentElement.style.scrollBehavior = previousScrollBehavior
+      document.body.style.scrollSnapType = previousBodyScrollSnapType
+      document.body.style.scrollPaddingTop = previousBodyScrollPaddingTop
+      document.body.style.scrollBehavior = previousBodyScrollBehavior
+    }
+    if (snapWheelHandler) {
+      window.removeEventListener('wheel', snapWheelHandler)
+      snapWheelHandler = null
+    }
   }
 })
 
@@ -379,7 +489,7 @@ onBeforeUnmount(() => {
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
     <div class="noise"></div>
-    <section class="hero">
+    <section ref="heroSection" class="hero">
       <div class="hero-copy">
         <div class="hero-badge">
           <span class="dot"></span>
@@ -439,34 +549,34 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="marquee-wrap" aria-label="Highlights">
-        <div class="marquee">
-          <span>Terminal UI</span><span class="sep">◆</span>
-          <span>Profile Management</span><span class="sep">◆</span>
-          <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
-          <span>Detached Processes</span><span class="sep">◆</span>
-          <span>Live Health Monitoring</span><span class="sep">◆</span>
-          <span>Token Rate Polling</span><span class="sep">◆</span>
-          <span>RPC Offload</span><span class="sep">◆</span>
-          <span>Single Binary</span><span class="sep">◆</span>
-          <span>Terminal UI</span><span class="sep">◆</span>
-          <span>Profile Management</span><span class="sep">◆</span>
-          <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
-          <span>Detached Processes</span><span class="sep">◆</span>
-          <span>Live Health Monitoring</span><span class="sep">◆</span>
-          <span>Token Rate Polling</span><span class="sep">◆</span>
-          <span>RPC Offload</span><span class="sep">◆</span>
-          <span>Single Binary</span><span class="sep">◆</span>
-        </div>
-      </div>
-
       <div class="hero-scroll">
         <span>Scroll</span>
         <div class="scroll-line"></div>
       </div>
     </section>
 
-    <section class="why-section">
+    <section ref="marqueeWrap" class="marquee-wrap" aria-label="Highlights">
+      <div class="marquee">
+        <span>Terminal UI</span><span class="sep">◆</span>
+        <span>Profile Management</span><span class="sep">◆</span>
+        <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
+        <span>Detached Processes</span><span class="sep">◆</span>
+        <span>Live Health Monitoring</span><span class="sep">◆</span>
+        <span>Token Rate Polling</span><span class="sep">◆</span>
+        <span>RPC Offload</span><span class="sep">◆</span>
+        <span>Single Binary</span><span class="sep">◆</span>
+        <span>Terminal UI</span><span class="sep">◆</span>
+        <span>Profile Management</span><span class="sep">◆</span>
+        <span>GGUF Auto-Discovery</span><span class="sep">◆</span>
+        <span>Detached Processes</span><span class="sep">◆</span>
+        <span>Live Health Monitoring</span><span class="sep">◆</span>
+        <span>Token Rate Polling</span><span class="sep">◆</span>
+        <span>RPC Offload</span><span class="sep">◆</span>
+        <span>Single Binary</span><span class="sep">◆</span>
+      </div>
+    </section>
+
+    <section ref="whySection" class="why-section">
       <div class="why-annotation" :class="{ visible: annotationVisible }" aria-hidden="true">
         <span class="why-annotation-text">
           <span>This is</span>
@@ -554,7 +664,7 @@ onBeforeUnmount(() => {
   isolation: isolate;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 1rem 1rem 4rem;
+  padding: .1rem .1rem .1rem;
 }
 
 .bg-grid,
@@ -624,8 +734,9 @@ onBeforeUnmount(() => {
   grid-template-rows: 1fr auto;
   align-items: center;
   gap: 3rem 3.25rem;
-  min-height: calc(100vh - var(--vp-nav-height));
   position: relative;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 
@@ -636,7 +747,6 @@ onBeforeUnmount(() => {
   justify-self: end;
   width: min(100%, 720px);
 }
-.marquee-wrap { grid-column: 1 / -1; grid-row: 2; align-self: end; }
 
 .hero-scroll {
   position: absolute;
@@ -879,8 +989,21 @@ onBeforeUnmount(() => {
 }
 
 .primary-btn:hover,
-.secondary-btn:hover {
+.primary-btn:focus-visible,
+.secondary-btn:hover,
+.secondary-btn:focus-visible {
   transform: translateY(-2px);
+}
+
+.primary-btn:hover,
+.primary-btn:focus-visible {
+  box-shadow: 0 12px 32px rgba(0, 229, 255, 0.3);
+}
+
+.secondary-btn:hover,
+.secondary-btn:focus-visible {
+  border-color: rgba(0, 229, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .hero-pills {
@@ -988,7 +1111,7 @@ onBeforeUnmount(() => {
   background-size: cover;
   background-position: center;
   filter: blur(15px) saturate(0.98);
-  opacity: 0.05;
+  opacity: 0.01;
 }
 
 .hero-stack-card.is-back .hero-card-shadow {
@@ -1056,8 +1179,11 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   gap: 1.5rem;
   align-items: stretch;
-  padding: 6rem 0 4rem;
+  padding: 3rem 0 1.25rem;
   position: relative;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  scroll-margin-top: calc(var(--vp-nav-height));
 }
 
 .why-annotation {
@@ -1144,13 +1270,16 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.03);
   text-decoration: none;
   color: inherit;
-  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
 }
 
-.why-link:hover {
+.why-link:hover,
+.why-link:focus-visible {
   transform: translateY(-2px);
   border-color: rgba(0, 229, 255, 0.25);
   background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  outline: none;
 }
 
 .why-link span {
@@ -1259,6 +1388,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  scroll-margin-top: calc(var(--vp-nav-height) + .25rem);
 }
 
 .marquee {
@@ -1291,12 +1421,11 @@ onBeforeUnmount(() => {
 
   .hero-copy  { grid-column: 1; grid-row: 1; }
   .hero-media { grid-column: 1; grid-row: 2; }
-  .marquee-wrap { grid-column: 1; grid-row: 3; }
 
   .why-section {
     grid-template-columns: 1fr;
     gap: 1rem;
-    padding: 4rem 0 3rem;
+    padding: 3rem 0 1rem;
   }
 
   .why-copy {
