@@ -7,12 +7,12 @@ const activeHero = ref('landing')
 const heroCards = [
   {
     id: 'landing',
-    src: to('/assets/screenshots/newlanding.png'),
+    src: '/assets/screenshots/newlanding.png',
     alt: 'llmctl TUI showing models, profiles, running services, and status panes',
   },
   {
     id: 'dashboard',
-    src: to('/assets/screenshots/dashboard.png'),
+    src: '/assets/screenshots/dashboard.png',
     alt: 'llmctl dashboard showing active models, source trends, and GPU utilization',
   },
 ]
