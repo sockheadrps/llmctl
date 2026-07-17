@@ -1,18 +1,20 @@
 <script setup>
 import { withBase } from 'vitepress'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import dashboardShot from '../../../assets/screenshots/dashboard.png'
+import landingShot from '../../../assets/screenshots/newlanding.png'
 
 const to = (path) => withBase(path)
 const activeHero = ref('landing')
 const heroCards = [
   {
     id: 'landing',
-    src: '/assets/screenshots/newlanding.png',
+    src: landingShot,
     alt: 'llmctl TUI showing models, profiles, running services, and status panes',
   },
   {
     id: 'dashboard',
-    src: '/assets/screenshots/dashboard.png',
+    src: dashboardShot,
     alt: 'llmctl dashboard showing active models, source trends, and GPU utilization',
   },
 ]
@@ -208,7 +210,7 @@ onBeforeUnmount(() => {
 
       <div
         class="hero-media hero-stack"
-        :style="{ '--hero-url': `url(${to('/assets/screenshots/newlanding.png')})` }"
+        :style="{ '--hero-url': `url(${landingShot})` }"
       >
         <button
           v-for="(card, index) in heroCards"
