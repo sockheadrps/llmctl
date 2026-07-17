@@ -17,11 +17,15 @@ type Controller struct {
 	statusServer *statusserver.Server
 }
 
-// New creates a Controller backed by the given runtime.Manager and statusserver.
-func New(mgr *runtime.Manager, statusServer *statusserver.Server) *Controller {
+// New creates a Controller backed by the given runtime.Manager and statusserver (optional).
+func New(mgr *runtime.Manager, statusServer ...*statusserver.Server) *Controller {
+	var server *statusserver.Server
+	if len(statusServer) > 0 {
+		server = statusServer[0]
+	}
 	return &Controller{
 		mgr:          mgr,
-		statusServer: statusServer,
+		statusServer: server,
 	}
 }
 
@@ -151,3 +155,13 @@ func (c *Controller) NewPublisher(clientID, clientName string) *statusserver.Pub
 // RPCServerState returns the RPC server state type — convenience alias so
 // TUI files can refer to the type without importing runtime directly.
 type RPCServerState = runtime.RPCServerState
+
+// GPUDeviceInfo provides the GPU device information needed by the TUI
+// without importing statusserver directly
+type GPUDeviceInfo = statusserver.GPUDeviceInfo
+
+// Status provides the complete status information needed by the TUI
+type Status = statusserver.Status
+
+// Publisher provides the publisher functionality needed by the TUI
+type Publisher = statusserver.Publisher

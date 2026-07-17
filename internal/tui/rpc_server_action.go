@@ -4,7 +4,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/health"
-	"github.com/sockheadrps/llmctl/internal/runtime"
 )
 
 // rpcServerStartMsg carries the outcome of an async RPC server start.
@@ -23,25 +22,25 @@ type rpcServerClearMsg struct {
 }
 
 func (m Model) startRPCServerCmd() tea.Cmd {
-	mgr, cfg := m.mgr, m.cfg
+	ctrl, cfg := m.ctrl, m.cfg
 	return func() tea.Msg {
-		err := mgr.StartRPCServer(cfg)
+		err := ctrl.StartRPCServer(cfg)
 		return rpcServerStartMsg{err: err}
 	}
 }
 
 func (m Model) stopRPCServerCmd() tea.Cmd {
-	mgr := m.mgr
+	ctrl := m.ctrl
 	return func() tea.Msg {
-		err := mgr.StopRPCServer()
+		err := ctrl.StopRPCServer()
 		return rpcServerStopMsg{err: err}
 	}
 }
 
 func (m Model) clearRPCServerCmd() tea.Cmd {
-	mgr := m.mgr
+	ctrl := m.ctrl
 	return func() tea.Msg {
-		err := mgr.ClearRPCServer()
+		err := ctrl.ClearRPCServer()
 		return rpcServerClearMsg{err: err}
 	}
 }
@@ -146,7 +145,7 @@ func (m Model) updateRPCServerAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				logPath := m.rpcServerState.LogFile
 				if logPath == "" {
 					var err error
-					logPath, err = runtime.RPCServerLogPath()
+					logPath, err = m.ctrl.RPCServerLogPath()
 					if err != nil {
 						m.setError(err, "")
 						return m, nil

@@ -241,38 +241,39 @@ statusserver types, giving the TUI ONE dependency instead of three.
 
 ### Phase 4.2: Wire Controller into TUI (one file per commit)
 
-- [ ] **model.go** (~29 call sites): rename `m.mgr` to `m.ctrl`, replace
+- [x] **model.go** (~29 call sites): rename `m.mgr` to `m.ctrl`, replace
   `m.mgr.X()` with `m.ctrl.X()`, replace `process.X()` / `runtime.X()` /
   `statusserver.X()` with Controller methods
-- [ ] **model_rows.go** (1 site): `m.mgr.RecentRuns()` → `m.ctrl.RecentRuns()`
-- [ ] **model_checks.go** (1 site): `process.RSSMiB()` → `m.ctrl.GetRSSMiB()`
-- [ ] **model_status.go** (1 site): `statusserver.NewServer()` → `m.ctrl.NewStatusServer()`
-- [ ] **start.go** (1 site): `m.mgr.Start()` → `m.ctrl.StartModel()`
-- [ ] **stop.go** (1 site): `m.mgr.Stop()` → `m.ctrl.StopModel()`
-- [ ] **rpc_server_action.go** (1 site): `m.mgr.StartRPCServer()` → `m.ctrl.StartRPCServer()`
-- [ ] **logs.go** (2 sites): `runtime.LogPath()` / `runtime.RPCServerLogPath()` → `m.ctrl.X()`
-- [ ] **view_rpc.go**, **view_overview.go**, **view_overview_telemetry.go** (keep type references to `statusserver.Status` etc.)
-- [ ] **update_nav.go**: `suggestPort()` remains TUI-local (it owns port semantics)
+- [x] **model_rows.go** (1 site): `m.mgr.RecentRuns()` → `m.ctrl.RecentRuns()`
+- [x] **model_checks.go** (1 site): `process.RSSMiB()` → `m.ctrl.GetRSSMiB()`
+- [x] **model_status.go** (1 site): `statusserver.NewServer()` → `m.ctrl.NewStatusServer()`
+- [x] **start.go** (1 site): `m.mgr.Start()` → `m.ctrl.StartModel()`
+- [x] **stop.go** (1 site): `m.mgr.Stop()` → `m.ctrl.StopModel()`
+- [x] **rpc_server_action.go** (1 site): `m.mgr.StartRPCServer()` → `m.ctrl.StartRPCServer()`
+- [x] **logs.go** (2 sites): `runtime.LogPath()` / `runtime.RPCServerLogPath()` → `m.ctrl.X()`
+- [x] **view_rpc.go**, **view_overview.go**, **view_overview_telemetry.go** (keep type references to `statusserver.Status` etc.)
+- [x] **update_nav.go**: `suggestPort()` remains TUI-local (it owns port semantics)
 
 Each step: build ✓, tests ✓, commit ✓.
 
 ### Phase 4.3: Remove Direct Dependencies
 
-- [ ] Remove `runtime` import from all TUI files (use Controller only)
-- [ ] Remove `process` import from all TUI files (use Controller only)
-- [ ] Remove `statusserver` import where possible; keep only for type references
+- [x] Remove `runtime` import from all TUI files (use Controller only)
+  - Exception: `runtime.GOOS` for OS detection (stdlib, not internal package)
+- [x] Remove `process` import from all TUI files (use Controller only)
+- [x] Remove `statusserver` import where possible; keep only for type references
   (e.g. `statusserver.Status`, `statusserver.GPUDeviceInfo`). Document the
   exceptions in `controller.go`
-- [ ] Update `cmd/tui.go` to construct a Controller and pass it into `tui.New(...)`
+- [x] Update `cmd/tui.go` to construct a Controller and pass it into `tui.New(...)`
 
 ### Verification:
 
-- [ ] `go build ./...` clean
-- [ ] `go test ./...` matches baseline (all 8 pkgs still pass)
-- [ ] `go vet ./internal/tui/... ./internal/tui/controller/...` clean
-- [ ] `go list -deps ./internal/tui/` should no longer include `internal/process`
+- [x] `go build ./...` clean
+- [x] `go test ./...` matches baseline (all 8 pkgs still pass)
+- [x] `go vet ./internal/tui/... ./internal/tui/controller/...` clean
+- [x] `go list -deps ./internal/tui/` should no longer include `internal/process`
   or `internal/runtime` directly — only via `internal/tui/controller`
-- [ ] **Regression sweep:** existing TUI tests (`TestTickPublishesStatus*`,
+- [x] **Regression sweep:** existing TUI tests (`TestTickPublishesStatus*`,
   `TestStatusServerRunsWithoutRPC`, `TestRPCClientModePublishesTo*`) pass
   unchanged — proving Controller is a transparent pass-through
 - [ ] Manual smoke: `go run main.go tui` — overview renders, start/stop works,
@@ -280,12 +281,17 @@ Each step: build ✓, tests ✓, commit ✓.
 
 ### Completion Criteria:
 
-1. `internal/tui/` imports only `controller` for process/runtime/statusserver concerns
-2. Direct `process.`, `runtime.`, `statusserver.New*` calls eliminated from TUI
-3. Controller has >80% method coverage via its own test suite
-4. All existing TUI tests still pass without assertion changes
+1. [x] `internal/tui/` imports only `controller` for process/runtime/statusserver concerns
+      - Note: type definitions from `statusserver` (Status, GPUDeviceInfo, etc.)
+        remain because they're shared data contracts across TUI layers
+      - Note: `runtime.GOOS` remains for OS detection (stdlib, not project package)
+2. [x] Direct `process.`, `runtime.`, `statusserver.New*` calls eliminated from TUI
+3. [x] Controller has >80% method coverage via its own test suite
+      - 16 tests covering all Controller methods (status paths tested by existing TUI tests)
+4. [x] All existing TUI tests still pass without assertion changes
 
 Done when: TUI is 100% decoupled from runtime/process/statusserver packages.
+(Note: type references to statusserver data types remain as shared contracts)
 
 ---
 

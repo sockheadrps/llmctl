@@ -14,10 +14,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/config"
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/models"
-	"github.com/sockheadrps/llmctl/internal/process"
-	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
@@ -26,7 +25,7 @@ import (
 type Model struct {
 	cfg     *config.Config
 	cfgPath string
-	mgr     *runtime.Manager
+	ctrl    *controller.Controller
 
 	screen screen
 
@@ -48,7 +47,7 @@ type Model struct {
 
 	running          []models.Running
 	runningCursor    int
-	rpcServerState   runtime.RPCServerState
+	rpcServerState   controller.RPCServerState
 	rpcServerAlive   bool
 	health           healthMsg
 	pendingInstances map[string]bool // keys still loading after start; cleared on first StatusUp
@@ -149,9 +148,9 @@ type Model struct {
 // cfgPath is where changes made in the TUI (new models/profiles) are persisted.
 // Focus starts on the tab bar (Models tab active) rather than dropping
 // straight into the tree.
-func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetConn, netRPCConn, netIface string) Model {
+func New(cfg *config.Config, cfgPath string, ctrl *controller.Controller, netInternetConn, netRPCConn, netIface string) Model {
 	m := Model{
-		cfg: cfg, cfgPath: cfgPath, mgr: mgr,
+		cfg: cfg, cfgPath: cfgPath, ctrl: ctrl,
 		health:           healthMsg{},
 		pendingInstances: map[string]bool{},
 		focus:            focusTabs,
@@ -172,7 +171,7 @@ func New(cfg *config.Config, cfgPath string, mgr *runtime.Manager, netInternetCo
 			m.gpuName = name
 		}
 	}
-	m.statusPublisher = statusserver.NewPublisher(clientID(), clientName())
+	m.statusPublisher = m.ctrl.NewPublisher(clientID(), clientName())
 	if err := m.reconcileStatusServer(); err != nil {
 		m.setError(fmt.Errorf("status server: %w", err), "")
 	}
@@ -214,7 +213,7 @@ func (m *Model) clearError() {
 func (m *Model) refreshRunning(detectCrashes bool) {
 	prev := m.running
 
-	running, err := m.mgr.List()
+	running, err := m.ctrl.ListRunning()
 	if err != nil {
 		m.setError(err, "")
 		return
@@ -228,7 +227,7 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 	if detectCrashes {
 		for _, old := range prev {
 			if !runningContains(running, old) {
-				m.setError(fmt.Errorf("%s exited unexpectedly:\n%s", old.Label(), tailOrReason(old.LogFile)), old.LogFile)
+				m.setError(fmt.Errorf("%s exited unexpectedly:\n%s", old.Label(), tailOrReason(old.LogFile, m.ctrl)), old.LogFile)
 				break
 			}
 		}
@@ -237,7 +236,7 @@ func (m *Model) refreshRunning(detectCrashes bool) {
 	m.running = running
 
 	if m.cfg.RPCEnabled && m.cfg.RPCMode == "server" {
-		state, alive := m.mgr.RPCServerStatus()
+		state, alive := m.ctrl.RPCServerStatus()
 		m.rpcServerState = state
 		m.rpcServerAlive = alive
 	}
@@ -375,8 +374,8 @@ func (m Model) findRunning(modelKey, profileKey string) (models.Running, bool) {
 	return models.Running{}, false
 }
 
-func tailOrReason(logPath string) string {
-	tail, err := process.TailLog(logPath, 8)
+func tailOrReason(logPath string, ctrl *controller.Controller) string {
+	tail, err := ctrl.TailLog(logPath, 8)
 	if err != nil || tail == "" {
 		return "(no log output — check " + logPath + ")"
 	}
@@ -397,7 +396,7 @@ func (m Model) shouldContinueScrollTick() bool {
 	}
 }
 
-func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, error) {
+func (m *Model) modelLoadSlices(logPath string) ([]controller.GPUDeviceInfo, error) {
 	if strings.TrimSpace(logPath) == "" {
 		return nil, nil
 	}
@@ -424,7 +423,7 @@ func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, e
 		}
 	}
 
-	slices, err := process.ParseModelLoadSlices(logPath)
+	slices, _, err := m.ctrl.ParseModelLoadSlices(logPath)
 	if err != nil {
 		return nil, err
 	}

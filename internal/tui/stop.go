@@ -12,9 +12,9 @@ type stopResultMsg struct {
 }
 
 func (m Model) stopProfileCmd(modelKey, profileKey, label string) tea.Cmd {
-	mgr := m.mgr
+	ctrl := m.ctrl
 	return func() tea.Msg {
-		err := mgr.Stop(modelKey, profileKey)
+		err := ctrl.StopModel(modelKey, profileKey)
 		return stopResultMsg{label: label, err: err}
 	}
 }

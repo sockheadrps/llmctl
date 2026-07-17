@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sockheadrps/llmctl/internal/config"
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
@@ -129,7 +130,10 @@ func TestTailFittingHeightSanitizesAndCapsWrappedLogPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := tailFittingHeight(logPath, 24, 3)
+	// Create a controller for testing - TailLog doesn't use manager state
+	// so we can use one with nil manager (it just delegates to process.TailLog)
+	ctrl := controller.New(nil)
+	got := tailFittingHeight(ctrl, logPath, 24, 3)
 	if strings.Contains(got, "\x1b") || strings.Contains(got, "\a") || strings.Contains(got, "\r") {
 		t.Fatalf("expected sanitized preview, got %q", got)
 	}

@@ -67,7 +67,7 @@ func (m *Model) reconcileStatusServer() error {
 		m.statusServerPort = 0
 	}
 
-	srv := statusserver.NewServer()
+	srv := m.ctrl.NewStatusServer()
 	if err := srv.Start(host, port); err != nil {
 		return err
 	}

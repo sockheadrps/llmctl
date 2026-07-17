@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/sockheadrps/llmctl/internal/runtime"
 )
 
 // logsState backs the full-screen log viewer.
@@ -40,7 +38,7 @@ func (m Model) openLogsForCurrent() (tea.Model, tea.Cmd) {
 		logPath := m.rpcServerState.LogFile
 		if logPath == "" {
 			var err error
-			logPath, err = runtime.RPCServerLogPath()
+			logPath, err = m.ctrl.RPCServerLogPath()
 			if err != nil {
 				m.setError(err, "")
 				return m, nil
@@ -61,7 +59,7 @@ func (m Model) openLogsForCurrent() (tea.Model, tea.Cmd) {
 	if !ok || (r.kind != rowProfile && r.kind != rowRunning) {
 		return m, nil
 	}
-	path, err := runtime.LogPath(r.modelKey, r.profileKey)
+	path, err := m.ctrl.LogPath(r.modelKey, r.profileKey)
 	if err != nil {
 		m.setError(err, "")
 		return m, nil

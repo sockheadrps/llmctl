@@ -6,8 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/sockheadrps/llmctl/internal/process"
 )
 
 type exportArgsState struct {
@@ -26,7 +24,7 @@ func (m Model) openExportArgs(r row) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	args := process.BuildProfileArgs(p)
+	args := m.ctrl.BuildProfileArgs(&p)
 	argsStr := strings.Join(args, " ")
 
 	copied := false

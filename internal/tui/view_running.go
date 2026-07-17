@@ -265,7 +265,7 @@ func (m Model) renderRunningOutputPane(rightW, innerH int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	if tail := tailFittingHeight(run.LogFile, rightW, budget); tail != "" {
+	if tail := tailFittingHeight(m.ctrl, run.LogFile, rightW, budget); tail != "" {
 		b.WriteString(profileStyle.Render(tail))
 	} else {
 		b.WriteString(profileStyle.Render("(no output yet)"))

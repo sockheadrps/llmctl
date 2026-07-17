@@ -6,9 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/health"
-	"github.com/sockheadrps/llmctl/internal/process"
-	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
@@ -224,11 +223,11 @@ func (m Model) renderRPCServerModeOutputPane(rightW, innerH int) string {
 	} else {
 		logPath := m.rpcServerState.LogFile
 		if logPath == "" {
-			if p, err := runtime.RPCServerLogPath(); err == nil {
+			if p, err := m.ctrl.RPCServerLogPath(); err == nil {
 				logPath = p
 			}
 		}
-		if tail := tailFittingHeightRPC(logPath, rightW, innerH-5); tail != "" {
+		if tail := tailFittingHeightRPC(m.ctrl, logPath, rightW, innerH-5); tail != "" {
 			b.WriteString(profileStyle.Render(tail))
 		} else {
 			b.WriteString(profileStyle.Render("(no output yet)"))
@@ -370,8 +369,8 @@ func compressRPCLogLines(lines []string) []string {
 
 // tailFittingHeightRPC is like tailFittingHeight but compresses known-noisy
 // RPC server log patterns before fitting to the available height.
-func tailFittingHeightRPC(logPath string, boxWidth, maxLines int) string {
-	raw, err := process.TailLog(logPath, 500)
+func tailFittingHeightRPC(ctrl *controller.Controller, logPath string, boxWidth, maxLines int) string {
+	raw, err := ctrl.TailLog(logPath, 500)
 	if err != nil || raw == "" {
 		return ""
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/runtime"
 	"github.com/sockheadrps/llmctl/internal/tui"
 )
@@ -46,5 +47,6 @@ func runTUI() error {
 		return err
 	}
 
-	return tui.Run(cfg, cfgPath, mgr, tuiInternetConn, tuiRPCConn, tuiIface)
+	ctrl := controller.New(mgr)
+	return tui.Run(cfg, cfgPath, ctrl, tuiInternetConn, tuiRPCConn, tuiIface)
 }

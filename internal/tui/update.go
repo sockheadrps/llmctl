@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/health"
-	"github.com/sockheadrps/llmctl/internal/runtime"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -20,7 +20,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		now := time.Now()
-		if m.mgr != nil {
+		if m.ctrl != nil {
 			start := time.Now()
 			m.refreshRunning(true)
 			debugTimingf("refreshRunning(detectCrashes=true) took %s", time.Since(start))
@@ -217,7 +217,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setError(msg.err, "")
 			return m, nil
 		}
-		m.rpcServerState = runtime.RPCServerState{}
+		m.rpcServerState = controller.RPCServerState{}
 		m.rpcServerAlive = false
 		delete(m.health, "rpc-server")
 		m.clearError()

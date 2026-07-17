@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/sockheadrps/llmctl/internal/process"
+	"github.com/sockheadrps/llmctl/internal/controller"
 )
 
 // Fallback dimensions used before the first WindowSizeMsg arrives (or if a
@@ -249,8 +249,8 @@ func (m Model) renderLeftPaneContent(leftW int) string {
 // boxWidth — process output can contain very long or numerous lines (a
 // chat template dump, say), which by raw line count alone could still
 // wrap well past the available space.
-func tailFittingHeight(logPath string, boxWidth, maxLines int) string {
-	raw, err := process.TailLog(logPath, 500)
+func tailFittingHeight(ctrl *controller.Controller, logPath string, boxWidth, maxLines int) string {
+	raw, err := ctrl.TailLog(logPath, 500)
 	if err != nil || raw == "" {
 		return ""
 	}
