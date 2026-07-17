@@ -64,97 +64,105 @@ func (m Model) viewForm() string {
 		labelWidth = max(8, rowWidth-formMinInputWidth-1)
 		inputWidth = max(formMinInputWidth, rowWidth-labelWidth-1)
 	}
-	body := strings.Builder{}
-	sections := []struct {
-		name   string
-		fields []int
-	}{
-		{name: "Identity", fields: []int{fieldKey, fieldHost, fieldAlias, fieldPort, fieldCtxSize}},
-		{name: "Sampling", fields: []int{fieldTemp, fieldTopP, fieldTopK, fieldMinP, fieldPresencePenalty, fieldRepetitionPenalty, fieldFrequencyPenalty, fieldSeed}},
-		{name: "Cache & Compute", fields: []int{fieldBatchSize, fieldUBatchSize, fieldRepeatLastN, fieldGPULayers, fieldMMap, fieldKVOffload}},
-		{name: "Server", fields: []int{fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM}},
-		{name: "Reasoning", fields: []int{fieldReasoning, fieldReasoningBudget, fieldReasoningFormat}},
-		{name: "Advanced", fields: []int{fieldCacheK, fieldCacheV, fieldExtraArgs, fieldNotes}},
-		{name: "RPC", fields: []int{fieldRPCEnabled}},
-	}
 
+	var body strings.Builder
 	visibleRows := m.formVisibleRows()
-	selectedRows := make([]string, 0, len(m.form.fields)+3)
+	selectedRows := make([]string, 0, len(m.form.fields)+8)
 	focusedRow := 0
 	rowIndex := 0
-	for _, section := range sections {
-		if section.name != "" {
-			selectedRows = append(selectedRows, sectionTitleStyle.Render(section.name))
-			rowIndex++
+
+	appendSectionTitle := func(name string) {
+		selectedRows = append(selectedRows, sectionTitleStyle.Render(name))
+		rowIndex++
+	}
+
+	appendFieldRow := func(idx int) {
+		f := m.form.fields[idx]
+		f.input.Width = inputWidth
+		labelText := truncateText(f.label+":", labelWidth)
+		label := formLabelStyle.Width(labelWidth)
+		if m.form.focus == idx {
+			if !m.form.navigating {
+				label = formEditingLabelStyle.Width(labelWidth)
+			} else {
+				label = formFocusedLabelStyle.Width(labelWidth)
+			}
+			focusedRow = rowIndex
 		}
-		for _, idx := range section.fields {
-			f := m.form.fields[idx]
-			f.input.Width = inputWidth
-			labelText := truncateText(f.label+":", labelWidth)
-			label := formLabelStyle.Width(labelWidth)
-			if m.form.focus == idx {
-				if !m.form.navigating {
-					label = formEditingLabelStyle.Width(labelWidth)
-				} else {
-					label = formFocusedLabelStyle.Width(labelWidth)
-				}
-				focusedRow = rowIndex
-			}
-			rowStr := fmt.Sprintf("%s %s", label.Render(labelText), f.input.View())
-			if idx == fieldGPULayers && m.form.cpuOnly {
-				rowStr += " " + detailMutedStyle.Render("(overridden)")
-			}
-			selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
-			rowIndex++
+		rowStr := fmt.Sprintf("%s %s", label.Render(labelText), f.input.View())
+		selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
+		rowIndex++
+	}
 
-			if idx == fieldGPULayers {
-				selectedRows = append(selectedRows, fitStyledLine(m.renderLayerDistRow(labelWidth, rowWidth), rowWidth))
-				if m.form.focus == len(m.form.fields)+3 {
-					focusedRow = rowIndex
-				}
-				rowIndex++
+	appendBoolRow := func(label string, value bool, focused bool, extra string) {
+		lbl := formLabelStyle.Width(labelWidth)
+		if focused {
+			if !m.form.navigating {
+				lbl = formEditingLabelStyle.Width(labelWidth)
+			} else {
+				lbl = formFocusedLabelStyle.Width(labelWidth)
 			}
+			focusedRow = rowIndex
 		}
+		val := "false"
+		if value {
+			val = "true"
+		}
+		rowStr := fmt.Sprintf("%s %s", lbl.Render(truncateText(label+":", labelWidth)), val)
+		if extra != "" {
+			rowStr += " " + detailMutedStyle.Render(extra)
+		}
+		selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
+		rowIndex++
 	}
-	flashLabel := formLabelStyle
-	if m.form.focus == len(m.form.fields) {
-		flashLabel = formFocusedLabelStyle
-		focusedRow = rowIndex
-	}
-	flashLabel = flashLabel.Width(labelWidth)
-	flashValue := "false"
-	if m.form.flash {
-		flashValue = "true"
-	}
-	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", flashLabel.Render(truncateText("Flash Attention:", labelWidth)), flashValue), rowWidth))
-	rowIndex++
 
-	cpuOnlyLabel := formLabelStyle
-	if m.form.focus == len(m.form.fields)+1 {
-		cpuOnlyLabel = formFocusedLabelStyle
-		focusedRow = rowIndex
-	}
-	cpuOnlyLabel = cpuOnlyLabel.Width(labelWidth)
-	cpuOnlyValue := "false"
-	if m.form.cpuOnly {
-		cpuOnlyValue = "true"
-	}
-	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", cpuOnlyLabel.Render(truncateText("CPU Only:", labelWidth)), cpuOnlyValue), rowWidth))
-	rowIndex++
+	appendFieldRow(fieldKey)
+	appendFieldRow(fieldNotes)
+	appendBoolRow("Flash Attention", m.form.flash, m.form.focus == len(m.form.fields), "")
+	appendBoolRow("RPC Enabled", strings.EqualFold(strings.TrimSpace(m.form.fields[fieldRPCEnabled].input.Value()), "true"), m.form.focus == fieldRPCEnabled, "")
+	appendFieldRow(fieldHost)
+	appendFieldRow(fieldAlias)
+	appendFieldRow(fieldPort)
+	appendFieldRow(fieldCtxSize)
 
-	mlockLabel := formLabelStyle
-	if m.form.focus == len(m.form.fields)+2 {
-		mlockLabel = formFocusedLabelStyle
-		focusedRow = rowIndex
+	appendSectionTitle("Sampling")
+	for _, idx := range []int{fieldTemp, fieldTopP, fieldTopK, fieldMinP, fieldPresencePenalty, fieldRepetitionPenalty, fieldFrequencyPenalty, fieldSeed} {
+		appendFieldRow(idx)
 	}
-	mlockLabel = mlockLabel.Width(labelWidth)
-	mlockValue := "false"
-	if m.form.mlock {
-		mlockValue = "true"
-	}
-	selectedRows = append(selectedRows, fitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(truncateText("MLock:", labelWidth)), mlockValue), rowWidth))
-	rowIndex++
 
+	appendSectionTitle("Cache & Compute")
+	for _, idx := range []int{fieldBatchSize, fieldUBatchSize, fieldRepeatLastN} {
+		appendFieldRow(idx)
+	}
+	appendBoolRow("CPU Only", m.form.cpuOnly, m.form.focus == len(m.form.fields)+1, "")
+	if !m.form.cpuOnly {
+		appendFieldRow(fieldGPULayers)
+		selectedRows = append(selectedRows, fitStyledLine(m.renderLayerDistRow(labelWidth, rowWidth), rowWidth))
+		if m.form.focus == len(m.form.fields)+3 {
+			focusedRow = rowIndex
+		}
+		rowIndex++
+	}
+	for _, idx := range []int{fieldMMap, fieldKVOffload} {
+		appendFieldRow(idx)
+	}
+
+	appendSectionTitle("Server")
+	for _, idx := range []int{fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM} {
+		appendFieldRow(idx)
+	}
+
+	appendSectionTitle("Reasoning")
+	for _, idx := range []int{fieldReasoning, fieldReasoningBudget, fieldReasoningFormat} {
+		appendFieldRow(idx)
+	}
+
+	appendSectionTitle("Advanced")
+	for _, idx := range []int{fieldCacheK, fieldCacheV, fieldExtraArgs} {
+		appendFieldRow(idx)
+	}
+
+	appendBoolRow("MLock", m.form.mlock, m.form.focus == len(m.form.fields)+2, "")
 	selectedRows = append(selectedRows, "")
 	rowIndex++
 	saveStyle := profileStyle
@@ -183,14 +191,12 @@ func (m Model) viewForm() string {
 		body.WriteString("\n")
 	}
 	if len(selectedRows) > visibleRows {
-		body.WriteString(helpStyle.Render("↑↓/wasd scroll  enter activate"))
+		body.WriteString(helpStyle.Render("up/down/wasd scroll  enter activate"))
 		body.WriteString("\n")
 	}
 
 	paneHeight := m.formPaneHeight()
 	leftPane := paneStyle.Width(leftWidth).Height(paneHeight).Render(body.String())
-	// lipgloss.Height includes the 2 border rows; subtract them so that the
-	// right pane's .Height() sets content height, making total heights match.
 	actualHeight := lipgloss.Height(leftPane) - 2
 	rightPane := strings.Builder{}
 	rightPane.WriteString(sectionTitleStyle.Render("Details"))
@@ -205,13 +211,13 @@ func (m Model) viewForm() string {
 			rightPane.WriteString(" ")
 			rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
-			rightPane.WriteString(helpStyle.Render("← back  enter confirm"))
+			rightPane.WriteString(helpStyle.Render("left/back  enter confirm"))
 		} else {
 			rightPane.WriteString(detailMutedStyle.Render("Flag:"))
 			rightPane.WriteString(" ")
 			rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
-			rightPane.WriteString(helpStyle.Render("→/d to override"))
+			rightPane.WriteString(helpStyle.Render("d to override"))
 		}
 		rightPane.WriteString("\n\n")
 		descReserved = 7
@@ -237,16 +243,15 @@ func (m Model) viewForm() string {
 		b.WriteString(errorStyle.Render("error: " + m.form.err))
 		b.WriteString("\n")
 	}
-	b.WriteString(helpStyle.Render("↑↓/wasd navigate  enter edit/save  esc cancel"))
+	b.WriteString(helpStyle.Render("up/down/wasd navigate  enter edit/save  esc cancel"))
 	b.WriteString("  ")
 	b.WriteString(helpStyle.Render("x import args"))
 	if m.form.focusedFlag() != "" && !m.form.flagFocus {
 		b.WriteString("  ")
-		b.WriteString(helpStyle.Render("→/d override flag"))
+		b.WriteString(helpStyle.Render("d override flag"))
 	}
 	return b.String()
 }
-
 func (m Model) viewFormImportModal() string {
 	_, detailsWidth := m.formPaneWidths()
 	inputWidth := max(24, formDescriptionTextWidth(detailsWidth)-2)

@@ -18,6 +18,8 @@ const heroCards = [
 ]
 
 const angle = 12
+const hoverResetDelay = 500
+const hoverBuffer = 24
 const remap = (value, oldMax, newMax) => {
   const newValue = ((value + oldMax) * (newMax * 2)) / (oldMax * 2) - newMax
   return Math.min(Math.max(newValue, -newMax), newMax)
@@ -48,7 +50,36 @@ const resetCardPose = (cardEl) => {
   cardEl.style.setProperty('--glow-y', '50%')
 }
 
-const handleCardMove = (heroId, event) => {
+const clearHoverReset = () => {
+  if (hoverResetTimer !== null) {
+    window.clearTimeout(hoverResetTimer)
+    hoverResetTimer = null
+  }
+}
+
+const queueHoverReset = (heroId, cardEl) => {
+  clearHoverReset()
+
+  hoverResetTimer = window.setTimeout(() => {
+    hoverResetTimer = null
+
+    if (activeHero.value !== heroId) {
+      return
+    }
+
+    if (stopIntroMotion) {
+      stopIntroMotion()
+      stopIntroMotion = null
+    }
+
+    resetCardPose(cardEl)
+    stopIntroMotion = startIntroMotion()
+  }, hoverResetDelay)
+}
+
+const handleCardMove = (event) => {
+  clearHoverReset()
+
   if (stopIntroMotion) {
     stopIntroMotion()
     stopIntroMotion = null
@@ -58,42 +89,73 @@ const handleCardMove = (heroId, event) => {
     return
   }
 
-  const cardEl = event.currentTarget?.closest('.hero-stack-card')
+  const stackEl = event.currentTarget
+  const cardEl = stackEl?.querySelector('.hero-stack-card.is-front')
+  const imageEl = cardEl?.querySelector('.hero-card-image')
+  if (!cardEl || !imageEl) {
+    return
+  }
+
+  const rect = imageEl.getBoundingClientRect()
+  const bufferRect = {
+    left: rect.left - hoverBuffer,
+    right: rect.right + hoverBuffer,
+    top: rect.top - hoverBuffer,
+    bottom: rect.bottom + hoverBuffer,
+  }
+
+  if (
+    event.clientX < bufferRect.left ||
+    event.clientX > bufferRect.right ||
+    event.clientY < bufferRect.top ||
+    event.clientY > bufferRect.bottom
+  ) {
+    queueHoverReset(activeHero.value, cardEl)
+    return
+  }
+
+  clearHoverReset()
+
+  if (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  ) {
+    const x = event.clientX - (rect.left + rect.width / 2)
+    const y = event.clientY - (rect.top + rect.height / 2)
+    setCardPose(cardEl, remap(x, rect.width / 2, angle), remap(y, rect.height / 2, angle) * -1)
+  }
+}
+
+const handleCardLeave = (event) => {
+  const currentEl = event.currentTarget
+  const cardEl = currentEl?.classList?.contains('hero-stack-card')
+    ? currentEl
+    : currentEl?.closest?.('.hero-stack-card') ?? currentEl?.querySelector?.('.hero-stack-card.is-front') ?? null
   if (!cardEl) {
     return
   }
 
-  if (activeHero.value !== heroId) {
+  if (!cardEl.classList.contains('is-front')) {
     return
   }
 
-  const rect = cardEl.getBoundingClientRect()
-  const x = event.clientX - (rect.left + rect.width / 2)
-  const y = event.clientY - (rect.top + rect.height / 2)
-  setCardPose(cardEl, remap(y, rect.height / 2, angle) * -1, remap(x, rect.width / 2, angle))
+  queueHoverReset(activeHero.value, cardEl)
 }
 
-const handleCardLeave = (heroId, event) => {
-  const cardEl = event.currentTarget?.closest('.hero-stack-card')
-  if (!cardEl) {
-    return
-  }
+let hoverResetTimer = null
 
-  resetCardPose(cardEl)
-
-  if (activeHero.value === heroId) {
-    if (stopIntroMotion) {
-      stopIntroMotion()
-    }
-    stopIntroMotion = startIntroMotion()
-  }
-}
-
-const getFrontCardFrame = () => document.querySelector('.hero-stack-card.is-front .hero-card-frame')
+const getFrontCardImage = () => document.querySelector('.hero-stack-card.is-front .hero-card-image')
 
 const startIntroMotion = () => {
-  const frame = getFrontCardFrame()
-  if (!frame || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const image = getFrontCardImage()
+  if (!image || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return () => {}
+  }
+
+  const card = image.closest('.hero-stack-card')
+  if (!card) {
     return () => {}
   }
 
@@ -119,14 +181,14 @@ const startIntroMotion = () => {
     const rotateX = Math.sin(angle) * radius * (1 - eased)
     const rotateY = Math.cos(angle) * radius * (1 - eased)
 
-    setCardPose(frame.closest('.hero-stack-card'), rotateX, rotateY)
+    setCardPose(card, rotateX, rotateY)
 
     if (progress < 1) {
       frameId = window.requestAnimationFrame(tick)
       return
     }
 
-    resetCardPose(frame.closest('.hero-stack-card'))
+    resetCardPose(card)
   }
 
   frameId = window.requestAnimationFrame(tick)
@@ -136,14 +198,13 @@ const startIntroMotion = () => {
     if (frameId !== null) {
       window.cancelAnimationFrame(frameId)
     }
-    resetCardPose(frame.closest('.hero-stack-card'))
+    resetCardPose(card)
   }
 
   const stopOnUser = () => stop()
-  frame.addEventListener('pointermove', stopOnUser, { once: true, passive: true })
-  frame.addEventListener('pointerdown', stopOnUser, { once: true })
-  frame.addEventListener('click', stopOnUser, { once: true })
-  frame.addEventListener('pointerleave', stopOnUser, { once: true })
+  image.addEventListener('pointermove', stopOnUser, { once: true, passive: true })
+  image.addEventListener('pointerdown', stopOnUser, { once: true })
+  image.addEventListener('click', stopOnUser, { once: true })
 
   return stop
 }
@@ -165,6 +226,7 @@ onMounted(() => {
 
   stopIntroMotion = startIntroMotion()
   cleanupHero = () => {
+    clearHoverReset()
     if (stopIntroMotion) {
       stopIntroMotion()
       stopIntroMotion = null
@@ -209,6 +271,9 @@ onBeforeUnmount(() => {
       <div
         class="hero-media hero-stack"
         :style="{ '--hero-url': `url(${to('/assets/screenshots/newlanding.png')})` }"
+        @pointermove="handleCardMove"
+        @pointerleave="handleCardLeave"
+        @pointercancel="handleCardLeave"
       >
         <button
           v-for="(card, index) in heroCards"
@@ -226,19 +291,15 @@ onBeforeUnmount(() => {
           :tabindex="0"
         >
           <div class="hero-card-shadow"></div>
-          <div
-            class="hero-card-frame"
-            @pointermove="(event) => handleCardMove(card.id, event)"
-            @pointerleave="(event) => handleCardLeave(card.id, event)"
-            @pointercancel="(event) => handleCardLeave(card.id, event)"
-            @click="toggleHeroFront(card.id)"
-          >
+          <div class="hero-card-frame">
             <div class="hero-card-glow"></div>
             <img
               :src="to(card.src)"
               :alt="card.alt"
               loading="eager"
               class="hero-card-image"
+              @click="toggleHeroFront(card.id)"
+              @pointerout="handleCardLeave"
             />
             <div class="hero-card-sheen" aria-hidden="true"></div>
           </div>

@@ -84,19 +84,19 @@ func (f *formState) blurAll() {
 }
 
 // formNavOrder returns the Tab/arrow navigation sequence for the form.
-// The layer-split slider (len(fields)+3) is inserted immediately after
-// fieldGPULayers so it's reachable without scrolling past all other fields.
-func formNavOrder(numFields int) []int {
+// It mirrors the visible row order so focus moves predictably through the
+// rendered controls.
+func formNavOrder(numFields int, cpuOnly bool) []int {
 	order := make([]int, 0, numFields+5)
-	for i := 0; i <= fieldGPULayers; i++ {
-		order = append(order, i)
-	}
-	order = append(order, numFields+3) // layer split slider
-	for i := fieldGPULayers + 1; i < numFields; i++ {
-		order = append(order, i)
-	}
-	order = append(order, numFields+0) // flash attention
+	order = append(order, fieldKey, fieldNotes, numFields, fieldRPCEnabled, fieldHost, fieldAlias, fieldPort, fieldCtxSize)
+	order = append(order, fieldTemp, fieldTopP, fieldTopK, fieldMinP, fieldPresencePenalty, fieldRepetitionPenalty, fieldFrequencyPenalty, fieldSeed)
+	order = append(order, fieldBatchSize, fieldUBatchSize, fieldRepeatLastN)
 	order = append(order, numFields+1) // cpu only
+	if !cpuOnly {
+		order = append(order, fieldGPULayers, numFields+3) // layer split slider
+	}
+	order = append(order, fieldMMap, fieldKVOffload, fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM)
+	order = append(order, fieldReasoning, fieldReasoningBudget, fieldReasoningFormat, fieldCacheK, fieldCacheV, fieldExtraArgs)
 	order = append(order, numFields+2) // mlock
 	order = append(order, numFields+4) // save
 	return order
@@ -106,7 +106,7 @@ func (f *formState) moveFocus(delta int, visibleRows int) {
 	f.commitFlagInput()
 	f.flagFocus = false
 	f.flagInput.Blur()
-	order := formNavOrder(len(f.fields))
+	order := formNavOrder(len(f.fields), f.cpuOnly)
 	pos := 0
 	for i, v := range order {
 		if v == f.focus {
@@ -241,7 +241,7 @@ func (m Model) openForm(modelKey string, overrides map[int]string) (tea.Model, t
 	defaults[fieldCacheV] = ""
 	defaults[fieldExtraArgs] = ""
 	defaults[fieldNotes] = ""
-	defaults[fieldRPCEnabled] = ""
+	defaults[fieldRPCEnabled] = strconv.FormatBool(m.cfg.RPCEnabled)
 
 	for idx, val := range overrides {
 		if idx >= 0 && idx < len(defaults) {
@@ -322,7 +322,11 @@ func (m Model) openEditForm(modelKey, profileKey string) (tea.Model, tea.Cmd) {
 	defaults[fieldCacheV] = p.CacheTypeV
 	defaults[fieldExtraArgs] = strings.Join(p.ExtraArgs, " ")
 	defaults[fieldNotes] = p.Notes
-	defaults[fieldRPCEnabled] = boolPtrOrEmpty(p.RPCEnabled)
+	rpcEnabled := m.cfg.RPCEnabled
+	if p.RPCEnabled != nil {
+		rpcEnabled = *p.RPCEnabled
+	}
+	defaults[fieldRPCEnabled] = strconv.FormatBool(rpcEnabled)
 
 	initClientLayers := 0
 	if p.TensorSplit != "" {
@@ -531,6 +535,9 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		switch m.form.focus {
+		case fieldRPCEnabled:
+			current := strings.EqualFold(strings.TrimSpace(m.form.fields[fieldRPCEnabled].input.Value()), "true")
+			m.form.fields[fieldRPCEnabled].input.SetValue(strconv.FormatBool(!current))
 		case len(m.form.fields):
 			m.form.flash = !m.form.flash
 		case len(m.form.fields) + 1:
