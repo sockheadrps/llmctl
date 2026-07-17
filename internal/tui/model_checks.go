@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sockheadrps/llmctl/internal/gpu"
@@ -73,6 +75,16 @@ func (m Model) backgroundChecks() tea.Cmd {
 		}
 	}
 	return tea.Batch(cmds...)
+}
+
+// backgroundPollInterval returns how often the periodic telemetry sweep
+// should run. RPC client mode is intentionally a little slower because it
+// has to juggle local GPU telemetry plus the remote status publisher.
+func (m Model) backgroundPollInterval() time.Duration {
+	if m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" && len(m.running) > 0 {
+		return 4 * time.Second
+	}
+	return 2 * time.Second
 }
 
 // shared

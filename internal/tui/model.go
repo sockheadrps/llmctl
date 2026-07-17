@@ -6,6 +6,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	runtimeos "runtime"
 	"strings"
 	"time"
@@ -121,6 +122,7 @@ type Model struct {
 
 	overviewSepDragging bool
 	overviewSepX        int // 0 = auto; positive = user-dragged overview column separator X
+	backgroundPollUntil time.Time
 
 	modelSubTabFocused bool // true when cursor is on the Models/Recents sub-tab header row
 
@@ -399,9 +401,16 @@ func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, e
 	if strings.TrimSpace(logPath) == "" {
 		return nil, nil
 	}
-	if cached, ok := m.modelLoadCache[logPath]; ok && len(cached.slices) > 0 {
+	info, err := os.Stat(logPath)
+	if err != nil {
+		return nil, err
+	}
+	if cached, ok := m.modelLoadCache[logPath]; ok && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
 		out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
 		copy(out, cached.slices)
+		if len(out) == 0 {
+			return nil, nil
+		}
 		return out, nil
 	}
 
@@ -413,9 +422,16 @@ func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, e
 		m.modelLoadCache = make(map[string]cachedModelLoad)
 	}
 	if len(slices) == 0 {
+		m.modelLoadCache[logPath] = cachedModelLoad{
+			modTime: info.ModTime(),
+			size:    info.Size(),
+			slices:  nil,
+		}
 		return nil, nil
 	}
 	cached := cachedModelLoad{
+		modTime: info.ModTime(),
+		size:    info.Size(),
 		slices: append([]statusserver.GPUDeviceInfo(nil), slices...),
 	}
 	m.modelLoadCache[logPath] = cached

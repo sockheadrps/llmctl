@@ -19,6 +19,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		now := time.Now()
 		if m.mgr != nil {
 			m.refreshRunning(true)
 		}
@@ -30,7 +31,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen != screenMain {
 			return m, tickCmd()
 		}
-		return m, tea.Batch(tickCmd(), m.backgroundChecks())
+		if now.After(m.backgroundPollUntil) {
+			m.backgroundPollUntil = now.Add(m.backgroundPollInterval())
+			return m, tea.Batch(tickCmd(), m.backgroundChecks())
+		}
+		return m, tickCmd()
 
 	case scrollTickMsg:
 		switch m.screen {
