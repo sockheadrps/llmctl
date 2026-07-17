@@ -13,7 +13,7 @@ enabling distributed GPU mode.
 
 `/status` is the live source of truth. `/history` powers the dashboard charts.
 
-![Browser dashboard showing source selector, active models, and trend cards](../assets/screenshots/dashboard.png)
+![Browser dashboard showing source selector, active models, and trend cards](/assets/screenshots/dashboard.png)
 
 ## Settings
 
@@ -32,3 +32,4 @@ curl http://127.0.0.1:11435/status
 ```
 
 Use the host and port shown in llmctl settings.
+

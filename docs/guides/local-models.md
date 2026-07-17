@@ -10,7 +10,7 @@ The **Models** tab is where you manage everything related to your local GGUF fil
 
 The left pane shows a tree of all registered models. Each model can be expanded to reveal its profiles.
 
-![Models tab showing the tree with models and profiles](../assets/screenshots/local-models-tree.png)
+![Models tab showing the tree with models and profiles](/assets/screenshots/local-models-tree.png)
 
 ---
 
@@ -78,7 +78,7 @@ Once the dot turns green, check the **Overview** tab — your model appears unde
 
 You can also switch to the **Running** tab for a more detailed live view showing the rate meter and VRAM usage. 
 
-![Running tab showing a model with green health dot, VRAM bar, and rate meter](../assets/screenshots/local-models-running.png)
+![Running tab showing a model with green health dot, VRAM bar, and rate meter](/assets/screenshots/model-running-health-up.png)
 
 ---
 
