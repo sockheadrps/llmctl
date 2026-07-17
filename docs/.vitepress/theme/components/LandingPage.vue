@@ -4,6 +4,34 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const to = (path) => withBase(path)
 const activeHero = ref('landing')
+const terminalLines = [
+  'llama-server \\',
+  '  -m models Ternary-Bonsai-27B-Q2_0.gguf \\',
+  '  -md models Ternary-Bonsai-27B-dspark-Q4_1.gguf \\',
+  '  --spec-type draft-dspark \\',
+  '  --spec-draft-n-max 4 \\',
+  '  -ngl 99 \\',
+  '  -ngld 99 \\',
+  '  --host 0.0.0.0 \\',
+  '  --port 8091 \\',
+  '  --ctx-size 16384 \\',
+  '  -np 1 \\',
+  '  -b 1024 \\',
+  '  -ub 256 \\',
+  '  --flash-attn on \\',
+  '  --cache-type-k q8_0 \\',
+  '  --cache-type-v q8_0 \\',
+  '  --cache-type-k-draft q8_0 \\',
+  '  --cache-type-v-draft q8_0 \\',
+  '  --temp 0.7 \\',
+  '  --top-p 0.95 \\',
+  '  --top-k 20',
+]
+const typedTerminalLines = ref(terminalLines.map(() => ''))
+const terminalFinished = ref(false)
+const annotationVisible = ref(false)
+let terminalTimer = null
+let annotationTimer = null
 const heroCards = [
   {
     id: 'landing',
@@ -55,6 +83,60 @@ const clearHoverReset = () => {
     window.clearTimeout(hoverResetTimer)
     hoverResetTimer = null
   }
+}
+
+const stopTerminalTyping = () => {
+  if (terminalTimer !== null) {
+    window.clearTimeout(terminalTimer)
+    terminalTimer = null
+  }
+}
+
+const stopAnnotationTimer = () => {
+  if (annotationTimer !== null) {
+    window.clearTimeout(annotationTimer)
+    annotationTimer = null
+  }
+}
+
+const startTerminalTyping = () => {
+  stopTerminalTyping()
+  stopAnnotationTimer()
+  annotationVisible.value = false
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reducedMotion) {
+    typedTerminalLines.value = [...terminalLines]
+    terminalFinished.value = true
+    annotationVisible.value = true
+    return
+  }
+
+  typedTerminalLines.value = terminalLines.map(() => '')
+  terminalFinished.value = false
+  annotationTimer = window.setTimeout(() => {
+    annotationVisible.value = true
+    annotationTimer = null
+  }, 1500)
+
+  const typeLine = (lineIndex, charIndex) => {
+    if (lineIndex >= terminalLines.length) {
+      terminalFinished.value = true
+      terminalTimer = null
+      return
+    }
+
+    const line = terminalLines[lineIndex]
+    typedTerminalLines.value[lineIndex] = line.slice(0, charIndex)
+
+    if (charIndex < line.length) {
+      terminalTimer = window.setTimeout(() => typeLine(lineIndex, charIndex + 1), 12)
+      return
+    }
+
+    terminalTimer = window.setTimeout(() => typeLine(lineIndex + 1, 0), 180)
+  }
+
+  terminalTimer = window.setTimeout(() => typeLine(0, 1), 220)
 }
 
 const queueHoverReset = (heroId, cardEl) => {
@@ -243,8 +325,11 @@ onMounted(() => {
   document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
 
   stopIntroMotion = startIntroMotion()
+  startTerminalTyping()
   cleanupHero = () => {
     clearHoverReset()
+    stopTerminalTyping()
+    stopAnnotationTimer()
     if (stopIntroMotion) {
       stopIntroMotion()
       stopIntroMotion = null
@@ -352,81 +437,74 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section class="cards-section">
-      <div class="section-label reveal">Get Around</div>
-      <h2 class="section-title reveal reveal-delay-1">
-        Start anywhere.<br>
-        <span style="color:var(--text2)">Everything is one click away.</span>
-      </h2>
-      <p class="section-subtitle reveal reveal-delay-2">
-        Jump to the workflow you need — first run, profile setup, RPC offload, or the full TUI reference.
-      </p>
+    <section class="why-section">
+      <div class="why-annotation" :class="{ visible: annotationVisible }" aria-hidden="true">
+        <span class="why-annotation-text">
+          <span>This is</span>
+          <span>why</span>
+        </span>
+        <svg class="why-annotation-arrow" viewBox="0 0 920 340" preserveAspectRatio="none">
+          <path class="why-annotation-line" d="M 216 186 C 250 186, 282 190, 312 198 C 348 208, 386 214, 422 220 C 456 226, 476 232, 494 240" />
+          <path class="why-annotation-line why-annotation-head" d="M 494 240 C 482 234, 473 227, 464 218" />
+          <path class="why-annotation-line why-annotation-head" d="M 494 240 C 482 246, 473 254, 465 264" />
+        </svg>
+      </div>
+      <div class="why-copy">
+        <div class="section-label reveal">Why llmctl?</div>
+        <h2 class="section-title reveal reveal-delay-1">
+          Why?<br>
+          <span style="color:var(--text2)">Flag configurations and spot-benchmarking is painful.</span>
+        </h2>
+        <p class="section-subtitle reveal reveal-delay-2">
+          llmctl keeps your model launch workflows, profile presets, and RPC offload setups in one place so you can move from idea to run without rebuilding the same command line over and over.
+        </p>
 
-      <div class="cards-shell">
-        <div class="cards-grid cards-grid-features">
-          <a class="feature-card reveal" :href="to('/quickstart')">
-            <span class="feature-kicker">Start here</span>
-            <strong>Get a model running fast</strong>
-            <span>Follow the shortest path from install to a live local server.</span>
+        <div class="why-links reveal reveal-delay-3">
+          <a class="why-link" :href="to('/quickstart')">
+            <span>Quickstart</span>
+            <small>Get to a first run fast.</small>
           </a>
-          <a class="feature-card reveal reveal-delay-1" :href="to('/guides/profiles')">
-            <span class="feature-kicker">Profiles</span>
-            <strong>Save and reuse launch flags</strong>
-            <span>Keep fast-draft, high-quality, and custom profiles side by side.</span>
+          <a class="why-link" :href="to('/guides/profiles')">
+            <span>Profiles</span>
+            <small>Save launch flags once, reuse them later.</small>
           </a>
-          <a class="feature-card reveal reveal-delay-2" :href="to('/guides/rpc')">
-            <span class="feature-kicker">RPC</span>
-            <strong>Distribute layers across machines</strong>
-            <span>Use the RPC workflow for Linux to Windows GPU offload.</span>
+          <a class="why-link" :href="to('/guides/rpc')">
+            <span>RPC</span>
+            <small>Split layers across machines when you need it.</small>
           </a>
-          <a class="feature-card reveal reveal-delay-3" :href="to('/reference/tui')">
-            <span class="feature-kicker">Reference</span>
-            <strong>Learn the full TUI surface</strong>
-            <span>See the tabs, keys, and supported actions in one place.</span>
+          <a class="why-link" :href="to('/reference/tui')">
+            <span>TUI reference</span>
+            <small>See the full terminal workflow at a glance.</small>
           </a>
         </div>
+      </div>
 
-        <div class="cards-grid cards-grid-docs">
-          <a class="docs-card reveal" :href="to('/installation')">
-            <span>01</span>
-            <strong>Install</strong>
-            <p>Grab the release artifact, put it on PATH, and launch the TUI.</p>
-          </a>
-          <a class="docs-card reveal reveal-delay-1" :href="to('/quickstart')">
-            <span>02</span>
-            <strong>Quickstart</strong>
-            <p>Walk through your first import, profile, and running server.</p>
-          </a>
-          <a class="docs-card reveal reveal-delay-2" :href="to('/guides/local-models')">
-            <span>03</span>
-            <strong>Local models</strong>
-            <p>Configure directories and import GGUF files into llmctl.</p>
-          </a>
-          <a class="docs-card reveal reveal-delay-3" :href="to('/guides/status-server')">
-            <span>04</span>
-            <strong>Status server</strong>
-            <p>Expose runtime state so other tools can see what is live.</p>
-          </a>
-          <a class="docs-card reveal reveal-delay-4" :href="to('/guides/troubleshooting')">
-            <span>05</span>
-            <strong>Troubleshooting</strong>
-            <p>Handle missing binaries, empty model directories, and port issues.</p>
-          </a>
-          <a class="docs-card reveal reveal-delay-4" :href="to('/reference/cli')">
-            <span>06</span>
-            <strong>CLI reference</strong>
-            <p>Check the commands and flags without digging through the source.</p>
-          </a>
+      <div class="terminal-panel reveal reveal-delay-1" aria-label="Example llama-server command">
+        <div class="terminal-topbar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">bash</span>
+        </div>
+        <div class="terminal-body">
+          <div
+            v-for="(line, index) in typedTerminalLines"
+            :key="`${index}-${line}`"
+            class="terminal-line"
+          >
+            <span v-if="index === 0" class="terminal-prompt">❯ </span>
+            <span class="terminal-text">{{ line }}</span>
+            <span v-if="terminalFinished && index === typedTerminalLines.length - 1" class="terminal-cursor">█</span>
+          </div>
+          <div v-if="!terminalFinished" class="terminal-line terminal-line-pulse">
+            <span class="terminal-prompt">❯ </span>
+            <span class="terminal-text terminal-placeholder">typing command...</span>
+            <span class="terminal-cursor">█</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="quote-panel">
-      <p class="section-label">The idea</p>
-      <blockquote>
-        llmctl is the layer between "I know what I want to run" and "I have to remember that command again."
-      </blockquote>
-    </section>
   </div>
 </template>
 
@@ -944,21 +1022,207 @@ onBeforeUnmount(() => {
   mix-blend-mode: screen;
 }
 
-.quote-panel {
-  margin-top: 3rem;
-  padding: 1.5rem 1.75rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, .06);
-  background: rgba(255, 255, 255, .02);
-  border-left: 3px solid var(--accent-3);
+.why-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 1.5rem;
+  align-items: stretch;
+  padding: 6rem 0 4rem;
+  position: relative;
 }
 
-.quote-panel blockquote {
-  margin: .35rem 0 0;
-  font-size: 1.1rem;
-  color: rgba(232, 232, 240, .85);
-  font-style: italic;
-  line-height: 1.65;
+.why-annotation {
+  position: absolute;
+  inset: -1.2rem 0 auto 0;
+  height: 272px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition: opacity .4s ease, transform .4s ease;
+  z-index: 2;
+}
+
+.why-annotation.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.why-annotation-text {
+  position: absolute;
+  left: 22%;
+  top: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: .05rem;
+  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  font-size: clamp(1.35rem, 1.8vw, 2.05rem);
+  line-height: .84;
+  color: #ff3b30;
+  letter-spacing: -.04em;
+  transform: rotate(-6deg);
+  text-shadow: 0 0 0.5px rgba(255, 59, 48, 0.5);
+}
+
+.why-annotation-text span:last-child {
+  margin-left: 1.65rem;
+}
+
+.why-annotation-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.why-annotation-line {
+  fill: none;
+  stroke: #ff3b30;
+  stroke-width: 4.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 710;
+  stroke-dashoffset: 710;
+  filter: drop-shadow(0 0 1px rgba(255, 59, 48, 0.24));
+}
+
+.why-annotation.visible .why-annotation-line {
+  animation: drawArrow 1.35s ease forwards;
+}
+
+.why-annotation-head {
+  animation-delay: .9s;
+}
+
+.why-copy {
+  padding: 1rem 0;
+}
+
+.why-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin-top: 2rem;
+}
+
+.why-link {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  text-decoration: none;
+  color: inherit;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+
+.why-link:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 229, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.why-link span {
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #f2f6ff;
+}
+
+.why-link small {
+  font-size: .9rem;
+  line-height: 1.5;
+  color: rgba(232, 232, 240, 0.72);
+}
+
+.terminal-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(12, 16, 26, 0.96), rgba(8, 10, 18, 0.94)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  overflow: hidden;
+}
+
+.terminal-topbar {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .9rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.terminal-dot.red { background: #ff5f57; }
+.terminal-dot.yellow { background: #febc2e; }
+.terminal-dot.green { background: #28c840; }
+
+.terminal-title {
+  margin-left: .45rem;
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(232, 232, 240, 0.55);
+}
+
+.terminal-body {
+  padding: 1.2rem 1.1rem 1.35rem;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: .84rem;
+  line-height: 1.85;
+  color: #d9e7ff;
+}
+
+.terminal-line {
+  display: flex;
+  align-items: flex-start;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.terminal-prompt {
+  color: var(--accent);
+  margin-right: .55rem;
+}
+
+.terminal-text {
+  color: #d9e7ff;
+}
+
+.terminal-placeholder {
+  color: rgba(232, 232, 240, 0.42);
+}
+
+.terminal-cursor {
+  display: inline-block;
+  margin-left: .2rem;
+  color: var(--accent);
+  animation: cursorBlink 1s steps(1) infinite;
+}
+
+.terminal-line-pulse .terminal-cursor {
+  opacity: 1;
+}
+
+.terminal-line:not(:first-child) .terminal-prompt {
+  opacity: 0;
+  width: 0;
 }
 
 .marquee-wrap {
@@ -999,6 +1263,24 @@ onBeforeUnmount(() => {
   .hero-copy  { grid-column: 1; grid-row: 1; }
   .hero-media { grid-column: 1; grid-row: 2; }
   .marquee-wrap { grid-column: 1; grid-row: 3; }
+
+  .why-section {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 4rem 0 3rem;
+  }
+
+  .why-copy {
+    padding: 0;
+  }
+
+  .why-links {
+    grid-template-columns: 1fr;
+  }
+
+  .why-annotation {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1043,6 +1325,15 @@ onBeforeUnmount(() => {
 
   .hero-card-image {
     border-radius: 24px;
+  }
+
+  .terminal-body {
+    font-size: .74rem;
+    line-height: 1.45;
+  }
+
+  .terminal-panel {
+    min-height: 0;
   }
 }
 
@@ -1118,6 +1409,17 @@ onBeforeUnmount(() => {
 @keyframes marqueeScroll {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
+}
+
+@keyframes cursorBlink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes drawArrow {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ── Scroll Reveal ── */
