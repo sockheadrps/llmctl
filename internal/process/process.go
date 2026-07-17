@@ -210,6 +210,10 @@ func Start(bin string, m models.Model, p models.Profile, logPath string, rpcEndp
 		return 0, fmt.Errorf("start %s: %w", displayBin(bin), err)
 	}
 
+	// The child has its own inherited handles; close the parent's copy so
+	// Windows can release temp log files once the process exits.
+	_ = logFile.Close()
+
 	// The child now owns the log file's lifetime; the parent CLI process
 	// exits shortly after Start returns.
 	go cmd.Wait()
@@ -327,6 +331,10 @@ func StartRPC(bin, host string, port int, logPath string) (pid int, err error) {
 		logFile.Close()
 		return 0, fmt.Errorf("start rpc-server: %w", err)
 	}
+
+	// Close the parent's handle so Windows doesn't keep the temp log file
+	// locked after StartRPC returns.
+	_ = logFile.Close()
 
 	go cmd.Wait()
 

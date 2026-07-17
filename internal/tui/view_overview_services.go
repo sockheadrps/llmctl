@@ -13,6 +13,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -94,7 +95,7 @@ func (m Model) renderRemoteServiceEntry(ri statusserver.RunningInfo, remoteDevic
 	if len(ri.GPUs) > 0 || ri.VRAMMiB > 0 {
 		rpcBadge = " " + detailMutedStyle.Render("[RPC]")
 	}
-	b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, modelStyle.Render(truncateText(remoteName, contentW-4)), rpcBadge))
+	b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, modelStyle.Render(tui_form.TruncateText(remoteName, contentW-4)), rpcBadge))
 
 	narrow := contentW < 50
 
@@ -167,7 +168,7 @@ func (m Model) renderServiceEntry(r models.Running, ri *statusserver.RunningInfo
 
 	hasSpark := len(m.tokHistory[hkey]) >= 2
 	if m.overviewCopied == hkey {
-		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
+		b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(tui_form.TruncateText(displayName, contentW-4))))
 		b.WriteString(runningStyle.Render("  └─ ✓ copied to clipboard") + "\n")
 		b.WriteString("\n")
 		if narrow {
@@ -180,7 +181,7 @@ func (m Model) renderServiceEntry(r models.Running, ri *statusserver.RunningInfo
 		return b.String()
 	}
 
-	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(truncateText(displayName, contentW-4))))
+	b.WriteString(fmt.Sprintf("  %s %s\n", dot, modelStyle.Render(tui_form.TruncateText(displayName, contentW-4))))
 
 	modeBadge := detailMutedStyle.Render("[GPU]")
 	if mdl, ok := m.cfg.Models[r.ModelKey]; ok {

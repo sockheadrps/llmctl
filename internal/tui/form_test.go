@@ -10,6 +10,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/models"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 func TestFormLabelsIncludeExtendedProfileOptions(t *testing.T) {
@@ -95,17 +96,17 @@ func TestFormExitDiscardReturnsToMain(t *testing.T) {
 
 func TestFormPaneHeightLeavesRoomForHotkeys(t *testing.T) {
 	m := Model{height: 40}
-	if got := m.formPaneHeight(); got != 34 {
+	if got := tui_form.FormPaneHeight(m.height); got != 34 {
 		t.Fatalf("expected pane inner height 34 for a 40-line terminal, got %d", got)
 	}
-	if got := m.formVisibleRows(); got != 33 {
+	if got := tui_form.FormVisibleRows(tui_form.FormPaneHeight(m.height)); got != 33 {
 		t.Fatalf("expected visible rows to leave room for in-pane scroll hint, got %d", got)
 	}
 }
 
 func TestFormPaneWidthsShrinkParametersBeforeDetails(t *testing.T) {
 	m := Model{width: 82}
-	left, details := m.formPaneWidths()
+	left, details := tui_form.FormPaneWidths(m.width)
 	if left+details > 78 {
 		t.Fatalf("expected panes to fit available width, got left %d details %d", left, details)
 	}
@@ -119,17 +120,17 @@ func TestFormPaneWidthsShrinkParametersBeforeDetails(t *testing.T) {
 
 func TestFormDescriptionWrapsToInnerPaneWidth(t *testing.T) {
 	m := Model{width: 82}
-	_, details := m.formPaneWidths()
+	_, details := tui_form.FormPaneWidths(m.width)
 	lines := m.formDescriptionLines(details)
 	for _, line := range lines {
-		if len(line) > formDescriptionTextWidth(details) {
-			t.Fatalf("expected %q to fit inner details width %d", line, formDescriptionTextWidth(details))
+		if len(line) > tui_form.FormDescriptionTextWidth(details) {
+			t.Fatalf("expected %q to fit inner details width %d", line, tui_form.FormDescriptionTextWidth(details))
 		}
 	}
 }
 
 func TestTruncateTextPreventsDetailTitleWrapping(t *testing.T) {
-	got := truncateText("Extra Args (space-separated)", 12)
+	got := tui_form.TruncateText("Extra Args (space-separated)", 12)
 	if len(got) != 12 {
 		t.Fatalf("expected truncated title to match width, got %q len %d", got, len(got))
 	}
@@ -150,13 +151,13 @@ func TestEditFormViewDoesNotExceedViewportWithLongParameterValue(t *testing.T) {
 }
 
 func TestDescriptionWindowKeepsFixedLineCount(t *testing.T) {
-	got := descriptionWindow([]string{"one", "two", "three", "four"}, 3, 1)
+	got := tui_form.DescriptionWindow([]string{"one", "two", "three", "four"}, 3, 1)
 	want := []string{"two", "three", "four"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}
 
-	got = descriptionWindow([]string{"one"}, 3, 0)
+	got = tui_form.DescriptionWindow([]string{"one"}, 3, 0)
 	want = []string{"one", "", ""}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected padded fixed window %v, got %v", want, got)
@@ -165,28 +166,28 @@ func TestDescriptionWindowKeepsFixedLineCount(t *testing.T) {
 
 func TestDescriptionScrollAdvancesDownThenBackUp(t *testing.T) {
 	f := formState{}
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 1 || f.descDir != 1 {
 		t.Fatalf("expected scroll 1 dir 1, got scroll %d dir %d", f.descScroll, f.descDir)
 	}
 
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 2 || f.descDir != -1 || f.descPause != scrollPauseTicks {
 		t.Fatalf("expected scroll 2 dir -1 pause %d at bottom, got scroll %d dir %d pause %d", scrollPauseTicks, f.descScroll, f.descDir, f.descPause)
 	}
 
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 2 || f.descDir != -1 || f.descPause != scrollPauseTicks-1 {
 		t.Fatalf("expected bottom pause to hold, got scroll %d dir %d pause %d", f.descScroll, f.descDir, f.descPause)
 	}
 
-	f.advanceDescriptionScroll(5, 3)
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 1 || f.descDir != -1 || f.descPause != 0 {
 		t.Fatalf("expected scroll 1 dir -1 after bottom pause, got scroll %d dir %d pause %d", f.descScroll, f.descDir, f.descPause)
 	}
 
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 0 || f.descDir != 1 || f.descPause != scrollPauseTicks {
 		t.Fatalf("expected scroll 0 dir 1 pause %d at top, got scroll %d dir %d pause %d", scrollPauseTicks, f.descScroll, f.descDir, f.descPause)
 	}
@@ -194,9 +195,9 @@ func TestDescriptionScrollAdvancesDownThenBackUp(t *testing.T) {
 
 func TestDescriptionScrollResetWaitsBeforeMoving(t *testing.T) {
 	f := formState{descScroll: 2, descDir: -1}
-	f.resetDescriptionScroll()
+	f.descScroll, f.descDir, f.descPause = tui_form.ResetDescriptionScroll(scrollPauseTicks)
 
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 0 || f.descDir != 1 || f.descPause != scrollPauseTicks-1 {
 		t.Fatalf("expected reset scroll to wait before moving, got scroll %d dir %d pause %d", f.descScroll, f.descDir, f.descPause)
 	}
@@ -223,13 +224,13 @@ func TestScrollTickIntervalIsFasterThanRefreshTick(t *testing.T) {
 
 func TestDescriptionScrollTopPauseThenRepeats(t *testing.T) {
 	f := formState{descScroll: 1, descDir: -1}
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 0 || f.descDir != 1 || f.descPause != scrollPauseTicks {
 		t.Fatalf("expected top pause, got scroll %d dir %d pause %d", f.descScroll, f.descDir, f.descPause)
 	}
-	f.advanceDescriptionScroll(5, 3)
-	f.advanceDescriptionScroll(5, 3)
-	f.advanceDescriptionScroll(5, 3)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
+	f.descScroll, f.descDir, f.descPause = tui_form.AdvanceDescriptionScroll(f.descScroll, f.descDir, f.descPause, 5, 3, scrollPauseTicks)
 	if f.descScroll != 1 || f.descDir != 1 || f.descPause != 0 {
 		t.Fatalf("expected repeat downward after top pause, got scroll %d dir %d pause %d", f.descScroll, f.descDir, f.descPause)
 	}
@@ -270,8 +271,7 @@ func TestFieldDefaultFlagReturnsCorrectFlags(t *testing.T) {
 		}
 	}
 	// Flash Attention toggle sits at len(formLabels) in the form focus index.
-	f := &formState{focus: len(formLabels), fields: make([]formField, len(formLabels))}
-	if got := f.focusedFlag(); got != "--flash-attn" {
+	if got := tui_form.FocusedFlag(len(formLabels), len(formLabels)); got != "--flash-attn" {
 		t.Errorf("focusedFlag for flash attn toggle = %q, want --flash-attn", got)
 	}
 }
@@ -357,11 +357,29 @@ func TestFlagOverrideRestoredToDefaultWhenCleared(t *testing.T) {
 
 func TestFlagOverrideMakesDirty(t *testing.T) {
 	m := testEditFormModel(t)
-	if m.form.dirty() {
+	values := make([]string, len(m.form.fields))
+	for i := range m.form.fields {
+		values[i] = m.form.fields[i].input.Value()
+	}
+	if tui_form.Dirty(
+		m.form.flash, m.form.initialFlash,
+		m.form.cpuOnly, m.form.initialCPUOnly,
+		m.form.mlock, m.form.initialMLock,
+		m.form.rpcClientLayers, m.form.initialRPCClientLayers,
+		values, m.form.initial,
+		m.form.flagOverrides, m.form.initialFlagOverrides,
+	) {
 		t.Fatal("expected clean form initially")
 	}
 	m.form.flagOverrides["--port"] = "--p"
-	if !m.form.dirty() {
+	if !tui_form.Dirty(
+		m.form.flash, m.form.initialFlash,
+		m.form.cpuOnly, m.form.initialCPUOnly,
+		m.form.mlock, m.form.initialMLock,
+		m.form.rpcClientLayers, m.form.initialRPCClientLayers,
+		values, m.form.initial,
+		m.form.flagOverrides, m.form.initialFlagOverrides,
+	) {
 		t.Fatal("expected dirty form when flag override added")
 	}
 }
@@ -369,20 +387,20 @@ func TestFlagOverrideMakesDirty(t *testing.T) {
 func TestSyncFlagInputShowsCurrentOverrideOrDefault(t *testing.T) {
 	m := testNewFormModel(t)
 	m.form.focus = fieldGPULayers
-	m.form.syncFlagInput()
+	m.form.flagInput = tui_form.SyncFlagInput(m.form.flagInput, m.form.focus, len(formLabels), m.form.flagOverrides)
 	if got := m.form.flagInput.Value(); got != "--n-gpu-layers" {
 		t.Fatalf("expected default flag --n-gpu-layers, got %q", got)
 	}
 
 	m.form.flagOverrides["--n-gpu-layers"] = "--ngl"
-	m.form.syncFlagInput()
+	m.form.flagInput = tui_form.SyncFlagInput(m.form.flagInput, m.form.focus, len(formLabels), m.form.flagOverrides)
 	if got := m.form.flagInput.Value(); got != "--ngl" {
 		t.Fatalf("expected override --ngl, got %q", got)
 	}
 }
 
 func TestParseProfileArgsMapsExportedFlags(t *testing.T) {
-	got, extra := parseProfileArgs(`--port 8123 --host 0.0.0.0 --flash-attn on --no-mmap --reasoning auto --cache-type-k q8_0 --verbose --threads 8`)
+	got, extra := tui_form.ParseProfileArgs(`--port 8123 --host 0.0.0.0 --flash-attn on --no-mmap --reasoning auto --cache-type-k q8_0 --verbose --threads 8`, len(formLabels), fieldDefaultFlag, len(formLabels), fieldExtraArgs)
 
 	if got[fieldPort] != "8123" {
 		t.Fatalf("expected port 8123, got %q", got[fieldPort])
@@ -411,7 +429,7 @@ func TestParseProfileArgsMapsExportedFlags(t *testing.T) {
 }
 
 func TestParseProfileArgsSkipsBinaryAndModelSource(t *testing.T) {
-	got, extra := parseProfileArgs(`llama-server --model /models/llama.gguf -hf ignored/repo --port 8123 --verbose`)
+	got, extra := tui_form.ParseProfileArgs(`llama-server --model /models/llama.gguf -hf ignored/repo --port 8123 --verbose`, len(formLabels), fieldDefaultFlag, len(formLabels), fieldExtraArgs)
 
 	if got[fieldPort] != "8123" {
 		t.Fatalf("expected port 8123, got %q", got[fieldPort])
@@ -426,7 +444,9 @@ func TestParseProfileArgsSkipsBinaryAndModelSource(t *testing.T) {
 
 func TestImportModalAppliesArgsToForm(t *testing.T) {
 	m := testNewFormModel(t)
-	m.form.openImportModal()
+	m.form.importEditing = true
+	m.form.importErr = ""
+	m.form.importInput = tui_form.OpenImportModal(tui_form.BuildImportInput())
 	m.form.importInput.SetValue(`--port 8123 --host 0.0.0.0 --flash-attn off --cache-type-v q4_0 --verbose`)
 
 	next, _ := m.updateForm(tea.KeyMsg{Type: tea.KeyEnter})

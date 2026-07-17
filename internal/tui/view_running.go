@@ -12,6 +12,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -153,7 +154,7 @@ func (m Model) renderRunningRowWithWidth(r models.Running, selected, focused boo
 		}
 	}
 	if width > 0 {
-		text = truncateText(text, max(1, formRowTextWidth(width)-lipgloss.Width(cursor)-2))
+		text = tui_form.TruncateText(text, max(1, tui_form.FormRowTextWidth(width)-lipgloss.Width(cursor)-2))
 	}
 	row := fmt.Sprintf("%s%s %s %s\n", cursor, dot, badge, labelStyle.Render(text))
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/models"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 func TestModelCursorTargetsUseTopLevelUntilProfileMode(t *testing.T) {
@@ -171,8 +172,8 @@ func TestRenderRecentsListTruncatesLongRows(t *testing.T) {
 
 	got := m.renderRecentsList(width)
 	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
-		if lipgloss.Width(line) > formRowTextWidth(width) {
-			t.Fatalf("expected recent row to fit width %d, got %d in %q", formRowTextWidth(width), lipgloss.Width(line), line)
+		if lipgloss.Width(line) > tui_form.FormRowTextWidth(width) {
+			t.Fatalf("expected recent row to fit width %d, got %d in %q", tui_form.FormRowTextWidth(width), lipgloss.Width(line), line)
 		}
 	}
 }

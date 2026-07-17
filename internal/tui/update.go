@@ -9,6 +9,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/health"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -44,7 +45,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scrollTickMsg:
 		switch m.screen {
 		case screenNewProfile:
-			m.form.advanceDescriptionScroll(m.formDescriptionLineCount(), m.formDescriptionVisibleLines())
+			m.form.descScroll, m.form.descDir, m.form.descPause = tui_form.AdvanceDescriptionScroll(m.form.descScroll, m.form.descDir, m.form.descPause, m.formDescriptionLineCount(), m.formDescriptionVisibleLines(), scrollPauseTicks)
 		case screenMain:
 			// Don't auto-scroll while the user is navigating settings content —
 			// it fights cursor movement and scrolls options off-screen.
@@ -264,8 +265,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRPCServerAction(msg)
 		default:
 			return m.updateMain(msg)
-		}
 	}
+}
 
 	return m, nil
 }

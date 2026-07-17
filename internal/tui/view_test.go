@@ -14,6 +14,8 @@ import (
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
+	tui_picker "github.com/sockheadrps/llmctl/internal/tui/picker"
 )
 
 func TestPickerSpinnerFrame(t *testing.T) {
@@ -44,8 +46,8 @@ func TestInactiveAddStyleDoesNotUseSelectedAccent(t *testing.T) {
 func TestViewPickerShowsCompletedScanStatus(t *testing.T) {
 	m := Model{
 		cfg: &config.Config{ModelsDirs: []string{`D:\models`}},
-		picker: pickerState{
-			files: []string{`D:\models\model.gguf`},
+		picker: tui_picker.State{
+			Files: []string{`D:\models\model.gguf`},
 		},
 	}
 
@@ -117,8 +119,8 @@ func TestWrappedContentLinesFitPaneInnerWidth(t *testing.T) {
 	width := 34
 	lines := wrappedContentLines("Select from your most recently run profiles to quickly re-run one.", width)
 	for _, line := range lines {
-		if lipgloss.Width(line) > formDescriptionTextWidth(width) {
-			t.Fatalf("expected line %q width %d to fit inner width %d", line, lipgloss.Width(line), formDescriptionTextWidth(width))
+		if lipgloss.Width(line) > tui_form.FormDescriptionTextWidth(width) {
+			t.Fatalf("expected line %q width %d to fit inner width %d", line, lipgloss.Width(line), tui_form.FormDescriptionTextWidth(width))
 		}
 	}
 }
@@ -143,8 +145,8 @@ func TestTailFittingHeightSanitizesAndCapsWrappedLogPreview(t *testing.T) {
 		t.Fatalf("expected at most 3 wrapped lines, got %d: %q", len(lines), got)
 	}
 	for _, line := range lines {
-		if lipgloss.Width(line) > formDescriptionTextWidth(24) {
-			t.Fatalf("expected line %q width %d to fit inner width %d", line, lipgloss.Width(line), formDescriptionTextWidth(24))
+		if lipgloss.Width(line) > tui_form.FormDescriptionTextWidth(24) {
+			t.Fatalf("expected line %q width %d to fit inner width %d", line, lipgloss.Width(line), tui_form.FormDescriptionTextWidth(24))
 		}
 	}
 }

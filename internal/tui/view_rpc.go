@@ -9,6 +9,7 @@ import (
 	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	tui_logs "github.com/sockheadrps/llmctl/internal/tui/logs"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -375,7 +376,7 @@ func tailFittingHeightRPC(ctrl *controller.Controller, logPath string, boxWidth,
 		return ""
 	}
 
-	lines := wrappedLogPreviewLines(raw, boxWidth)
+	lines := tui_logs.PreviewLines(raw, boxWidth)
 	if len(lines) == 0 {
 		return ""
 	}

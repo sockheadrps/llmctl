@@ -1,4 +1,4 @@
-package tui
+package form
 
 import (
 	"fmt"
@@ -76,18 +76,20 @@ func isNumericToken(s string) bool {
 	return digitSeen
 }
 
-// parseProfileArgs parses a space-separated CLI arg string (e.g. copied from
-// export) and returns a map of field-index → value. Index len(formLabels) is
-// used for the flash-attention toggle.
-func parseProfileArgs(argsStr string) (map[int]string, []string) {
+// ParseProfileArgs parses a space-separated CLI arg string (for example copied
+// from export) and returns a map of field-index -> value. labelCount is the
+// number of fields in the target form, defaultFlag maps a field index to its
+// default llama-server CLI flag, flashIndex is the toggle row index, and
+// extraArgsIndex is where any unrecognized arguments are stored.
+func ParseProfileArgs(argsStr string, labelCount int, defaultFlag func(int) string, flashIndex int, extraArgsIndex int) (map[int]string, []string) {
 	tokens := splitCLIArgs(argsStr)
 	result := make(map[int]string)
 	extra := make([]string, 0)
 	sawRelevantFlag := false
 
 	flagToField := make(map[string]int)
-	for i := 0; i < len(formLabels); i++ {
-		if f := fieldDefaultFlag(i); f != "" {
+	for i := 0; i < labelCount; i++ {
+		if f := defaultFlag(i); f != "" {
 			flagToField[f] = i
 		}
 	}
@@ -156,7 +158,7 @@ func parseProfileArgs(argsStr string) (map[int]string, []string) {
 				if raw == "off" || raw == "false" || raw == "0" {
 					val = "off"
 				}
-				result[len(formLabels)] = val
+				result[flashIndex] = val
 				i++
 				continue
 			}
@@ -165,11 +167,11 @@ func parseProfileArgs(argsStr string) (map[int]string, []string) {
 				if raw == "off" || raw == "false" || raw == "0" {
 					val = "off"
 				}
-				result[len(formLabels)] = val
+				result[flashIndex] = val
 				i = nextIdx + 1
 				continue
 			}
-			result[len(formLabels)] = val
+			result[flashIndex] = val
 			i++
 			continue
 		}
@@ -187,7 +189,7 @@ func parseProfileArgs(argsStr string) (map[int]string, []string) {
 			continue
 		}
 
-		// --no-flag → bool false
+		// --no-flag -> bool false
 		if strings.HasPrefix(tok, "--no-") {
 			posFlag := "--" + tok[len("--no-"):]
 			if fieldIdx, ok := flagToField[posFlag]; ok {
@@ -200,7 +202,7 @@ func parseProfileArgs(argsStr string) (map[int]string, []string) {
 			continue
 		}
 
-		// --flag value  or  bare --flag (= true)
+		// --flag value or bare --flag (= true)
 		if strings.HasPrefix(tok, "-") {
 			if fieldIdx, ok := flagToField[tok]; ok {
 				sawRelevantFlag = true
@@ -224,52 +226,30 @@ func parseProfileArgs(argsStr string) (map[int]string, []string) {
 		i++
 	}
 	if len(extra) > 0 {
-		result[fieldExtraArgs] = strings.Join(extra, " ")
+		result[extraArgsIndex] = strings.Join(extra, " ")
 	}
 	return result, extra
 }
 
-func (f *formState) applyImportedArgs(argsStr string) error {
-	values, extra := parseProfileArgs(argsStr)
-	if len(values) == 0 && len(extra) == 0 {
-		return fmt.Errorf("no recognizable CLI args found")
-	}
-
-	// Clear all arg fields except the profile key, then apply what was parsed.
-	for i := range f.fields {
-		if i != fieldKey {
-			f.fields[i].input.SetValue("")
-		}
-	}
-	f.flash = false
-	f.cpuOnly = false
-	f.mlock = false
-	f.rpcClientLayers = 0
-
-	for idx, val := range values {
-		switch idx {
-		case len(formLabels):
-			f.flash = strings.EqualFold(val, "on") || strings.EqualFold(val, "true") || val == "1"
-		default:
-			if idx >= 0 && idx < len(f.fields) {
-				f.fields[idx].input.SetValue(val)
-			}
-		}
-	}
-
-	f.syncFlagInput()
-	f.importErr = ""
-	return nil
-}
-
-func parseIntOrZero(s string) (int, error) {
+// ParseIntOrZero returns 0 for a blank field.
+func ParseIntOrZero(s string) (int, error) {
 	if s == "" {
 		return 0, nil
 	}
 	return strconv.Atoi(s)
 }
 
-func parseBoolPtr(s string) (*bool, error) {
+// ParsePort validates a positive port number.
+func ParsePort(s string) (int, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("port must be a positive integer")
+	}
+	return n, nil
+}
+
+// ParseBoolPtr returns nil for a blank field.
+func ParseBoolPtr(s string) (*bool, error) {
 	if s == "" {
 		return nil, nil
 	}
@@ -280,7 +260,8 @@ func parseBoolPtr(s string) (*bool, error) {
 	return &v, nil
 }
 
-func parseReasoning(s string) (string, error) {
+// ParseReasoning validates the reasoning mode.
+func ParseReasoning(s string) (string, error) {
 	if s == "" {
 		return "", nil
 	}
@@ -293,11 +274,8 @@ func parseReasoning(s string) (string, error) {
 	}
 }
 
-// parseIntPtr and parseFloatPtr return nil for a blank field — used for
-// sampling params where an explicit 0 (e.g. min_p=0.0 to disable min-p
-// filtering) must be distinguishable from "flag omitted, use the
-// llama-server default", per Profile's doc comment.
-func parseIntPtr(s string) (*int, error) {
+// ParseIntPtr returns nil for a blank field.
+func ParseIntPtr(s string) (*int, error) {
 	if s == "" {
 		return nil, nil
 	}
@@ -308,7 +286,8 @@ func parseIntPtr(s string) (*int, error) {
 	return &v, nil
 }
 
-func parseFloatPtr(s string) (*float64, error) {
+// ParseFloatPtr returns nil for a blank field.
+func ParseFloatPtr(s string) (*float64, error) {
 	if s == "" {
 		return nil, nil
 	}
@@ -317,14 +296,4 @@ func parseFloatPtr(s string) (*float64, error) {
 		return nil, err
 	}
 	return &v, nil
-}
-
-func boolPtrOrEmpty(b *bool) string {
-	if b == nil {
-		return ""
-	}
-	if *b {
-		return "true"
-	}
-	return "false"
 }

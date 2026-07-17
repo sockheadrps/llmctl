@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/textinput"
+import (
+	"github.com/charmbracelet/bubbles/textinput"
+
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
+)
 
 // formField is one text input row in the new-profile form.
 type formField struct {
@@ -48,45 +52,37 @@ type formState struct {
 
 // Field indices into formState.fields, matching the order of formLabels.
 const (
-	fieldKey = iota
-	fieldHost
-	fieldAlias
-	fieldPort
-	fieldCtxSize
-	fieldTemp
-	fieldTopP
-	fieldTopK
-	fieldMinP
-	fieldPresencePenalty
-	fieldRepetitionPenalty
-	fieldFrequencyPenalty
-	fieldSeed
-	fieldBatchSize
-	fieldUBatchSize
-	fieldRepeatLastN
-	fieldGPULayers
-	fieldMMap
-	fieldKVOffload
-	fieldParallelSlots
-	fieldContBatching
-	fieldCachePrompt
-	fieldCacheRAM
-	fieldReasoning
-	fieldReasoningBudget
-	fieldReasoningFormat
-	fieldCacheK
-	fieldCacheV
-	fieldExtraArgs
-	fieldNotes
-	fieldRPCEnabled
+	fieldKey               = tui_form.FieldKey
+	fieldHost              = tui_form.FieldHost
+	fieldAlias             = tui_form.FieldAlias
+	fieldPort              = tui_form.FieldPort
+	fieldCtxSize           = tui_form.FieldCtxSize
+	fieldTemp              = tui_form.FieldTemp
+	fieldTopP              = tui_form.FieldTopP
+	fieldTopK              = tui_form.FieldTopK
+	fieldMinP              = tui_form.FieldMinP
+	fieldPresencePenalty   = tui_form.FieldPresencePenalty
+	fieldRepetitionPenalty = tui_form.FieldRepetitionPenalty
+	fieldFrequencyPenalty  = tui_form.FieldFrequencyPenalty
+	fieldSeed              = tui_form.FieldSeed
+	fieldBatchSize         = tui_form.FieldBatchSize
+	fieldUBatchSize        = tui_form.FieldUBatchSize
+	fieldRepeatLastN       = tui_form.FieldRepeatLastN
+	fieldGPULayers         = tui_form.FieldGPULayers
+	fieldMMap              = tui_form.FieldMMap
+	fieldKVOffload         = tui_form.FieldKVOffload
+	fieldParallelSlots     = tui_form.FieldParallelSlots
+	fieldContBatching      = tui_form.FieldContBatching
+	fieldCachePrompt       = tui_form.FieldCachePrompt
+	fieldCacheRAM          = tui_form.FieldCacheRAM
+	fieldReasoning         = tui_form.FieldReasoning
+	fieldReasoningBudget   = tui_form.FieldReasoningBudget
+	fieldReasoningFormat   = tui_form.FieldReasoningFormat
+	fieldCacheK            = tui_form.FieldCacheK
+	fieldCacheV            = tui_form.FieldCacheV
+	fieldExtraArgs         = tui_form.FieldExtraArgs
+	fieldNotes             = tui_form.FieldNotes
+	fieldRPCEnabled        = tui_form.FieldRPCEnabled
 )
 
-var formLabels = []string{
-	"Key", "Host", "Alias", "Port", "Ctx Size", "Temp", "Top P", "Top K", "Min P",
-	"Presence Penalty", "Repetition Penalty", "Frequency Penalty", "Seed",
-	"Batch Size", "UBatch Size", "Repeat Last N", "GPU Layers", "MMap", "KV Offload",
-	"Parallel Slots", "Continuous Batching", "Prompt Cache", "Cache RAM",
-	"Reasoning", "Reasoning Budget", "Reasoning Format", "Cache Type K", "Cache Type V",
-	"Extra Args (space-separated)", "Notes",
-	"RPC Enabled",
-}
+var formLabels = tui_form.Labels

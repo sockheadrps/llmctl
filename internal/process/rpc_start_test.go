@@ -1,6 +1,7 @@
 package process
 
 import (
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,13 +24,17 @@ func TestStartRPCMissingBinaryReturnsHint(t *testing.T) {
 }
 
 func TestStartRPCEmptyBinFallsBackToDefaultName(t *testing.T) {
+	if _, err := exec.LookPath("ggml-rpc-server"); err == nil {
+		t.Skip("ggml-rpc-server is present on PATH — skipping not-found test")
+	}
+
 	logPath := filepath.Join(t.TempDir(), "rpc.log")
 
 	// Empty bin should fall back to "ggml-rpc-server" and fail with the
 	// standard not-found message (not a generic exec error).
 	_, err := StartRPC("", "0.0.0.0", 50052, logPath)
 	if err == nil {
-		t.Skip("ggml-rpc-server is present on PATH — skipping not-found test")
+		t.Fatal("expected error for missing fallback binary")
 	}
 
 	if !strings.Contains(err.Error(), "ggml-rpc-server") {

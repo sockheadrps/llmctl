@@ -18,6 +18,8 @@ import (
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/models"
 	"github.com/sockheadrps/llmctl/internal/statusserver"
+	tui_logs "github.com/sockheadrps/llmctl/internal/tui/logs"
+	tui_picker "github.com/sockheadrps/llmctl/internal/tui/picker"
 	"github.com/sockheadrps/llmctl/internal/util"
 )
 
@@ -98,11 +100,11 @@ type Model struct {
 	detailsHovered       bool // mouse is over the details pane; suppresses auto-scroll
 	detailsManualScroll  bool // user scrolled with wheel; stays suppressed until row changes
 
-	picker               pickerState
+	picker               tui_picker.State
 	form                 formState
 	formExit             formExitState
 	confirm              confirmState
-	logs                 logsState
+	logs                 tui_logs.State
 	settings             settingsState
 	runningAction        runningActionState
 	rpcServerActionState rpcServerActionState
