@@ -1,37 +1,38 @@
 package tui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/gpu"
 	"github.com/sockheadrps/llmctl/internal/health"
 	"github.com/sockheadrps/llmctl/internal/models"
-	"github.com/sockheadrps/llmctl/internal/process"
-	"github.com/sockheadrps/llmctl/internal/runtime"
-	"github.com/sockheadrps/llmctl/internal/statusserver"
 )
 
 // client-mode only
 // pollRemoteStatusCmd polls the remote llmctl's status server at remoteStatusAddr
 // ("host:port"). On success the caller derives the RPC endpoint from the
 // response's rpc_server fields using the same host.
-func pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
+func (m *Model) pollRemoteStatusCmd(remoteStatusAddr string) tea.Cmd {
+	ctrl := m.ctrl
 	return func() tea.Msg {
-		st, err := statusserver.PollAddr(remoteStatusAddr)
-		if err != nil {
+		status, err := ctrl.PollRemoteStatus(remoteStatusAddr)
+		if err != nil || status == nil {
 			return remoteStatusMsg{err: err}
 		}
-		return remoteStatusMsg{status: &st}
+		return remoteStatusMsg{status: status}
 	}
 }
 
 // shared
 // checkRAMCmd reads RSS MiB for the given PIDs (CPU-only model processes).
-func checkRAMCmd(pids []int) tea.Cmd {
+func (m *Model) checkRAMCmd(pids []int) tea.Cmd {
 	return func() tea.Msg {
 		byPID := make(map[int]int64, len(pids))
 		for _, pid := range pids {
-			if mb := process.RSSMiB(pid); mb > 0 {
+			if mb := m.ctrl.GetRSSMiB(pid); mb > 0 {
 				byPID[pid] = mb
 			}
 		}
@@ -43,12 +44,15 @@ func checkRAMCmd(pids []int) tea.Cmd {
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
-	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
+	cmds := []tea.Cmd{
+		timedCmd("checkHealth", checkHealthCmd(m.running)),
+		timedCmd("checkSlots", checkSlotsCmd(m.running)),
+	}
 	if m.networkTabVisible() {
-		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
+		cmds = append(cmds, timedCmd("checkNetworkStatus", checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)))
 	}
 	if m.gpuAvailable {
-		cmds = append(cmds, checkVRAMCmd())
+		cmds = append(cmds, timedCmd("checkVRAM", checkVRAMCmd()))
 	}
 	// Poll RSS for any CPU-only model processes.
 	var cpuPIDs []int
@@ -60,19 +64,29 @@ func (m Model) backgroundChecks() tea.Cmd {
 		}
 	}
 	if len(cpuPIDs) > 0 {
-		cmds = append(cmds, checkRAMCmd(cpuPIDs))
+		cmds = append(cmds, timedCmd("checkRAM", m.checkRAMCmd(cpuPIDs)))
 	}
 	if m.cfg.RPCEnabled {
 		switch m.cfg.RPCMode {
 		case "server":
-			cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
+			cmds = append(cmds, timedCmd("checkRPCServerHealth", checkRPCServerHealthCmd(m.ctrl, m.cfg.RPCServerHost, m.cfg.RPCServerPort)))
 		case "client":
 			if m.cfg.RemoteStatusAddr != "" {
-				cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
+				cmds = append(cmds, timedCmd("pollRemoteStatus", m.pollRemoteStatusCmd(m.cfg.RemoteStatusAddr)))
 			}
 		}
 	}
 	return tea.Batch(cmds...)
+}
+
+// backgroundPollInterval returns how often the periodic telemetry sweep
+// should run. RPC client mode is intentionally a little slower because it
+// has to juggle local GPU telemetry plus the remote status publisher.
+func (m Model) backgroundPollInterval() time.Duration {
+	if m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" && len(m.running) > 0 {
+		return 4 * time.Second
+	}
+	return 2 * time.Second
 }
 
 // shared
@@ -144,15 +158,15 @@ func checkVRAMCmd() tea.Cmd {
 // would fail while the server is busy handling an existing RPC connection
 // (e.g. a model loading on the remote machine). The TCP probe is only used
 // as a fallback to detect an externally-started server with no state file.
-func checkRPCServerHealthCmd(mgr *runtime.Manager, host string, port int) tea.Cmd {
+func checkRPCServerHealthCmd(ctrl *controller.Controller, host string, port int) tea.Cmd {
 	return func() tea.Msg {
-		state, running := mgr.RPCServerStatus()
+		state, running := ctrl.RPCServerStatus()
 		if running {
 			_ = state
 			return healthMsg{"rpc-server": health.StatusUp}
 		}
 		// PID dead or no state file.
-		if mgr.HasRPCStateFile() {
+		if ctrl.HasRPCStateFile() {
 			return healthMsg{"rpc-server": health.StatusDown}
 		}
 		// No state file — check if something external is on the port.

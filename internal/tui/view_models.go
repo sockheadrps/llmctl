@@ -9,6 +9,7 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/health"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 // renderHeaderLine renders the Models/Recents/Settings tab strip above the
@@ -121,7 +122,7 @@ func (m Model) renderModelsSubTab() string {
 func (m Model) renderSettingsList(width int) string {
 	var b strings.Builder
 	rows := m.buildSettingsRows()
-	textWidth := formRowTextWidth(width)
+	textWidth := tui_form.FormRowTextWidth(width)
 	inSettings := m.focus == focusLeft || m.focus == focusSettingsContent
 	for i, r := range rows {
 		selected := i == m.settingsCursor
@@ -133,7 +134,7 @@ func (m Model) renderSettingsList(width int) string {
 			}
 			style = activeModelStyle
 		}
-		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+		label := tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 	}
 	b.WriteString("\n")
@@ -144,7 +145,7 @@ func (m Model) renderSettingsList(width int) string {
 
 func (m Model) renderModelsTree(width int) string {
 	var b strings.Builder
-	textWidth := formRowTextWidth(width)
+	textWidth := tui_form.FormRowTextWidth(width)
 
 	if len(m.cfg.ModelsDirs) == 0 {
 		b.WriteString(modelStyle.Render("No models folders set."))
@@ -165,7 +166,7 @@ func (m Model) renderModelsTree(width int) string {
 			prefix = cursorStyle.Render("/ ")
 		}
 		b.WriteString(prefix)
-		b.WriteString(detailMutedStyle.Render(truncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
+		b.WriteString(detailMutedStyle.Render(tui_form.TruncateText(query, max(1, textWidth-lipgloss.Width(prefix)))))
 		b.WriteString("\n\n")
 	}
 
@@ -211,7 +212,7 @@ func (m Model) renderModelsTree(width int) string {
 					dot = loadingStyle.Render("● ")
 				}
 			}
-			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-lipgloss.Width(dot)))
+			label := tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-lipgloss.Width(dot)))
 			b.WriteString(fmt.Sprintf("%s%s%s\n", cursor, dot, style.Render(label)))
 
 		case rowProfile:
@@ -228,7 +229,7 @@ func (m Model) renderModelsTree(width int) string {
 			if avg, ok := m.loadHistory.average(r.modelKey+"/"+r.profileKey, m.cfg.RPCEnabled); ok {
 				avgSuffix = detailMutedStyle.Render("  (avg " + fmtLoadDur(time.Duration(avg*float64(time.Second))) + ")")
 			}
-			label = truncateText(label, max(1, textWidth-lipgloss.Width(cursor)-2-lipgloss.Width(avgSuffix)))
+			label = tui_form.TruncateText(label, max(1, textWidth-lipgloss.Width(cursor)-2-lipgloss.Width(avgSuffix)))
 			fmt.Fprintf(&b, "%s  %s%s\n", cursor, style.Render(label), avgSuffix)
 
 		case rowAddProfile:
@@ -236,7 +237,7 @@ func (m Model) renderModelsTree(width int) string {
 			if active {
 				style = selectedAddStyle
 			}
-			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-2))
+			label := tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)-2))
 			b.WriteString(fmt.Sprintf("%s  %s\n", cursor, style.Render(label)))
 
 		case rowAddModel:
@@ -245,7 +246,7 @@ func (m Model) renderModelsTree(width int) string {
 			if active {
 				style = selectedAddStyle
 			}
-			label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+			label := tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
 			b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 		}
 	}
@@ -273,7 +274,7 @@ func (m Model) renderRecentsList(width int) string {
 		return b.String()
 	}
 
-	textWidth := formRowTextWidth(width)
+	textWidth := tui_form.FormRowTextWidth(width)
 	focused := m.focus == focusLeft
 	for i, r := range m.recentRows {
 		selected := i == m.recentCursor
@@ -284,7 +285,7 @@ func (m Model) renderRecentsList(width int) string {
 			cursor = cursorStyle.Render("> ")
 			style = selectedProfileStyle
 		}
-		label := truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
+		label := tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(label)))
 	}
 	return b.String()

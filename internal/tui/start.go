@@ -4,8 +4,6 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/sockheadrps/llmctl/internal/runtime"
 )
 
 // startResultMsg carries the outcome of an async profile start. Manager.Start
@@ -21,12 +19,12 @@ type startResultMsg struct {
 }
 
 func (m Model) startProfileCmd(r row) tea.Cmd {
-	mgr, cfg := m.mgr, m.cfg
+	ctrl, cfg := m.ctrl, m.cfg
 	modelKey, profileKey, label := r.modelKey, r.profileKey, r.label
 	rpcOverride := m.discoveredRPCEndpoint
 	return func() tea.Msg {
-		logPath, _ := runtime.LogPath(modelKey, profileKey)
-		_, err := mgr.Start(cfg, modelKey, profileKey, rpcOverride)
+		logPath, _ := ctrl.LogPath(modelKey, profileKey)
+		_, err := ctrl.StartModel(cfg, modelKey, profileKey, rpcOverride)
 		if err != nil && !logFileHasContent(logPath) {
 			logPath = ""
 		}

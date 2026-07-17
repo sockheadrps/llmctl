@@ -7,8 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sockheadrps/llmctl/internal/controller"
 	"github.com/sockheadrps/llmctl/internal/health"
-	"github.com/sockheadrps/llmctl/internal/runtime"
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -19,10 +20,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		if m.mgr != nil {
+		now := time.Now()
+		if m.ctrl != nil {
+			start := time.Now()
 			m.refreshRunning(true)
+			debugTimingf("refreshRunning(detectCrashes=true) took %s", time.Since(start))
 		}
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(tick) took %s", time.Since(startPush))
 		if m.screen == screenLogs {
 			m.refreshLogs()
 			return m, tickCmd()
@@ -30,12 +36,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen != screenMain {
 			return m, tickCmd()
 		}
-		return m, tea.Batch(tickCmd(), m.backgroundChecks())
+		if now.After(m.backgroundPollUntil) {
+			m.backgroundPollUntil = now.Add(m.backgroundPollInterval())
+			return m, tea.Batch(tickCmd(), m.backgroundChecks())
+		}
+		return m, tickCmd()
 
 	case scrollTickMsg:
 		switch m.screen {
 		case screenNewProfile:
-			m.form.advanceDescriptionScroll(m.formDescriptionLineCount(), m.formDescriptionVisibleLines())
+			m.form.descScroll, m.form.descDir, m.form.descPause = tui_form.AdvanceDescriptionScroll(m.form.descScroll, m.form.descDir, m.form.descPause, m.formDescriptionLineCount(), m.formDescriptionVisibleLines(), scrollPauseTicks)
 		case screenMain:
 			// Don't auto-scroll while the user is navigating settings content —
 			// it fights cursor movement and scrolls options off-screen.
@@ -71,23 +81,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.health[key] = status
 			}
 		}
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(health) took %s", time.Since(startPush))
 		return m, nil
 
 	case slotsMsg:
 		m.applyTokSamples(msg)
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(slots) took %s", time.Since(startPush))
 		return m, nil
 
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuDevices = msg.devices
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(vram) took %s", time.Since(startPush))
 		return m, nil
 
 	case ramMsg:
 		m.ramByPID = msg.byPID
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(ram) took %s", time.Since(startPush))
 		return m, nil
 
 	case remoteStatusMsg:
@@ -200,7 +218,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setError(msg.err, "")
 			return m, nil
 		}
-		m.rpcServerState = runtime.RPCServerState{}
+		m.rpcServerState = controller.RPCServerState{}
 		m.rpcServerAlive = false
 		delete(m.health, "rpc-server")
 		m.clearError()
@@ -247,8 +265,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRPCServerAction(msg)
 		default:
 			return m.updateMain(msg)
-		}
 	}
+}
 
 	return m, nil
 }

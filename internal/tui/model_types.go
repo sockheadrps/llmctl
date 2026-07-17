@@ -114,9 +114,10 @@ type remoteStatusMsg struct {
 }
 
 type cachedModelLoad struct {
-	modTime time.Time
-	size    int64
-	slices  []statusserver.GPUDeviceInfo
+	modTime  time.Time
+	size     int64
+	slices   []statusserver.GPUDeviceInfo
+	complete bool
 }
 
 const (

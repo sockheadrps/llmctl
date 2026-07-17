@@ -5,7 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/sockheadrps/llmctl/internal/process"
+	"github.com/sockheadrps/llmctl/internal/controller"
+	tui_logs "github.com/sockheadrps/llmctl/internal/tui/logs"
 )
 
 // Fallback dimensions used before the first WindowSizeMsg arrives (or if a
@@ -249,13 +250,13 @@ func (m Model) renderLeftPaneContent(leftW int) string {
 // boxWidth — process output can contain very long or numerous lines (a
 // chat template dump, say), which by raw line count alone could still
 // wrap well past the available space.
-func tailFittingHeight(logPath string, boxWidth, maxLines int) string {
-	raw, err := process.TailLog(logPath, 500)
+func tailFittingHeight(ctrl *controller.Controller, logPath string, boxWidth, maxLines int) string {
+	raw, err := ctrl.TailLog(logPath, 500)
 	if err != nil || raw == "" {
 		return ""
 	}
 
-	lines := wrappedLogPreviewLines(raw, boxWidth)
+	lines := tui_logs.PreviewLines(raw, boxWidth)
 	if len(lines) == 0 {
 		return ""
 	}
@@ -263,35 +264,4 @@ func tailFittingHeight(logPath string, boxWidth, maxLines int) string {
 		lines = lines[len(lines)-maxLines:]
 	}
 	return strings.Join(lines, "\n")
-}
-
-func wrappedLogPreviewLines(raw string, boxWidth int) []string {
-	innerWidth := formDescriptionTextWidth(boxWidth)
-	if innerWidth <= 0 {
-		innerWidth = formDescriptionTextWidth(minRightWidth)
-	}
-
-	text := sanitizePreviewText(raw)
-	rendered := lipgloss.NewStyle().Width(innerWidth).Render(strings.TrimRight(text, "\n"))
-	rendered = strings.TrimRight(rendered, "\n")
-	if rendered == "" {
-		return nil
-	}
-	return strings.Split(rendered, "\n")
-}
-
-func sanitizePreviewText(s string) string {
-	s = stripANSI(s)
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	return strings.Map(func(r rune) rune {
-		switch r {
-		case '\n', '\t':
-			return r
-		}
-		if r < 32 || r == 127 {
-			return -1
-		}
-		return r
-	}, s)
 }

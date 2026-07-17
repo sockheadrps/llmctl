@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 // paneDimensions works out how big the main screen's panes should be so
@@ -183,9 +185,9 @@ func advanceAutoScroll(offset, dir, pause, lines, visible int) (int, int, int) {
 }
 
 func wrappedContentLines(content string, width int) []string {
-	innerWidth := formDescriptionTextWidth(width)
+	innerWidth := tui_form.FormDescriptionTextWidth(width)
 	if innerWidth <= 0 {
-		innerWidth = formDescriptionTextWidth(minRightWidth)
+		innerWidth = tui_form.FormDescriptionTextWidth(minRightWidth)
 	}
 	rendered := lipgloss.NewStyle().Width(innerWidth).Render(strings.TrimRight(content, "\n"))
 	lines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")

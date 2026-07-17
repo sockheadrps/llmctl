@@ -22,7 +22,7 @@ func (m *Model) rebuildRows() {
 // entry against the current config, silently dropping any whose model or
 // profile no longer exists (e.g. deleted since it was last run).
 func (m *Model) rebuildRecentRows() {
-	recent, err := m.mgr.RecentRuns()
+	recent, err := m.ctrl.RecentRuns()
 	if err != nil {
 		m.setError(err, "")
 		return

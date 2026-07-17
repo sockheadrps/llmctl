@@ -10,6 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
 
 // netStatusMsg carries the result of a periodic network status poll.
@@ -278,7 +280,7 @@ func listNetworkConnectionsCmd(role netPickerRole) tea.Cmd {
 // summary, two switch action rows, and two configure rows.
 func (m Model) renderNetworkList(width int) string {
 	var b strings.Builder
-	textWidth := formRowTextWidth(width)
+	textWidth := tui_form.FormRowTextWidth(width)
 	inNetwork := m.focus == focusLeft && m.leftMode == modeNetwork
 
 	s := m.netStatus
@@ -314,15 +316,15 @@ func (m Model) renderNetworkList(width int) string {
 	rowFmt := "  %-8s %s\n"
 	b.WriteString(fmt.Sprintf(rowFmt,
 		profileStyle.Render("active"),
-		connStyle.Render(truncateText(connLabel, max(1, textWidth-12))),
+		connStyle.Render(tui_form.TruncateText(connLabel, max(1, textWidth-12))),
 	))
 	b.WriteString(fmt.Sprintf(rowFmt,
 		profileStyle.Render("link"),
-		linkStyle.Render(truncateText(linkLabel, max(1, textWidth-12))),
+		linkStyle.Render(tui_form.TruncateText(linkLabel, max(1, textWidth-12))),
 	))
 	b.WriteString(fmt.Sprintf(rowFmt,
 		profileStyle.Render("iface"),
-		profileStyle.Render(truncateText(m.netIface, max(1, textWidth-12))),
+		profileStyle.Render(tui_form.TruncateText(m.netIface, max(1, textWidth-12))),
 	))
 	b.WriteString("\n")
 
@@ -350,7 +352,7 @@ func (m Model) renderNetworkList(width int) string {
 			style = activeModelStyle
 		}
 		b.WriteString(cursor)
-		b.WriteString(style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))))
+		b.WriteString(style.Render(tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))))
 		b.WriteString("\n")
 	}
 
@@ -365,7 +367,7 @@ func (m Model) renderNetworkList(width int) string {
 			style = selectedAddStyle
 		}
 		b.WriteString(cursor)
-		b.WriteString(style.Render(truncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))))
+		b.WriteString(style.Render(tui_form.TruncateText(r.label, max(1, textWidth-lipgloss.Width(cursor)))))
 		b.WriteString("\n")
 	}
 

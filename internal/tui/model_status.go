@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sockheadrps/llmctl/internal/build"
 	"github.com/sockheadrps/llmctl/internal/gpu"
@@ -66,7 +67,7 @@ func (m *Model) reconcileStatusServer() error {
 		m.statusServerPort = 0
 	}
 
-	srv := statusserver.NewServer()
+	srv := m.ctrl.NewStatusServer()
 	if err := srv.Start(host, port); err != nil {
 		return err
 	}
@@ -123,12 +124,18 @@ func clientName() string {
 // pushStatusServer updates the local status server snapshot with current state.
 // In RPC client mode it also publishes the snapshot to the remote status server.
 func (m *Model) pushStatusServer() {
+	start := time.Now()
 	st := m.buildStatusSnapshot()
+	debugTimingf("buildStatusSnapshot took %s", time.Since(start))
 	if m.statusServer != nil {
+		start = time.Now()
 		m.statusServer.SetStatus(st)
+		debugTimingf("statusServer.SetStatus took %s", time.Since(start))
 	}
 	if m.statusPublisher != nil {
+		start = time.Now()
 		m.statusPublisher.Update(st)
+		debugTimingf("statusPublisher.Update took %s", time.Since(start))
 	}
 }
 
@@ -151,6 +158,7 @@ func (m *Model) buildStatusSnapshot() statusserver.Status {
 
 	running := make([]statusserver.RunningInfo, 0, len(m.running))
 	for _, r := range m.running {
+		runStart := time.Now()
 		key := r.ModelKey + "/" + r.ProfileKey
 		h := m.health[key]
 		if h == "" || m.pendingInstances[key] {
@@ -213,6 +221,7 @@ func (m *Model) buildStatusSnapshot() statusserver.Status {
 				info.RAMMiB = mb
 			}
 		}
+		debugTimingf("buildStatusSnapshot run %s/%s took %s", r.ModelKey, r.ProfileKey, time.Since(runStart))
 		running = append(running, info)
 	}
 

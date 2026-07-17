@@ -2,39 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	tui_form "github.com/sockheadrps/llmctl/internal/tui/form"
 )
-
-// formSliderTotal returns the current GPU layers value from the form field,
-// used as the upper bound of the tensor split slider.
-func (m Model) formSliderTotal() int {
-	val := strings.TrimSpace(m.form.fields[fieldGPULayers].input.Value())
-	if val == "" {
-		return 0
-	}
-	n, err := strconv.Atoi(val)
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return n
-}
-
-// formRPCActive reports whether RPC is effectively enabled for the profile
-// being edited, so the tensor split slider knows when to be interactive.
-func (m Model) formRPCActive() bool {
-	val := strings.TrimSpace(m.form.fields[fieldRPCEnabled].input.Value())
-	switch val {
-	case "false":
-		return false
-	case "true":
-		return true
-	default:
-		return m.cfg.RPCEnabled
-	}
-}
 
 const (
 	formDefaultLeftWidth    = 70
@@ -56,113 +29,105 @@ func (m Model) viewForm() string {
 	b.WriteString(titleStyle.Render(fmt.Sprintf("%s — %s", title, mdl.Name)))
 	b.WriteString("\n\n")
 
-	leftWidth, detailsWidth := m.formPaneWidths()
-	rowWidth := formRowTextWidth(leftWidth)
+	leftWidth, detailsWidth := tui_form.FormPaneWidths(m.width)
+	rowWidth := tui_form.FormRowTextWidth(leftWidth)
 	labelWidth := min(30, max(14, rowWidth/2-2))
 	inputWidth := max(formMinInputWidth, rowWidth-labelWidth-1)
 	if labelWidth+1+inputWidth > rowWidth {
 		labelWidth = max(8, rowWidth-formMinInputWidth-1)
 		inputWidth = max(formMinInputWidth, rowWidth-labelWidth-1)
 	}
+	body := strings.Builder{}
+	sections := []struct {
+		name   string
+		fields []int
+	}{
+		{name: "Identity", fields: []int{fieldKey, fieldHost, fieldAlias, fieldPort, fieldCtxSize}},
+		{name: "Sampling", fields: []int{fieldTemp, fieldTopP, fieldTopK, fieldMinP, fieldPresencePenalty, fieldRepetitionPenalty, fieldFrequencyPenalty, fieldSeed}},
+		{name: "Cache & Compute", fields: []int{fieldBatchSize, fieldUBatchSize, fieldRepeatLastN, fieldGPULayers, fieldMMap, fieldKVOffload}},
+		{name: "Server", fields: []int{fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM}},
+		{name: "Reasoning", fields: []int{fieldReasoning, fieldReasoningBudget, fieldReasoningFormat}},
+		{name: "Advanced", fields: []int{fieldCacheK, fieldCacheV, fieldExtraArgs, fieldNotes}},
+		{name: "RPC", fields: []int{fieldRPCEnabled}},
+	}
 
-	var body strings.Builder
-	visibleRows := m.formVisibleRows()
-	selectedRows := make([]string, 0, len(m.form.fields)+8)
+	visibleRows := tui_form.FormVisibleRows(tui_form.FormPaneHeight(m.height))
+	selectedRows := make([]string, 0, len(m.form.fields)+3)
 	focusedRow := 0
 	rowIndex := 0
-
-	appendSectionTitle := func(name string) {
-		selectedRows = append(selectedRows, sectionTitleStyle.Render(name))
-		rowIndex++
-	}
-
-	appendFieldRow := func(idx int) {
-		f := m.form.fields[idx]
-		f.input.Width = inputWidth
-		labelText := truncateText(f.label+":", labelWidth)
-		label := formLabelStyle.Width(labelWidth)
-		if m.form.focus == idx {
-			if !m.form.navigating {
-				label = formEditingLabelStyle.Width(labelWidth)
-			} else {
-				label = formFocusedLabelStyle.Width(labelWidth)
+	for _, section := range sections {
+		if section.name != "" {
+			selectedRows = append(selectedRows, sectionTitleStyle.Render(section.name))
+			rowIndex++
+		}
+		for _, idx := range section.fields {
+			f := m.form.fields[idx]
+			f.input.Width = inputWidth
+			labelText := tui_form.TruncateText(f.label+":", labelWidth)
+			label := formLabelStyle.Width(labelWidth)
+			if m.form.focus == idx {
+				if !m.form.navigating {
+					label = formEditingLabelStyle.Width(labelWidth)
+				} else {
+					label = formFocusedLabelStyle.Width(labelWidth)
+				}
+				focusedRow = rowIndex
 			}
-			focusedRow = rowIndex
-		}
-		rowStr := fmt.Sprintf("%s %s", label.Render(labelText), f.input.View())
-		selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
-		rowIndex++
-	}
-
-	appendBoolRow := func(label string, value bool, focused bool, extra string) {
-		lbl := formLabelStyle.Width(labelWidth)
-		if focused {
-			if !m.form.navigating {
-				lbl = formEditingLabelStyle.Width(labelWidth)
-			} else {
-				lbl = formFocusedLabelStyle.Width(labelWidth)
+			rowStr := fmt.Sprintf("%s %s", label.Render(labelText), f.input.View())
+			if idx == fieldGPULayers && m.form.cpuOnly {
+				rowStr += " " + detailMutedStyle.Render("(overridden)")
 			}
-			focusedRow = rowIndex
+			selectedRows = append(selectedRows, tui_form.FitStyledLine(rowStr, rowWidth))
+			rowIndex++
+
+			if idx == fieldGPULayers {
+				selectedRows = append(selectedRows, tui_form.FitStyledLine(m.renderLayerDistRow(labelWidth, rowWidth), rowWidth))
+				if m.form.focus == len(m.form.fields)+3 {
+					focusedRow = rowIndex
+				}
+				rowIndex++
+			}
 		}
-		val := "false"
-		if value {
-			val = "true"
-		}
-		rowStr := fmt.Sprintf("%s %s", lbl.Render(truncateText(label+":", labelWidth)), val)
-		if extra != "" {
-			rowStr += " " + detailMutedStyle.Render(extra)
-		}
-		selectedRows = append(selectedRows, fitStyledLine(rowStr, rowWidth))
-		rowIndex++
 	}
+	flashLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields) {
+		flashLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
+	}
+	flashLabel = flashLabel.Width(labelWidth)
+	flashValue := "false"
+	if m.form.flash {
+		flashValue = "true"
+	}
+	selectedRows = append(selectedRows, tui_form.FitStyledLine(fmt.Sprintf("%s %s", flashLabel.Render(tui_form.TruncateText("Flash Attention:", labelWidth)), flashValue), rowWidth))
+	rowIndex++
 
-	appendFieldRow(fieldKey)
-	appendFieldRow(fieldNotes)
-	appendBoolRow("Flash Attention", m.form.flash, m.form.focus == len(m.form.fields), "")
-	appendBoolRow("RPC Enabled", strings.EqualFold(strings.TrimSpace(m.form.fields[fieldRPCEnabled].input.Value()), "true"), m.form.focus == fieldRPCEnabled, "")
-	appendFieldRow(fieldHost)
-	appendFieldRow(fieldAlias)
-	appendFieldRow(fieldPort)
-	appendFieldRow(fieldCtxSize)
+	cpuOnlyLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields)+1 {
+		cpuOnlyLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
+	}
+	cpuOnlyLabel = cpuOnlyLabel.Width(labelWidth)
+	cpuOnlyValue := "false"
+	if m.form.cpuOnly {
+		cpuOnlyValue = "true"
+	}
+	selectedRows = append(selectedRows, tui_form.FitStyledLine(fmt.Sprintf("%s %s", cpuOnlyLabel.Render(tui_form.TruncateText("CPU Only:", labelWidth)), cpuOnlyValue), rowWidth))
+	rowIndex++
 
-	appendSectionTitle("Sampling")
-	for _, idx := range []int{fieldTemp, fieldTopP, fieldTopK, fieldMinP, fieldPresencePenalty, fieldRepetitionPenalty, fieldFrequencyPenalty, fieldSeed} {
-		appendFieldRow(idx)
+	mlockLabel := formLabelStyle
+	if m.form.focus == len(m.form.fields)+2 {
+		mlockLabel = formFocusedLabelStyle
+		focusedRow = rowIndex
 	}
+	mlockLabel = mlockLabel.Width(labelWidth)
+	mlockValue := "false"
+	if m.form.mlock {
+		mlockValue = "true"
+	}
+	selectedRows = append(selectedRows, tui_form.FitStyledLine(fmt.Sprintf("%s %s", mlockLabel.Render(tui_form.TruncateText("MLock:", labelWidth)), mlockValue), rowWidth))
+	rowIndex++
 
-	appendSectionTitle("Cache & Compute")
-	for _, idx := range []int{fieldBatchSize, fieldUBatchSize, fieldRepeatLastN} {
-		appendFieldRow(idx)
-	}
-	appendBoolRow("CPU Only", m.form.cpuOnly, m.form.focus == len(m.form.fields)+1, "")
-	if !m.form.cpuOnly {
-		appendFieldRow(fieldGPULayers)
-		selectedRows = append(selectedRows, fitStyledLine(m.renderLayerDistRow(labelWidth, rowWidth), rowWidth))
-		if m.form.focus == len(m.form.fields)+3 {
-			focusedRow = rowIndex
-		}
-		rowIndex++
-	}
-	for _, idx := range []int{fieldMMap, fieldKVOffload} {
-		appendFieldRow(idx)
-	}
-
-	appendSectionTitle("Server")
-	for _, idx := range []int{fieldParallelSlots, fieldContBatching, fieldCachePrompt, fieldCacheRAM} {
-		appendFieldRow(idx)
-	}
-
-	appendSectionTitle("Reasoning")
-	for _, idx := range []int{fieldReasoning, fieldReasoningBudget, fieldReasoningFormat} {
-		appendFieldRow(idx)
-	}
-
-	appendSectionTitle("Advanced")
-	for _, idx := range []int{fieldCacheK, fieldCacheV, fieldExtraArgs} {
-		appendFieldRow(idx)
-	}
-
-	appendBoolRow("MLock", m.form.mlock, m.form.focus == len(m.form.fields)+2, "")
 	selectedRows = append(selectedRows, "")
 	rowIndex++
 	saveStyle := profileStyle
@@ -170,7 +135,7 @@ func (m Model) viewForm() string {
 		saveStyle = selectedProfileStyle
 		focusedRow = rowIndex
 	}
-	selectedRows = append(selectedRows, fitStyledLine(saveStyle.Render("[ Save ]"), rowWidth))
+	selectedRows = append(selectedRows, tui_form.FitStyledLine(saveStyle.Render("[ Save ]"), rowWidth))
 
 	start := 0
 	if len(selectedRows) > visibleRows {
@@ -191,40 +156,42 @@ func (m Model) viewForm() string {
 		body.WriteString("\n")
 	}
 	if len(selectedRows) > visibleRows {
-		body.WriteString(helpStyle.Render("up/down/wasd scroll  enter activate"))
+		body.WriteString(helpStyle.Render("↑↓/wasd scroll  enter activate"))
 		body.WriteString("\n")
 	}
 
-	paneHeight := m.formPaneHeight()
+	paneHeight := tui_form.FormPaneHeight(m.height)
 	leftPane := paneStyle.Width(leftWidth).Height(paneHeight).Render(body.String())
+	// lipgloss.Height includes the 2 border rows; subtract them so that the
+	// right pane's .Height() sets content height, making total heights match.
 	actualHeight := lipgloss.Height(leftPane) - 2
 	rightPane := strings.Builder{}
 	rightPane.WriteString(sectionTitleStyle.Render("Details"))
 	rightPane.WriteString("\n\n")
-	rightPane.WriteString(detailMutedStyle.Render(truncateText(m.formDescriptionTitle(), formDescriptionTextWidth(detailsWidth))))
+	rightPane.WriteString(detailMutedStyle.Render(tui_form.TruncateText(tui_form.DescriptionTitle(m.form.focus, len(m.form.fields)), tui_form.FormDescriptionTextWidth(detailsWidth))))
 	rightPane.WriteString("\n\n")
 	descReserved := 4
-	if currentFlag := m.form.focusedFlag(); currentFlag != "" {
-		m.form.flagInput.Width = formDescriptionTextWidth(detailsWidth) - 7
+	if currentFlag := tui_form.FocusedFlag(m.form.focus, len(m.form.fields)); currentFlag != "" {
+		m.form.flagInput.Width = tui_form.FormDescriptionTextWidth(detailsWidth) - 7
 		if m.form.flagFocus {
 			rightPane.WriteString(formFocusedLabelStyle.Width(0).Render("Flag:"))
 			rightPane.WriteString(" ")
 			rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
-			rightPane.WriteString(helpStyle.Render("left/back  enter confirm"))
+			rightPane.WriteString(helpStyle.Render("← back  enter confirm"))
 		} else {
 			rightPane.WriteString(detailMutedStyle.Render("Flag:"))
 			rightPane.WriteString(" ")
 			rightPane.WriteString(m.form.flagInput.View())
 			rightPane.WriteString("\n")
-			rightPane.WriteString(helpStyle.Render("d to override"))
+			rightPane.WriteString(helpStyle.Render("→/d to override"))
 		}
 		rightPane.WriteString("\n\n")
 		descReserved = 7
 	}
 	if m.form.focus == fieldExtraArgs {
 		if val := m.form.fields[fieldExtraArgs].input.Value(); val != "" {
-			valLines := wrapWords(val, formDescriptionTextWidth(detailsWidth))
+			valLines := tui_form.WrapWords(val, tui_form.FormDescriptionTextWidth(detailsWidth))
 			rightPane.WriteString(detailMutedStyle.Render("Args:"))
 			rightPane.WriteString("\n")
 			for _, line := range valLines {
@@ -243,18 +210,19 @@ func (m Model) viewForm() string {
 		b.WriteString(errorStyle.Render("error: " + m.form.err))
 		b.WriteString("\n")
 	}
-	b.WriteString(helpStyle.Render("up/down/wasd navigate  enter edit/save  esc cancel"))
+	b.WriteString(helpStyle.Render("↑↓/wasd navigate  enter edit/save  esc cancel"))
 	b.WriteString("  ")
 	b.WriteString(helpStyle.Render("x import args"))
-	if m.form.focusedFlag() != "" && !m.form.flagFocus {
+	if tui_form.FocusedFlag(m.form.focus, len(m.form.fields)) != "" && !m.form.flagFocus {
 		b.WriteString("  ")
-		b.WriteString(helpStyle.Render("d override flag"))
+		b.WriteString(helpStyle.Render("→/d override flag"))
 	}
 	return b.String()
 }
+
 func (m Model) viewFormImportModal() string {
-	_, detailsWidth := m.formPaneWidths()
-	inputWidth := max(24, formDescriptionTextWidth(detailsWidth)-2)
+	_, detailsWidth := tui_form.FormPaneWidths(m.width)
+	inputWidth := max(24, tui_form.FormDescriptionTextWidth(detailsWidth)-2)
 	m.form.importInput.Width = inputWidth
 
 	var body strings.Builder
@@ -272,147 +240,21 @@ func (m Model) viewFormImportModal() string {
 	return modalStyle.Render(body.String())
 }
 
-func (m Model) formDescriptionTitle() string {
-	if m.form.focus < len(m.form.fields) {
-		return m.form.fields[m.form.focus].label
-	}
-	switch m.form.focus - len(m.form.fields) {
-	case 0:
-		return "Flash Attention"
-	case 1:
-		return "CPU Only"
-	case 2:
-		return "MLock"
-	case 3:
-		return "Layer Split"
-	}
-	return "Save Profile"
-}
-
-func (m Model) formDescriptionText() string {
-	if m.form.focus < len(m.form.fields) {
-		return formFieldDescription(m.form.focus)
-	}
-	switch m.form.focus - len(m.form.fields) {
-	case 0:
-		return formFieldDescription(len(formLabels))
-	case 1:
-		return formFieldDescription(len(formLabels) + 1)
-	case 2:
-		return formFieldDescription(len(formLabels) + 2)
-	case 3:
-		return formFieldDescription(len(formLabels) + 3)
-	}
-	return formFieldDescription(len(formLabels) + 4)
-}
-
 func (m Model) formDescriptionLines(width int) []string {
-	return wrapWords(m.formDescriptionText(), formDescriptionTextWidth(width))
+	return tui_form.WrapWords(tui_form.DescriptionText(m.form.focus, len(m.form.fields)), tui_form.FormDescriptionTextWidth(width))
 }
 
 func (m Model) formDescriptionLineCount() int {
-	_, detailsWidth := m.formPaneWidths()
+	_, detailsWidth := tui_form.FormPaneWidths(m.width)
 	return len(m.formDescriptionLines(detailsWidth))
 }
 
 func (m Model) formDescriptionVisibleLines() int {
-	return max(2, m.formVisibleRows()-3)
+	return max(2, tui_form.FormVisibleRows(tui_form.FormPaneHeight(m.height))-3)
 }
 
 func (m Model) renderFormDescription(width, visible int) string {
-	return strings.Join(descriptionWindow(m.formDescriptionLines(width), visible, m.form.descScroll), "\n")
-}
-
-func (m Model) formPaneWidths() (leftWidth, detailsWidth int) {
-	termWidth := m.width
-	if termWidth <= 0 {
-		termWidth = fallbackWidth
-	}
-
-	available := termWidth - 4 // two bordered panes side-by-side
-	if available < formMinLeftWidth+formMinDetailsWidth {
-		available = formMinLeftWidth + formMinDetailsWidth
-	}
-
-	detailsWidth = formDefaultDetailsWidth
-	leftWidth = formDefaultLeftWidth
-	if leftWidth+detailsWidth > available {
-		detailsWidth = max(formMinDetailsWidth, min(formDefaultDetailsWidth, available/3))
-		leftWidth = available - detailsWidth
-		if leftWidth < formMinLeftWidth {
-			leftWidth = formMinLeftWidth
-			detailsWidth = max(formMinDetailsWidth, available-leftWidth)
-		}
-	}
-	return leftWidth, detailsWidth
-}
-
-func formDescriptionTextWidth(paneWidth int) int {
-	return max(8, paneWidth-2)
-}
-
-func formRowTextWidth(paneWidth int) int {
-	return max(8, paneWidth-2)
-}
-
-func truncateText(s string, width int) string {
-	if width <= 0 || len(s) <= width {
-		return s
-	}
-	if width <= 1 {
-		return s[:width]
-	}
-	return s[:width-1] + "."
-}
-
-func fitStyledLine(s string, width int) string {
-	if width <= 0 || lipgloss.Width(s) <= width {
-		return s
-	}
-	return truncateText(s, width)
-}
-
-func descriptionWindow(lines []string, visible, offset int) []string {
-	if visible <= 0 {
-		return nil
-	}
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-
-	maxOffset := max(0, len(lines)-visible)
-	offset = max(0, min(offset, maxOffset))
-
-	window := make([]string, 0, visible)
-	for i := offset; i < min(offset+visible, len(lines)); i++ {
-		window = append(window, lines[i])
-	}
-	for len(window) < visible {
-		window = append(window, "")
-	}
-	return window
-}
-
-func wrapWords(text string, width int) []string {
-	if width <= 0 {
-		return []string{text}
-	}
-
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return []string{""}
-	}
-
-	lines := []string{words[0]}
-	for _, word := range words[1:] {
-		last := len(lines) - 1
-		if len(lines[last])+1+len(word) <= width {
-			lines[last] += " " + word
-			continue
-		}
-		lines = append(lines, word)
-	}
-	return lines
+	return strings.Join(tui_form.DescriptionWindow(m.formDescriptionLines(width), visible, m.form.descScroll), "\n")
 }
 
 func (m Model) renderLayerDistRow(labelWidth, rowWidth int) string {
@@ -423,7 +265,7 @@ func (m Model) renderLayerDistRow(labelWidth, rowWidth int) string {
 	}
 	lbl = lbl.Width(labelWidth)
 
-	total := m.formSliderTotal()
+	total := tui_form.FormSliderTotal(m.form.fields[fieldGPULayers].input.Value())
 	client := m.form.rpcClientLayers
 	if total > 0 && client > total {
 		client = total
@@ -432,11 +274,11 @@ func (m Model) renderLayerDistRow(labelWidth, rowWidth int) string {
 	if total > 0 {
 		server = total - client
 	}
-	active := m.formRPCActive() && total > 0 && !m.form.cpuOnly
+	active := tui_form.FormRPCActive(m.form.fields[fieldRPCEnabled].input.Value(), m.cfg.RPCEnabled) && total > 0 && !m.form.cpuOnly
 
 	if !active {
 		hint := "enable RPC + GPU Layers to adjust"
-		return fmt.Sprintf("%s %s", lbl.Render(truncateText("Layer Split:", labelWidth)), detailMutedStyle.Render(hint))
+		return fmt.Sprintf("%s %s", lbl.Render(tui_form.TruncateText("Layer Split:", labelWidth)), detailMutedStyle.Render(hint))
 	}
 
 	const barWidth = 24
@@ -463,5 +305,5 @@ func (m Model) renderLayerDistRow(labelWidth, rowWidth int) string {
 		remoteStyle.Render(fmt.Sprintf("%d", server)) +
 		detailMutedStyle.Render(fmt.Sprintf("/%d", total))
 
-	return fmt.Sprintf("%s %s%s%s %s", lbl.Render(truncateText("Layer Split:", labelWidth)), left, bar, right, counts)
+	return fmt.Sprintf("%s %s%s%s %s", lbl.Render(tui_form.TruncateText("Layer Split:", labelWidth)), left, bar, right, counts)
 }
