@@ -30,6 +30,7 @@ const terminalLines = [
 const typedTerminalLines = ref(terminalLines.map(() => ''))
 const terminalFinished = ref(false)
 const annotationVisible = ref(false)
+const terminalPanel = ref(null)
 let terminalTimer = null
 let annotationTimer = null
 const heroCards = [
@@ -311,6 +312,17 @@ const startIntroMotion = () => {
 
 let stopIntroMotion = null
 let cleanupHero = null
+let terminalObserver = null
+let terminalTypingStarted = false
+
+const startTerminalTypingOnce = () => {
+  if (terminalTypingStarted) {
+    return
+  }
+
+  terminalTypingStarted = true
+  startTerminalTyping()
+}
 
 onMounted(() => {
   const observer = new IntersectionObserver((entries) => {
@@ -324,17 +336,34 @@ onMounted(() => {
 
   document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
 
+  terminalObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) {
+        return
+      }
+
+      startTerminalTypingOnce()
+      terminalObserver?.unobserve(entry.target)
+    })
+  }, { threshold: .25, rootMargin: '0px 0px -10% 0px' })
+
+  if (terminalPanel.value) {
+    terminalObserver.observe(terminalPanel.value)
+  }
+
   stopIntroMotion = startIntroMotion()
-  startTerminalTyping()
   cleanupHero = () => {
     clearHoverReset()
     stopTerminalTyping()
     stopAnnotationTimer()
+    terminalObserver?.disconnect()
+    terminalObserver = null
     if (stopIntroMotion) {
       stopIntroMotion()
       stopIntroMotion = null
     }
     observer.disconnect()
+    terminalTypingStarted = false
   }
 })
 
@@ -479,7 +508,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="terminal-panel reveal reveal-delay-1" aria-label="Example llama-server command">
+      <div ref="terminalPanel" class="terminal-panel reveal reveal-delay-1" aria-label="Example llama-server command">
         <div class="terminal-topbar">
           <span class="terminal-dot red"></span>
           <span class="terminal-dot yellow"></span>
