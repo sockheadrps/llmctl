@@ -214,64 +214,78 @@ defaults), but `tuiDefaultProfile` adds TUI-specific port selection logic.
 
 ## Section 4: Introduce a `Controller` Interface
 
-Right now `internal/tui` imports 8 internal packages directly. Adding an
-interface lets the TUI depend on a contract instead of concrete packages —
-critical before splitting the package.
+Right now `internal/tui` imports 8 internal packages directly. Adding a
+`Controller` struct lets the TUI depend on a contract instead of concrete
+packages — critical before splitting the package.
 
-- [ ] Define `internal/tui/controller.go` with an interface like:
-  ```go
-  type Controller interface {
-      // Models/profiles
-      Models() []models.Model
-      Profiles(modelKey string) []models.Profile
-      Running() []models.Running
+**Implementation approach:** Replace all direct uses of `m.mgr`, `process.`,
+`runtime.`, and `statusserver.` with calls through a single `Controller`
+wrapper. The `Controller` wraps `runtime.Manager`, process helpers, and
+statusserver types, giving the TUI ONE dependency instead of three.
 
-      // Lifecycle
-      Start(modelKey, profileKey string) error
-      Stop(instanceID string) error
-      Restart(instanceID string) error
+### Phase 4.1: Extend Controller Surface Area
 
-      // Config
-      Config() *config.Config
-      SaveConfig(cfg *config.Config) error
+- [x] Controller struct already exists (`internal/tui/controller/controller.go`)
+  with: `ListRunning`, `FindRunning`, `StartModel`, `StopModel`,
+  `RPCServerStatus`, `StartRPCServer`, `StopRPCServer`, `HasRPCStateFile`,
+  `ClearRPCServer`, `TailLog`, `BuildProfileArgs`, `GetRSSMiB`,
+  `ParseModelLoadSlices`, `LogPath`, `RPCServerLogPath`, `PollRemoteStatus`
+- [ ] Add `RecentRuns()` — expose via `runtime.Manager` recent-runs storage
+- [ ] Add `NewStatusServer()` / `NewPublisher()` — wrap `statusserver.New*`
+  factory calls so TUI never imports statusserver directly
+- [ ] Add `Config()` / `UpdateConfig()` — manage config read/write through
+  Controller instead of TUI writing directly
+- [ ] Add `StatusServer()` accessor if TUI needs `*statusserver.Server` as
+  a field (e.g. to publish snapshots) — document WHY as exception
+- [ ] Write tests for all new methods in `controller_test.go`
 
-      // Diagnostics
-      Health() HealthSnapshot
-      RecentRuns() []models.RecentRun
-      // ... extend as needed
-  }
-  ```
-- [ ] Implement the interface in a new struct (likely `*runtime.Manager` or a
-  thin `tui.ControllerImpl` wrapper). Wire it in through `tui.NewModel(...)`.
-- [ ] Refactor the TUI's hot paths to call `m.ctrl.Method()` instead of
-  reaching into `process`, `runtime`, `statusserver`, etc. directly.
-- [ ] Remove direct imports of `process`, `runtime`, `statusserver` from
-  `internal/tui` where the interface covers them. Some imports may remain
-  for message types — document which and why.
+### Phase 4.2: Wire Controller into TUI (one file per commit)
 
-Verification:
-- [x] `go build ./...` clean
-- [ ] `go test ./...` matches baseline
-- [ ] **Section -1 contract check:** `TestOverviewPageDimensions` (from Section -1)
-  MUST still pass unchanged. If the tick handler needs to update its assertion,
-  the refactor changed behavior — stop and investigate the exact line that changed.
-- [ ] **Controller acceptance test passes:** The `TestControllerImpl...` tests
-  written in Section -1 (`Start`, `Stop`, `Models`, `Config` round-trip) MUST
-  pass against the new `ControllerImpl`. These ARE the verification tests for
-  this section — writing them *before* Section 4 was the point.
-- [ ] **Regression sweep over existing TUI tests:** The following existing tests
-  exercise tick-driven behavior and must still pass with identical assertions:
-      `TestTickPublishesStatusOutsideMainScreen`
-      `TestStatusServerRunsWithoutRPC`
-      `TestRPCClientModePublishesToRemoteStatusServer`
-  If any of these need their assertion logic adjusted (not just the method they
-  call through), the Controller interface is too leaky.
-- [ ] Import check: `go list -deps ./internal/tui/` should no longer include
-  `internal/process`, `internal/statusserver`, or `internal/runtime` (or only
-  for pure message-type definitions — document any exceptions in `controller.go`).
+- [ ] **model.go** (~29 call sites): rename `m.mgr` to `m.ctrl`, replace
+  `m.mgr.X()` with `m.ctrl.X()`, replace `process.X()` / `runtime.X()` /
+  `statusserver.X()` with Controller methods
+- [ ] **model_rows.go** (1 site): `m.mgr.RecentRuns()` → `m.ctrl.RecentRuns()`
+- [ ] **model_checks.go** (1 site): `process.RSSMiB()` → `m.ctrl.GetRSSMiB()`
+- [ ] **model_status.go** (1 site): `statusserver.NewServer()` → `m.ctrl.NewStatusServer()`
+- [ ] **start.go** (1 site): `m.mgr.Start()` → `m.ctrl.StartModel()`
+- [ ] **stop.go** (1 site): `m.mgr.Stop()` → `m.ctrl.StopModel()`
+- [ ] **rpc_server_action.go** (1 site): `m.mgr.StartRPCServer()` → `m.ctrl.StartRPCServer()`
+- [ ] **logs.go** (2 sites): `runtime.LogPath()` / `runtime.RPCServerLogPath()` → `m.ctrl.X()`
+- [ ] **view_rpc.go**, **view_overview.go**, **view_overview_telemetry.go** (keep type references to `statusserver.Status` etc.)
+- [ ] **update_nav.go**: `suggestPort()` remains TUI-local (it owns port semantics)
 
-Done when: Every test in Section -1 passes against the new Controller without
-changing test code, and the three named tick-related tests pass unchanged.
+Each step: build ✓, tests ✓, commit ✓.
+
+### Phase 4.3: Remove Direct Dependencies
+
+- [ ] Remove `runtime` import from all TUI files (use Controller only)
+- [ ] Remove `process` import from all TUI files (use Controller only)
+- [ ] Remove `statusserver` import where possible; keep only for type references
+  (e.g. `statusserver.Status`, `statusserver.GPUDeviceInfo`). Document the
+  exceptions in `controller.go`
+- [ ] Update `cmd/tui.go` to construct a Controller and pass it into `tui.New(...)`
+
+### Verification:
+
+- [ ] `go build ./...` clean
+- [ ] `go test ./...` matches baseline (all 8 pkgs still pass)
+- [ ] `go vet ./internal/tui/... ./internal/tui/controller/...` clean
+- [ ] `go list -deps ./internal/tui/` should no longer include `internal/process`
+  or `internal/runtime` directly — only via `internal/tui/controller`
+- [ ] **Regression sweep:** existing TUI tests (`TestTickPublishesStatus*`,
+  `TestStatusServerRunsWithoutRPC`, `TestRPCClientModePublishesTo*`) pass
+  unchanged — proving Controller is a transparent pass-through
+- [ ] Manual smoke: `go run main.go tui` — overview renders, start/stop works,
+  logs open, settings save
+
+### Completion Criteria:
+
+1. `internal/tui/` imports only `controller` for process/runtime/statusserver concerns
+2. Direct `process.`, `runtime.`, `statusserver.New*` calls eliminated from TUI
+3. Controller has >80% method coverage via its own test suite
+4. All existing TUI tests still pass without assertion changes
+
+Done when: TUI is 100% decoupled from runtime/process/statusserver packages.
 
 ---
 
