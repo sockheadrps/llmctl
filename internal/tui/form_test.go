@@ -276,6 +276,29 @@ func TestFieldDefaultFlagReturnsCorrectFlags(t *testing.T) {
 	}
 }
 
+func TestFlashAttentionIsRenderedAndNavigable(t *testing.T) {
+	m := testNewFormModel(t)
+	m.width = 100
+	m.height = 60
+
+	got := m.viewForm()
+	if !strings.Contains(got, "Flash Attention") {
+		t.Fatal("expected Flash Attention row to be rendered in the form")
+	}
+
+	order := tui_form.FormNavOrder(len(m.form.fields))
+	found := false
+	for _, idx := range order {
+		if idx == len(m.form.fields) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected Flash Attention toggle to be present in navigation order")
+	}
+}
+
 func TestRightArrowEntersFlagFocusOnFieldWithFlag(t *testing.T) {
 	m := testNewFormModel(t)
 	m.form.focus = fieldPort
@@ -301,6 +324,42 @@ func TestRightArrowDoesNotEnterFlagFocusOnFieldWithNoFlag(t *testing.T) {
 
 	if got.form.flagFocus {
 		t.Fatal("expected no flagFocus after right arrow on Notes (no CLI flag)")
+	}
+}
+
+func TestEnterBeginsEditingOnRpcEnabledField(t *testing.T) {
+	m := testNewFormModel(t)
+	m.form.focus = fieldRPCEnabled
+
+	next, _ := m.updateForm(tea.KeyMsg{Type: tea.KeyEnter})
+	got := next.(Model)
+
+	if got.form.navigating {
+		t.Fatal("expected enter on RPC Enabled to switch into edit mode")
+	}
+}
+
+func TestCPUOnlyKeepsGpuLayersVisibleInView(t *testing.T) {
+	m := testNewFormModel(t)
+	m.width = 100
+	m.height = 60
+	m.form.cpuOnly = true
+
+	got := m.viewForm()
+	if !strings.Contains(got, "GPU Layers") {
+		t.Fatal("expected GPU Layers row to remain visible when CPU Only is enabled")
+	}
+}
+
+func TestNavigateFromRepeatLastNToCPUOnly(t *testing.T) {
+	m := testNewFormModel(t)
+	m.form.focus = fieldRepeatLastN
+
+	next, _ := m.updateForm(tea.KeyMsg{Type: tea.KeyDown})
+	got := next.(Model)
+
+	if got.form.focus != fieldGPULayers {
+		t.Fatalf("expected focus to move to GPU Layers, got %d", got.form.focus)
 	}
 }
 
