@@ -405,13 +405,23 @@ func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, e
 	if err != nil {
 		return nil, err
 	}
-	if cached, ok := m.modelLoadCache[logPath]; ok && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
-		out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
-		copy(out, cached.slices)
-		if len(out) == 0 {
-			return nil, nil
+	if cached, ok := m.modelLoadCache[logPath]; ok {
+		// Once we have a non-empty slice summary, the load split is stable for
+		// the lifetime of this log file. Appended runtime tokens/events should not
+		// trigger a full rescan on every render/tick.
+		if cached.complete && info.Size() >= cached.size {
+			out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
+			copy(out, cached.slices)
+			return out, nil
 		}
-		return out, nil
+		if !cached.complete && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
+			if len(cached.slices) == 0 {
+				return nil, nil
+			}
+			out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
+			copy(out, cached.slices)
+			return out, nil
+		}
 	}
 
 	slices, err := process.ParseModelLoadSlices(logPath)
@@ -423,16 +433,18 @@ func (m *Model) modelLoadSlices(logPath string) ([]statusserver.GPUDeviceInfo, e
 	}
 	if len(slices) == 0 {
 		m.modelLoadCache[logPath] = cachedModelLoad{
-			modTime: info.ModTime(),
-			size:    info.Size(),
-			slices:  nil,
+			modTime:  info.ModTime(),
+			size:     info.Size(),
+			slices:   nil,
+			complete: false,
 		}
 		return nil, nil
 	}
 	cached := cachedModelLoad{
-		modTime: info.ModTime(),
-		size:    info.Size(),
-		slices: append([]statusserver.GPUDeviceInfo(nil), slices...),
+		modTime:  info.ModTime(),
+		size:     info.Size(),
+		slices:   append([]statusserver.GPUDeviceInfo(nil), slices...),
+		complete: true,
 	}
 	m.modelLoadCache[logPath] = cached
 	out := make([]statusserver.GPUDeviceInfo, len(cached.slices))
