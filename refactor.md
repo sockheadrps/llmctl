@@ -114,37 +114,56 @@ Done when: every file in `internal/tui/` fits one of the prefix rules in
 
 ## Section 2: `internal/util` Audit
 
-`internal/util` currently holds 6 files mixing formatting, networking, path
-helpers, and model-domain helpers. Move domain-specific ones where they belong
-so `util` is strictly generic.
+The file `internal/util/models.go` is misnamed — it contains only
+filesystem helpers (`ExpandHome`, `ScanGGUF`), no model types. Split it
+correctly so `util` stays a generic leaf package:
 
-Expected moves (verify by reading first — contents drive the decision):
-- [ ] `internal/util/models.go` → `internal/models/` (likely belongs there;
-  model-domain helpers should live next to model types). Update all imports.
-- [ ] `internal/util/models_test.go` → moved along with `models.go`
-- [ ] `internal/util/format.go` → stays in `util` (generic formatter)
-- [ ] `internal/util/net.go`, `util/port.go` → stay in `util` (generic network)
-- [ ] `internal/util/paths.go` → inspect; may belong in `internal/config` if
-  it's exclusively about config paths, otherwise stays in `util`
-- [ ] `internal/util/pointers.go` → stays in `util` (generic helper)
+- [ ] Read `internal/util/models.go` — confirm actual contents:
+      `ExpandHome` (generic path expansion) and `ScanGGUF` (lists `.gguf` files).
+- [ ] Move `ScanGGUF` → `internal/models/scan.go`. Rationale: GGUF is a
+      model-file extension; this is model-domain knowledge, not generic.
+      Update the single caller: `internal/tui/picker.go`.
+- [ ] Move `ExpandHome` → `internal/util/paths.go` (absorb into the existing
+      path-helpers file). No callers need import changes since package stays
+      `util`.
+- [ ] Delete `internal/util/models.go` (now empty).
+- [ ] Move `TestScanGGUF*` / add a new `TestScanGGUF` in
+      `internal/models/scan_test.go` (use `t.TempDir()` to create a few
+      `.gguf` files and a non-gguf file, verify only the gguf ones are returned
+      sorted alphabetically).
+- [ ] Move `TestExpandHomeSupportsEnvVars` into `internal/util/paths_test.go`
+      (or create it if absent). Function name unchanged; test unchanged.
+- [ ] Delete `internal/util/models_test.go` (contents migrated).
+
+Files expected to still exist after Section 2 in `internal/util/`:
+- `paths.go` (now with `ExpandHome` appended)
+- `format.go` (unchanged)
+- `net.go` (unchanged)
+- `pointers.go` (unchanged)
+- `port.go` (unchanged)
+
+New file: `internal/models/scan.go` (+ `scan_test.go`).
 
 Verification (structural + tests):
 - [ ] `go build ./...` clean
-- [ ] `go test ./internal/util/...` — still passes (util's own tests moved
-      with the code where applicable)
-- [ ] `go test ./internal/models/...` — existing `models_test.go` still passes
-      (if any tests moved here they must continue to pass)
-- [ ] `go test ./internal/process/...` — `TestBuildArgs`,
-      `TestBuildStartArgs*`, `TestParseProfileArgs*` still pass — these
-      exercise util's arg-formatting helpers that may have moved
+- [ ] `go test ./internal/util/...` — still passes
+- [ ] `go test ./internal/models/...` — `TestScanGGUF` passes; all
+      pre-existing process tests that imported util still pass
+  (`TestBuildArgs`, `TestBuildStartArgs*`, `TestParseProfileArgs*`)
+- [ ] `go vet ./internal/util/ ./internal/models/` — clean
 - [ ] `internal/util/` has no import of `internal/models`, `internal/process`,
       or any sibling internal package (dependency must flow one way):
       `go list -f '{{.Imports}}' ./internal/util/` should show only stdlib
       and third-party
+- [ ] `internal/models/` imports only standard library (no util dependency
+      introduced; `ScanGGUF` is pure `os` + `path/filepath`)
+- [ ] `grep -n "util.ExpandHome\|util.ScanGGUF" -r --include="*.go" internal/ cmd/`
+      — every call site updated if anything moved packages (expected: only
+      `ExpandHome` callers stay `util.ExpandHome`; `ScanGGUF` callers change
+      from `util.ScanGGUF` → `models.ScanGGUF`)
 
-If `models.go` tests were in `util/models_test.go` and moved to
-`internal/models/models_test.go`, the new test file must contain a test for
-EVERY exported symbol that was in the moved file — no coverage drop.
+If any test needs its assertion logic adjusted (not just its import path)
+during this section, the behavior changed — stop and investigate.
 
 ---
 

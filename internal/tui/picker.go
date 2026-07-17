@@ -10,7 +10,6 @@ import (
 
 	"github.com/sockheadrps/llmctl/internal/config"
 	"github.com/sockheadrps/llmctl/internal/models"
-	"github.com/sockheadrps/llmctl/internal/util"
 )
 
 // pickerState backs the "Add Model" screen: a list of .gguf files found
@@ -48,7 +47,7 @@ func (m Model) openPicker() (tea.Model, tea.Cmd) {
 
 	var files, unreadable []string
 	for _, dir := range dirs {
-		found, err := util.ScanGGUF(dir)
+		found, err := models.ScanGGUF(dir)
 		if err != nil {
 			unreadable = append(unreadable, dir)
 			continue

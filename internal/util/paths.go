@@ -1,10 +1,12 @@
 // Package util holds small, dependency-free helpers shared across llmctl
-// packages: filesystem locations and network port probing.
+// packages: filesystem locations, path expansion, and network port probing.
 package util
 
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // HomeDir returns the llmctl state directory, ~/.llmctl, creating it if needed.
@@ -96,4 +98,33 @@ func StatusHistoryFile() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, "status_history.json"), nil
+}
+
+var percentEnvPattern = regexp.MustCompile(`%([A-Za-z0-9_]+)%`)
+
+// ExpandHome replaces a leading "~" in path with the user's home directory
+// and expands environment variables like ${VAR} or %VAR%.
+func ExpandHome(path string) (string, error) {
+	if path == "" {
+		return path, nil
+	}
+
+	expanded := os.ExpandEnv(path)
+	expanded = percentEnvPattern.ReplaceAllStringFunc(expanded, func(match string) string {
+		key := strings.Trim(match, "%")
+		if value, ok := os.LookupEnv(key); ok {
+			return value
+		}
+		return match
+	})
+
+	if expanded == "" || expanded[0] != '~' {
+		return expanded, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, strings.TrimPrefix(expanded, "~")), nil
 }
