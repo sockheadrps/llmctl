@@ -1,8 +1,155 @@
 <script setup>
 import { withBase } from 'vitepress'
-import { onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const to = (path) => withBase(path)
+const activeHero = ref('landing')
+const heroCards = [
+  {
+    id: 'landing',
+    src: '/assets/screenshots/newlanding.png',
+    alt: 'llmctl TUI showing models, profiles, running services, and status panes',
+  },
+  {
+    id: 'dashboard',
+    src: '/assets/screenshots/dashboard.png',
+    alt: 'llmctl dashboard showing active models, source trends, and GPU utilization',
+  },
+]
+
+const angle = 12
+const remap = (value, oldMax, newMax) => {
+  const newValue = ((value + oldMax) * (newMax * 2)) / (oldMax * 2) - newMax
+  return Math.min(Math.max(newValue, -newMax), newMax)
+}
+
+const toggleHeroFront = (heroId) => {
+  if (activeHero.value === heroId) {
+    activeHero.value = heroId === 'landing' ? 'dashboard' : 'landing'
+    return
+  }
+
+  activeHero.value = heroId
+}
+
+const setCardPose = (cardEl, rotateX, rotateY) => {
+  cardEl.style.setProperty('--rotate-x', `${rotateX}deg`)
+  cardEl.style.setProperty('--rotate-y', `${rotateY}deg`)
+  cardEl.style.setProperty('--lift', `${Math.abs(rotateX) * 0.08 + Math.abs(rotateY) * 0.06}px`)
+  cardEl.style.setProperty('--glow-x', `${50 + rotateY * 1.4}%`)
+  cardEl.style.setProperty('--glow-y', `${50 - rotateX * 1.4}%`)
+}
+
+const resetCardPose = (cardEl) => {
+  cardEl.style.setProperty('--rotate-x', '0deg')
+  cardEl.style.setProperty('--rotate-y', '0deg')
+  cardEl.style.setProperty('--lift', '0px')
+  cardEl.style.setProperty('--glow-x', '50%')
+  cardEl.style.setProperty('--glow-y', '50%')
+}
+
+const handleCardMove = (heroId, event) => {
+  if (stopIntroMotion) {
+    stopIntroMotion()
+    stopIntroMotion = null
+  }
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return
+  }
+
+  const cardEl = event.currentTarget?.closest('.hero-stack-card')
+  if (!cardEl) {
+    return
+  }
+
+  if (activeHero.value !== heroId) {
+    return
+  }
+
+  const rect = cardEl.getBoundingClientRect()
+  const x = event.clientX - (rect.left + rect.width / 2)
+  const y = event.clientY - (rect.top + rect.height / 2)
+  setCardPose(cardEl, remap(y, rect.height / 2, angle) * -1, remap(x, rect.width / 2, angle))
+}
+
+const handleCardLeave = (heroId, event) => {
+  const cardEl = event.currentTarget?.closest('.hero-stack-card')
+  if (!cardEl) {
+    return
+  }
+
+  resetCardPose(cardEl)
+
+  if (activeHero.value === heroId) {
+    if (stopIntroMotion) {
+      stopIntroMotion()
+    }
+    stopIntroMotion = startIntroMotion()
+  }
+}
+
+const getFrontCardFrame = () => document.querySelector('.hero-stack-card.is-front .hero-card-frame')
+
+const startIntroMotion = () => {
+  const frame = getFrontCardFrame()
+  if (!frame || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return () => {}
+  }
+
+  let frameId = null
+  let stopped = false
+  let start = 0
+  const duration = 1400
+  const radius = 6
+  const frequency = 2.2
+
+  const tick = (now) => {
+    if (stopped) {
+      return
+    }
+
+    if (!start) {
+      start = now
+    }
+
+    const progress = Math.min((now - start) / duration, 1)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    const angle = now / 1000 * frequency * Math.PI * 2
+    const rotateX = Math.sin(angle) * radius * (1 - eased)
+    const rotateY = Math.cos(angle) * radius * (1 - eased)
+
+    setCardPose(frame.closest('.hero-stack-card'), rotateX, rotateY)
+
+    if (progress < 1) {
+      frameId = window.requestAnimationFrame(tick)
+      return
+    }
+
+    resetCardPose(frame.closest('.hero-stack-card'))
+  }
+
+  frameId = window.requestAnimationFrame(tick)
+
+  const stop = () => {
+    stopped = true
+    if (frameId !== null) {
+      window.cancelAnimationFrame(frameId)
+    }
+    resetCardPose(frame.closest('.hero-stack-card'))
+  }
+
+  const stopOnUser = () => stop()
+  frame.addEventListener('pointermove', stopOnUser, { once: true, passive: true })
+  frame.addEventListener('pointerdown', stopOnUser, { once: true })
+  frame.addEventListener('click', stopOnUser, { once: true })
+  frame.addEventListener('pointerleave', stopOnUser, { once: true })
+
+  return stop
+}
+
+let stopIntroMotion = null
+let cleanupHero = null
 
 onMounted(() => {
   const observer = new IntersectionObserver((entries) => {
@@ -15,6 +162,19 @@ onMounted(() => {
   }, { threshold: .15, rootMargin: '0px 0px -40px 0px' })
 
   document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
+
+  stopIntroMotion = startIntroMotion()
+  cleanupHero = () => {
+    if (stopIntroMotion) {
+      stopIntroMotion()
+      stopIntroMotion = null
+    }
+    observer.disconnect()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (cleanupHero) cleanupHero()
 })
 </script>
 
@@ -46,12 +206,43 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="hero-media">
-        <img
-          :src="to('/assets/screenshots/landingshowcase.png')"
-          alt="llmctl TUI showing models, profiles, running services, and status panes"
-          loading="eager"
-        />
+      <div
+        class="hero-media hero-stack"
+        :style="{ '--hero-url': `url(${to('/assets/screenshots/newlanding.png')})` }"
+      >
+        <button
+          v-for="(card, index) in heroCards"
+          :key="card.id"
+          type="button"
+          class="hero-stack-card"
+          :data-hero-id="card.id"
+          :class="{
+            'is-front': activeHero === card.id,
+            'is-back': activeHero !== card.id,
+            'is-landscape': index === 0,
+            'is-dashboard': index === 1,
+          }"
+          :aria-pressed="activeHero === card.id"
+          :tabindex="0"
+        >
+          <div class="hero-card-shadow"></div>
+          <div
+            class="hero-card-frame"
+            @pointermove="(event) => handleCardMove(card.id, event)"
+            @pointerleave="(event) => handleCardLeave(card.id, event)"
+            @pointercancel="(event) => handleCardLeave(card.id, event)"
+            @click="toggleHeroFront(card.id)"
+          >
+            <div class="hero-card-glow"></div>
+            <img
+              :src="to(card.src)"
+              :alt="card.alt"
+              loading="eager"
+              class="hero-card-image"
+            />
+            <div class="hero-card-sheen" aria-hidden="true"></div>
+          </div>
+        </button>
       </div>
 
       <div class="marquee-wrap" aria-label="Highlights">
@@ -242,24 +433,29 @@ onMounted(() => {
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 0.98fr) minmax(0, 1.72fr);
   grid-template-rows: 1fr auto;
   align-items: center;
-  gap: 3rem 5rem;
+  gap: 3rem 3.25rem;
   min-height: calc(100vh - var(--vp-nav-height));
   position: relative;
 }
 
 
 .hero-copy  { grid-column: 1; grid-row: 1; }
-.hero-media { grid-column: 2; grid-row: 1; }
+.hero-media {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  width: min(100%, 720px);
+}
 .marquee-wrap { grid-column: 1 / -1; grid-row: 2; align-self: end; }
 
 .hero-scroll {
   position: absolute;
   bottom: 1.5rem;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(60px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -270,7 +466,7 @@ onMounted(() => {
   text-transform: uppercase;
   animation: scrollBounce 2s ease-in-out infinite;
   pointer-events: none;
-  bottom: 10rem;
+  bottom: 8rem;
 }
 
 .scroll-line {
@@ -517,16 +713,155 @@ onMounted(() => {
 }
 
 .hero-media {
-  padding: 1rem;
-  border-radius: 24px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, .05);
 }
 
-.hero-media img {
+.hero-stack {
+  position: relative;
+  min-height: clamp(340px, 48vw, 720px);
+  perspective: 1400px;
+  transform-style: preserve-3d;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.hero-stack-card {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transform-style: preserve-3d;
+  pointer-events: none;
+  transition:
+    transform .48s cubic-bezier(.2, .85, .25, 1),
+    opacity .28s ease,
+    filter .28s ease;
+  will-change: transform;
+}
+
+.hero-stack-card:focus-visible {
+  outline: 2px solid rgba(0, 229, 255, 0.8);
+  outline-offset: 8px;
+}
+
+.hero-stack-card.is-landscape.is-front {
+  z-index: 2;
+  transform:
+    translate3d(0, 0, 0)
+    rotateX(var(--rotate-y, 0deg))
+    rotateY(var(--rotate-x, 0deg))
+    scale(1);
+}
+
+.hero-stack-card.is-dashboard.is-front {
+  z-index: 2;
+  transform:
+    translate3d(0, 0, 0)
+    rotateX(var(--rotate-y, 0deg))
+    rotateY(var(--rotate-x, 0deg))
+    scale(1);
+}
+
+.hero-stack-card.is-landscape.is-back {
+  z-index: 1;
+  transform: translate3d(124px, 98px, -78px) scale(0.86);
+  opacity: 0.84;
+  filter: saturate(0.9) brightness(0.92);
+}
+
+.hero-stack-card.is-dashboard.is-back {
+  z-index: 1;
+  transform: translate3d(182px, -90px, -70px) scale(0.65);
+  opacity: 0.9;
+  filter: saturate(0.92) brightness(0.94);
+}
+
+.hero-stack-card.is-front:hover .hero-card-frame {
+  box-shadow:
+    0 28px 72px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.09) inset;
+}
+
+.hero-card-shadow {
+  position: absolute;
+  inset: 62px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 55%, rgba(168, 85, 247, 0.16), transparent 56%),
+    radial-gradient(circle at 62% 34%, rgba(0, 229, 255, 0.12), transparent 36%),
+    var(--hero-url);
+  background-size: cover;
+  background-position: center;
+  filter: blur(15px) saturate(0.98);
+  opacity: 0.05;
+}
+
+.hero-stack-card.is-back .hero-card-shadow {
+  opacity: 0.08;
+  filter: blur(7px) saturate(0.8);
+  transform: translate3d(0, 8px, -8px) scale(0.98);
+}
+
+.hero-card-frame {
+  position: relative;
+  border-radius: 28px;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transform:
+    perspective(1400px)
+    rotateX(var(--rotate-y, 0deg))
+    rotateY(var(--rotate-x, 0deg))
+    translate3d(0, 0, 0);
+  transition: transform .18s ease, box-shadow .18s ease;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.hero-card-image {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 16px;
+  transform: translate3d(0, 0, 1px);
+  border-radius: 28px;
+  pointer-events: auto;
+}
+
+.hero-card-glow,
+.hero-card-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hero-card-glow {
+  background:
+    radial-gradient(circle at var(--glow-x, 50%) var(--glow-y, 50%), rgba(255, 255, 255, 0.14), transparent 30%),
+    linear-gradient(135deg, rgba(168, 85, 247, 0.04), rgba(0, 229, 255, 0.015));
+  mix-blend-mode: screen;
+  opacity: 0.15;
+}
+
+.hero-stack-card.is-back .hero-card-glow {
+  opacity: 0.05;
+}
+
+.hero-card-sheen {
+  background:
+    linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.18) 48%, transparent 52%);
+  transform: translateX(-34%) translateY(-10%) rotate(8deg);
+  opacity: 0.10;
+  mix-blend-mode: screen;
 }
 
 .quote-panel {
@@ -597,6 +932,52 @@ onMounted(() => {
 
   .hero-actions {
     flex-wrap: wrap;
+  }
+
+  .hero-stack {
+    transform: none !important;
+    perspective: none;
+  }
+
+  .hero-stack {
+    min-height: 0;
+  }
+
+  .hero-stack-card {
+    position: relative;
+    inset: auto;
+    margin-bottom: 1rem;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+
+  .hero-card-frame {
+    transform: none;
+  }
+
+  .hero-card-shadow {
+    inset: 10px;
+    filter: blur(18px);
+  }
+
+  .hero-card-image {
+    border-radius: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-stack,
+  .hero-card-frame,
+  .hero-card-shadow,
+  .hero-card-glow,
+  .hero-card-sheen {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .hero-card-frame {
+    transform: none;
   }
 }
 
