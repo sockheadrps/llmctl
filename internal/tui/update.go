@@ -21,9 +21,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		now := time.Now()
 		if m.mgr != nil {
+			start := time.Now()
 			m.refreshRunning(true)
+			debugTimingf("refreshRunning(detectCrashes=true) took %s", time.Since(start))
 		}
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(tick) took %s", time.Since(startPush))
 		if m.screen == screenLogs {
 			m.refreshLogs()
 			return m, tickCmd()
@@ -76,23 +80,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.health[key] = status
 			}
 		}
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(health) took %s", time.Since(startPush))
 		return m, nil
 
 	case slotsMsg:
 		m.applyTokSamples(msg)
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(slots) took %s", time.Since(startPush))
 		return m, nil
 
 	case vramMsg:
 		m.gpuUsage = msg.usage
 		m.gpuDevices = msg.devices
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(vram) took %s", time.Since(startPush))
 		return m, nil
 
 	case ramMsg:
 		m.ramByPID = msg.byPID
+		startPush := time.Now()
 		m.pushStatusServer()
+		debugTimingf("pushStatusServer(ram) took %s", time.Since(startPush))
 		return m, nil
 
 	case remoteStatusMsg:

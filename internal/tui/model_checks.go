@@ -45,12 +45,15 @@ func checkRAMCmd(pids []int) tea.Cmd {
 // backgroundChecks batches the periodic health/tok-rate/VRAM polls fired
 // after a tick or a successful start.
 func (m Model) backgroundChecks() tea.Cmd {
-	cmds := []tea.Cmd{checkHealthCmd(m.running), checkSlotsCmd(m.running)}
+	cmds := []tea.Cmd{
+		timedCmd("checkHealth", checkHealthCmd(m.running)),
+		timedCmd("checkSlots", checkSlotsCmd(m.running)),
+	}
 	if m.networkTabVisible() {
-		cmds = append(cmds, checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn))
+		cmds = append(cmds, timedCmd("checkNetworkStatus", checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)))
 	}
 	if m.gpuAvailable {
-		cmds = append(cmds, checkVRAMCmd())
+		cmds = append(cmds, timedCmd("checkVRAM", checkVRAMCmd()))
 	}
 	// Poll RSS for any CPU-only model processes.
 	var cpuPIDs []int
@@ -62,15 +65,15 @@ func (m Model) backgroundChecks() tea.Cmd {
 		}
 	}
 	if len(cpuPIDs) > 0 {
-		cmds = append(cmds, checkRAMCmd(cpuPIDs))
+		cmds = append(cmds, timedCmd("checkRAM", checkRAMCmd(cpuPIDs)))
 	}
 	if m.cfg.RPCEnabled {
 		switch m.cfg.RPCMode {
 		case "server":
-			cmds = append(cmds, checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort))
+			cmds = append(cmds, timedCmd("checkRPCServerHealth", checkRPCServerHealthCmd(m.mgr, m.cfg.RPCServerHost, m.cfg.RPCServerPort)))
 		case "client":
 			if m.cfg.RemoteStatusAddr != "" {
-				cmds = append(cmds, pollRemoteStatusCmd(m.cfg.RemoteStatusAddr))
+				cmds = append(cmds, timedCmd("pollRemoteStatus", pollRemoteStatusCmd(m.cfg.RemoteStatusAddr)))
 			}
 		}
 	}
