@@ -76,6 +76,7 @@ type Model struct {
 	statusServer          *statusserver.Server
 	statusServerHost      string
 	statusServerPort      int
+	statusHistoryPersistActive bool
 	statusPublisher       *statusserver.Publisher
 	statusPublisherAddr   string
 	remoteStatus          *statusserver.Status

@@ -44,6 +44,7 @@ func (m *Model) reconcileStatusServer() error {
 			m.statusServer = nil
 			m.statusServerHost = ""
 			m.statusServerPort = 0
+			m.statusHistoryPersistActive = false
 		}
 		return nil
 	}
@@ -54,9 +55,11 @@ func (m *Model) reconcileStatusServer() error {
 		if err != nil {
 			return err
 		}
-		if err := m.statusServer.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+		enabled := m.cfg.StatusHistoryPersistEnabled() && !m.hasPendingInstances()
+		if err := m.statusServer.ConfigureHistoryPersistence(historyPath, enabled); err != nil {
 			return err
 		}
+		m.statusHistoryPersistActive = enabled
 		m.statusServer.ConfigureDashboard(m.cfg.StatusDashboardEnabled())
 		return nil
 	}
@@ -76,7 +79,8 @@ func (m *Model) reconcileStatusServer() error {
 		srv.Stop()
 		return err
 	}
-	if err := srv.ConfigureHistoryPersistence(historyPath, m.cfg.StatusHistoryPersistEnabled()); err != nil {
+	enabled := m.cfg.StatusHistoryPersistEnabled() && !m.hasPendingInstances()
+	if err := srv.ConfigureHistoryPersistence(historyPath, enabled); err != nil {
 		srv.Stop()
 		return err
 	}
@@ -84,6 +88,7 @@ func (m *Model) reconcileStatusServer() error {
 	m.statusServer = srv
 	m.statusServerHost = host
 	m.statusServerPort = port
+	m.statusHistoryPersistActive = enabled
 	m.pushStatusServer()
 	return nil
 }
@@ -124,6 +129,7 @@ func clientName() string {
 // pushStatusServer updates the local status server snapshot with current state.
 // In RPC client mode it also publishes the snapshot to the remote status server.
 func (m *Model) pushStatusServer() {
+	m.syncStatusHistoryPersistence()
 	start := time.Now()
 	st := m.buildStatusSnapshot()
 	debugTimingf("buildStatusSnapshot took %s", time.Since(start))
@@ -137,6 +143,24 @@ func (m *Model) pushStatusServer() {
 		m.statusPublisher.Update(st)
 		debugTimingf("statusPublisher.Update took %s", time.Since(start))
 	}
+}
+
+func (m *Model) syncStatusHistoryPersistence() {
+	if m.statusServer == nil || m.cfg == nil {
+		return
+	}
+	desired := m.cfg.StatusHistoryPersistEnabled() && !m.hasPendingInstances()
+	if desired == m.statusHistoryPersistActive {
+		return
+	}
+	historyPath, err := util.StatusHistoryFile()
+	if err != nil {
+		return
+	}
+	if err := m.statusServer.ConfigureHistoryPersistence(historyPath, desired); err != nil {
+		return
+	}
+	m.statusHistoryPersistActive = desired
 }
 
 // shared
