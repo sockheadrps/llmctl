@@ -46,7 +46,9 @@ func (m *Model) checkRAMCmd(pids []int) tea.Cmd {
 func (m Model) backgroundChecks() tea.Cmd {
 	cmds := []tea.Cmd{
 		timedCmd("checkHealth", checkHealthCmd(m.running)),
-		timedCmd("checkSlots", checkSlotsCmd(m.running)),
+	}
+	if slotsTargets := m.slotsPollTargets(); len(slotsTargets) > 0 {
+		cmds = append(cmds, timedCmd("checkSlots", checkSlotsCmd(slotsTargets)))
 	}
 	if m.networkTabVisible() {
 		cmds = append(cmds, timedCmd("checkNetworkStatus", checkNetworkStatusCmd(m.netIface, m.netInternetConn, m.netRPCConn)))
@@ -83,10 +85,38 @@ func (m Model) backgroundChecks() tea.Cmd {
 // should run. RPC client mode is intentionally a little slower because it
 // has to juggle local GPU telemetry plus the remote status publisher.
 func (m Model) backgroundPollInterval() time.Duration {
+	if m.hasPendingInstances() {
+		if m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" && len(m.running) > 0 {
+			return 8 * time.Second
+		}
+		return 4 * time.Second
+	}
 	if m.cfg != nil && m.cfg.RPCEnabled && m.cfg.RPCMode == "client" && len(m.running) > 0 {
 		return 4 * time.Second
 	}
 	return 2 * time.Second
+}
+
+func (m Model) hasPendingInstances() bool {
+	return len(m.pendingInstances) > 0
+}
+
+func (m Model) slotsPollTargets() []models.Running {
+	if len(m.running) == 0 {
+		return nil
+	}
+	targets := make([]models.Running, 0, len(m.running))
+	for _, r := range m.running {
+		key := r.ModelKey + "/" + r.ProfileKey
+		if m.pendingInstances[key] {
+			continue
+		}
+		if m.health[key] != health.StatusUp {
+			continue
+		}
+		targets = append(targets, r)
+	}
+	return targets
 }
 
 // shared
