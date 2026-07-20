@@ -221,6 +221,10 @@ func (m Model) renderRPCContent() string {
 			if m.settings.rpc.portEditing {
 				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Port:"), m.settings.rpc.portInput.View())
 			}
+			row(m.rpcServerEnvCursor(), m.renderRPCEnvLabel())
+			if m.settings.rpc.envEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Env:"), m.settings.rpc.envInput.View())
+			}
 		} else if m.netSupported {
 			netTabLabel := "Network Tab (Disabled)"
 			if m.cfg.NetworkTabEnabled {
@@ -235,10 +239,18 @@ func (m Model) renderRPCContent() string {
 						"  Optional: ethtool for link speed and carrier detection."))
 				b.WriteString("\n")
 			}
+			row(m.rpcServerEnvCursor(), m.renderRPCEnvLabel())
+			if m.settings.rpc.envEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Env:"), m.settings.rpc.envInput.View())
+			}
 		} else {
 			b.WriteString(detailMutedStyle.Render("ggml-rpc-server will listen on " +
 				m.cfg.RPCServerHost + ":" + strconv.Itoa(m.cfg.RPCServerPort)))
 			b.WriteString("\n")
+			row(m.rpcServerEnvCursor(), m.renderRPCEnvLabel())
+			if m.settings.rpc.envEditing {
+				fmt.Fprintf(&b, "  %s %s\n", formLabelStyle.Render("Env:"), m.settings.rpc.envInput.View())
+			}
 		}
 
 	default:

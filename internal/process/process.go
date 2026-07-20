@@ -163,9 +163,6 @@ func BuildArgs(m models.Model, p models.Profile) []string {
 
 func buildStartArgs(m models.Model, p models.Profile, rpcEndpoint string) []string {
 	args := BuildArgs(m, p)
-	if !hasArg(args, "-v") && !hasArg(args, "--verbose") {
-		args = append(args, "-v")
-	}
 	if rpcEndpoint != "" {
 		args = append(args, "--rpc", rpcEndpoint)
 	}
@@ -309,8 +306,9 @@ func TailLog(path string, n int) (string, error) {
 }
 
 // StartRPC launches the ggml-rpc-server binary at the given host:port,
-// with output redirected to logPath.
-func StartRPC(bin, host string, port int, logPath string) (pid int, err error) {
+// with output redirected to logPath. env, if non-nil, is merged into the
+// inherited environment (e.g. GGML_CUDA_DISABLE_GRAPHS=1).
+func StartRPC(bin, host string, port int, logPath string, env map[string]string) (pid int, err error) {
 	resolvedBin, err := resolveRPCExecutable(bin)
 	if err != nil {
 		return 0, fmt.Errorf("start rpc-server: %w", err)
@@ -326,6 +324,11 @@ func StartRPC(bin, host string, port int, logPath string) (pid int, err error) {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	configureProcess(cmd)
+	cmdEnv := os.Environ()
+	for k, v := range env {
+		cmdEnv = append(cmdEnv, k+"="+v)
+	}
+	cmd.Env = cmdEnv
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()

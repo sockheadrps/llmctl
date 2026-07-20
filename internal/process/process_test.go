@@ -223,33 +223,30 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
-func TestBuildStartArgsAddsVerboseAlways(t *testing.T) {
+func TestBuildStartArgsNoVerboseByDefault(t *testing.T) {
 	model := models.Model{Path: "/m.gguf"}
 	profile := models.Profile{Port: 8080}
 
 	got := buildStartArgs(model, profile, "")
-	if !slices.Contains(got, "-v") {
-		t.Fatalf("expected start args to include -v, got %v", got)
+	if slices.Contains(got, "-v") || slices.Contains(got, "--verbose") {
+		t.Fatalf("expected -v not to be added automatically, got %v", got)
 	}
 	if slices.Contains(got, "--rpc") {
 		t.Fatalf("expected non-RPC start args not to include --rpc, got %v", got)
 	}
 }
 
-func TestBuildStartArgsAddsVerboseForRPC(t *testing.T) {
+func TestBuildStartArgsAddsRPC(t *testing.T) {
 	model := models.Model{Path: "/m.gguf"}
 	profile := models.Profile{Port: 8080}
 
 	got := buildStartArgs(model, profile, "127.0.0.1:50052")
-	if !slices.Contains(got, "-v") {
-		t.Fatalf("expected RPC start args to include -v, got %v", got)
-	}
 	if !slices.Contains(got, "--rpc") {
 		t.Fatalf("expected RPC start args to include --rpc, got %v", got)
 	}
 }
 
-func TestBuildStartArgsDoesNotDuplicateVerbose(t *testing.T) {
+func TestBuildStartArgsPassesThroughVerboseFromExtraArgs(t *testing.T) {
 	model := models.Model{Path: "/m.gguf"}
 	profile := models.Profile{
 		Port:      8080,
@@ -257,6 +254,9 @@ func TestBuildStartArgsDoesNotDuplicateVerbose(t *testing.T) {
 	}
 
 	got := buildStartArgs(model, profile, "127.0.0.1:50052")
+	if !slices.Contains(got, "--verbose") {
+		t.Fatalf("expected --verbose from extra_args to be present, got %v", got)
+	}
 	count := 0
 	for _, arg := range got {
 		if arg == "-v" || arg == "--verbose" {
@@ -264,7 +264,7 @@ func TestBuildStartArgsDoesNotDuplicateVerbose(t *testing.T) {
 		}
 	}
 	if count != 1 {
-		t.Fatalf("expected one verbose flag, got %d in %v", count, got)
+		t.Fatalf("expected exactly one verbose flag, got %d in %v", count, got)
 	}
 }
 

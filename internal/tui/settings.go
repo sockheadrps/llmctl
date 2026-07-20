@@ -68,11 +68,11 @@ func (m Model) settingsContentMoveCursor(delta int) (tea.Model, tea.Cmd) {
 				maxRPCCursor = 4
 			case "server":
 				if runtime.GOOS == "windows" {
-					maxRPCCursor = 7
+					maxRPCCursor = 8
 				} else if m.netSupported {
-					maxRPCCursor = 5
+					maxRPCCursor = 6
 				} else {
-					maxRPCCursor = 4
+					maxRPCCursor = 5
 				}
 			}
 		}

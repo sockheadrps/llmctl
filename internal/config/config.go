@@ -21,10 +21,11 @@ type Config struct {
 	RPCEnabled       bool     `yaml:"rpc_enabled,omitempty"`
 	RPCMode          string   `yaml:"rpc_mode,omitempty"` // "client" or "server"
 	RPCEndpoint      string   `yaml:"rpc_endpoint,omitempty"`
-	RPCServerBin     string   `yaml:"rpc_server_bin,omitempty"`
-	RPCServerHost    string   `yaml:"rpc_server_host,omitempty"`
-	RPCServerPort    int      `yaml:"rpc_server_port,omitempty"`
-	RemoteStatusAddr string   `yaml:"remote_status_addr,omitempty"`
+	RPCServerBin     string            `yaml:"rpc_server_bin,omitempty"`
+	RPCServerHost    string            `yaml:"rpc_server_host,omitempty"`
+	RPCServerPort    int               `yaml:"rpc_server_port,omitempty"`
+	RPCServerEnv     map[string]string `yaml:"rpc_server_env,omitempty"`
+	RemoteStatusAddr string            `yaml:"remote_status_addr,omitempty"`
 
 	StatusServerEnabled          bool   `yaml:"status_server_enabled,omitempty"`
 	StatusServerHistoryPersist   *bool  `yaml:"status_history_persist,omitempty"`

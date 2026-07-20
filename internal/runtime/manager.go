@@ -286,7 +286,7 @@ func (mgr *Manager) StartRPCServer(cfg *config.Config) error {
 	}
 	logPath := filepath.Join(logDir, "rpc-server.log")
 
-	pid, err := process.StartRPC(bin, host, port, logPath)
+	pid, err := process.StartRPC(bin, host, port, logPath, cfg.RPCServerEnv)
 	if err != nil {
 		return err
 	}

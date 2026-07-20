@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -113,8 +114,39 @@ func (m Model) activateRPCRow() (tea.Model, tea.Cmd) {
 			return m.openRPCServerPortForm()
 		}
 		return m, nil
+	default:
+		if m.cfg.RPCMode == "server" && m.settings.rpc.cursor == m.rpcServerEnvCursor() {
+			return m.openRPCServerEnvForm()
+		}
 	}
 	return m, nil
+}
+
+func (m Model) renderRPCEnvLabel() string {
+	if len(m.cfg.RPCServerEnv) == 0 {
+		return "RPC Server Env"
+	}
+	keys := make([]string, 0, len(m.cfg.RPCServerEnv))
+	for k := range m.cfg.RPCServerEnv {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+"="+m.cfg.RPCServerEnv[k])
+	}
+	return "RPC Server Env (" + strings.Join(parts, " ") + ")"
+}
+
+// rpcServerEnvCursor returns the cursor index of the env row in server mode.
+func (m Model) rpcServerEnvCursor() int {
+	if runtime.GOOS == "windows" {
+		return 8
+	}
+	if m.netSupported {
+		return 6
+	}
+	return 5
 }
 
 func (m Model) openRemoteStatusAddrForm() (tea.Model, tea.Cmd) {
@@ -227,6 +259,54 @@ func (m Model) submitRPCServerPortForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.settings.rpc.portEditing = false
+	m.settings.rpc.err = ""
+	return m, nil
+}
+
+func (m Model) openRPCServerEnvForm() (tea.Model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = "KEY=VALUE KEY2=VALUE2"
+	ti.CharLimit = 512
+	ti.Width = 50
+
+	keys := make([]string, 0, len(m.cfg.RPCServerEnv))
+	for k := range m.cfg.RPCServerEnv {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+"="+m.cfg.RPCServerEnv[k])
+	}
+	ti.SetValue(strings.Join(parts, " "))
+	ti.Focus()
+	ti.CursorEnd()
+	m.settings.rpc.envInput = ti
+	m.settings.rpc.envEditing = true
+	m.settings.rpc.err = ""
+	return m, nil
+}
+
+func (m Model) submitRPCServerEnvForm() (tea.Model, tea.Cmd) {
+	raw := strings.TrimSpace(m.settings.rpc.envInput.Value())
+	env := map[string]string{}
+	if raw != "" {
+		for _, pair := range strings.Fields(raw) {
+			k, v, _ := strings.Cut(pair, "=")
+			if k != "" {
+				env[k] = v
+			}
+		}
+	}
+	if len(env) == 0 {
+		env = nil
+	}
+	m.cfg.RPCServerEnv = env
+	if err := m.saveConfig(); err != nil {
+		m.settings.rpc.err = err.Error()
+		return m, nil
+	}
+	m.settings.rpc.envEditing = false
 	m.settings.rpc.err = ""
 	return m, nil
 }

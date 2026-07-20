@@ -10,7 +10,7 @@ import (
 func TestStartRPCMissingBinaryReturnsHint(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "rpc.log")
 
-	_, err := StartRPC("llmctl-definitely-missing-rpc-server", "0.0.0.0", 50052, logPath)
+	_, err := StartRPC("llmctl-definitely-missing-rpc-server", "0.0.0.0", 50052, logPath, nil)
 	if err == nil {
 		t.Fatal("expected error for missing binary")
 	}
@@ -32,7 +32,7 @@ func TestStartRPCEmptyBinFallsBackToDefaultName(t *testing.T) {
 
 	// Empty bin should fall back to "ggml-rpc-server" and fail with the
 	// standard not-found message (not a generic exec error).
-	_, err := StartRPC("", "0.0.0.0", 50052, logPath)
+	_, err := StartRPC("", "0.0.0.0", 50052, logPath, nil)
 	if err == nil {
 		t.Fatal("expected error for missing fallback binary")
 	}
