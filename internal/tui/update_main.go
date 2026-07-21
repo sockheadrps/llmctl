@@ -92,19 +92,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settings.rpc.portInput, cmd = m.settings.rpc.portInput.Update(msg)
 		return m, cmd
 	}
-	if m.focus == focusSettingsContent && m.settings.rpc.envEditing {
-		switch msg.String() {
-		case "esc":
-			m.settings.rpc.envEditing = false
-			m.settings.rpc.err = ""
-			return m, nil
-		case "enter":
-			return m.submitRPCServerEnvForm()
-		}
-		var cmd tea.Cmd
-		m.settings.rpc.envInput, cmd = m.settings.rpc.envInput.Update(msg)
-		return m, cmd
-	}
 	if m.focus == focusSettingsContent && m.settings.statusSrv.hostEditing {
 		switch msg.String() {
 		case "esc":

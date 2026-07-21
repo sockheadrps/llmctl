@@ -40,8 +40,6 @@ type rpcContentState struct {
 	rpcBinInput       textinput.Model
 	portEditing       bool
 	portInput         textinput.Model
-	envEditing        bool
-	envInput          textinput.Model
 	err               string
 }
 
